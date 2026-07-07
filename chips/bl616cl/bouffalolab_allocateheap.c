@@ -78,13 +78,17 @@
  *
  ****************************************************************************/
 
+extern char __HeapBase[];
+extern char __HeapLimit[];
+
 void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 {
-
+  *heap_start = __HeapBase;
+  *heap_size = (size_t)(__HeapLimit - __HeapBase);
 }
 
 /******************************************************************************
- * Name: arm_addregion
+ * Name: riscv_addregion
  *
  * Description:
  *   Memory may be added in non-contiguous chunks.  Additional chunks are
@@ -93,7 +97,7 @@ void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
  ******************************************************************************/
 
 #if CONFIG_MM_REGIONS > 1
-void arm_addregion(void)
+void riscv_addregion(void)
 {
 
 }

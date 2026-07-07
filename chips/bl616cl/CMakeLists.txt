@@ -18,8 +18,14 @@
 #
 # ##############################################################################
 
-set(SRCS bouffalolab_start.c bouffalolab_irq.c bouffalolab_uart.c
-         bouffalolab_oneshot.c bouffalolab_allocateheap.c)
+set(SRCS
+    bl616cl_head.S
+    bouffalolab_start.c
+    bouffalolab_irq.c
+    bouffalolab_irq_dispatch.c
+    bouffalolab_uart.c
+    bouffalolab_oneshot.c
+    bouffalolab_allocateheap.c)
 
 target_sources(arch PRIVATE ${SRCS})
 

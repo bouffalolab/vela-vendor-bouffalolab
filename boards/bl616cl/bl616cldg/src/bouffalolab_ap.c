@@ -21,9 +21,7 @@
 /****************************************************************************
  * Included Files
  ****************************************************************************/
-// specify chip arch internal header
-// eg: arm_internal.h riscv_internal.h
-#include "arm_internal.h"
+#include "riscv_internal.h"
 
 /****************************************************************************
  * Public Functions

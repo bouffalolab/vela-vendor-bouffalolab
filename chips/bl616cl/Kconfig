@@ -5,19 +5,61 @@
 
 if ARCH_CHIP_CUSTOM
 
-comment "BOUFFALOLAB Configuration Options"
+comment "BouffaloLab BL616CL Configuration Options"
 
 choice
-    prompt "BOUFFALOLAB Chip Selection"
-    default ARCH_CHIP_BL616CL
+	prompt "BouffaloLab Chip Selection"
+	default ARCH_CHIP_BL616CL
 
 config ARCH_CHIP_BL616CL
-	bool "bl616cl"
-	select ARCH_CORTEXM4
-	select ARCH_HAVE_MPU
-	select ARM_HAVE_MPU_UNIFIED
+	bool "BL616CL"
+	select ARCH_RV32
 	select ARCH_HAVE_FPU
+	select ARCH_HAVE_MISALIGN_EXCEPTION
+	select ARCH_HAVE_RESET
+	select ARCH_RV_ISA_M
+	select ARCH_RV_ISA_A
+	select ARCH_RV_ISA_C
+	select ONESHOT
+	select ONESHOT_COUNT
+	select ONESHOT_FAST_DIVISION
+	select ALARM_ARCH
+	---help---
+		BouffaloLab BL616CL E907 platform.
 
 endchoice
+
+menu "BL616CL Peripheral Support"
+
+menuconfig BL616CL_UART
+	bool "UART"
+	default y
+	select ARCH_HAVE_SERIAL_TERMIOS
+
+if BL616CL_UART
+
+config BL616CL_UART0
+	bool "UART0"
+	default y
+	select UART0_SERIALDRIVER
+
+if BL616CL_UART0
+
+config BL616CL_UART0_RXPIN
+	int "UART0 RX pin"
+	default 35
+
+config BL616CL_UART0_TXPIN
+	int "UART0 TX pin"
+	default 34
+
+endif # BL616CL_UART0
+endif # BL616CL_UART
+
+config BL616CL_MTIME
+	bool "Machine timer"
+	default y
+
+endmenu
 
 endif

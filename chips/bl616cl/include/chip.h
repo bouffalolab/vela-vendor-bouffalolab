@@ -18,17 +18,13 @@
  *
  ****************************************************************************/
 
-#ifndef __VENDOR_BOUFFALOLAB_CHIP_BL616CL_INCLUDE_CHIP_H
-#define __VENDOR_BOUFFALOLAB_CHIP_BL616CL_INCLUDE_CHIP_H
+#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_CHIP_H
+#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_CHIP_H
 
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
-#include <nuttx/config.h>
+#include "../chip.h"
 
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-#endif /* __VENDOR_BOUFFALOLAB_CHIP_BL616CL_INCLUDE_CHIP_H */
+#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_CHIP_H */

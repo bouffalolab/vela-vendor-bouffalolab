@@ -29,50 +29,7 @@
 
 #include <arch/board/board.h>
 
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-/* .data is positioned first in the primary RAM followed immediately by .bss.
- * The IDLE thread stack lies just after .bss and has size give by
- * CONFIG_IDLETHREAD_STACKSIZE;  The heap then begins just after the IDLE.
- * ARM EABI requires 64 bit stack alignment.
- */
-
-extern uint32_t _ebss[];
-#define HEAP_BASE      ((uintptr_t)_ebss + CONFIG_IDLETHREAD_STACKSIZE)
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-/****************************************************************************
- * ROM Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/****************************************************************************
- * Private Data
- ****************************************************************************/
-
-/****************************************************************************
- * Public Data
- ****************************************************************************/
-
-/* g_idle_topstack: _sbss is the start of the BSS region as defined by the
- * linker script. _ebss lies at the end of the BSS region. The idle task
- * stack starts at the end of BSS and is of size CONFIG_IDLETHREAD_STACKSIZE.
- * The IDLE thread is the thread that the system boots on and, eventually,
- * becomes the IDLE, do nothing task that runs only when there is nothing
- * else to run.  The heap continues from there until the end of memory.
- * g_idle_topstack is a read-only variable the provides this computed
- * address.
- */
-
-const uintptr_t g_idle_topstack = HEAP_BASE;
+#include "riscv_internal.h"
 
 /****************************************************************************
  * Private Functions
@@ -83,15 +40,12 @@ const uintptr_t g_idle_topstack = HEAP_BASE;
  ****************************************************************************/
 
 /****************************************************************************
- * Name: __bouffalolab_start
+ * Name: __bl616cl_start
  ****************************************************************************/
 
-void __start(void)
+void __bl616cl_start(void)
 {
-  /* do something initialize */
-
-  /* Bring up NuttX */
-
+  riscv_earlyserialinit();
   nx_start();
 
   for (; ; );

@@ -27,6 +27,11 @@
 #include <nuttx/irq.h>
 #include <nuttx/arch.h>
 
+#include <arch/irq.h>
+
+#include "riscv_internal.h"
+#include "chip.h"
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -49,7 +54,8 @@
 
 void up_irqinitialize(void)
 {
-
+  riscv_exception_attach();
+  up_irq_enable();
 }
 
 /****************************************************************************
@@ -62,7 +68,7 @@ void up_irqinitialize(void)
 
 void up_enable_irq(int irq)
 {
-
+  UNUSED(irq);
 }
 
 /****************************************************************************
@@ -75,19 +81,37 @@ void up_enable_irq(int irq)
 
 void up_disable_irq(int irq)
 {
-
+  UNUSED(irq);
 }
 
 /****************************************************************************
- * Name: arm_ack_irq
+ * Name: riscv_ack_irq
  *
  * Description:
  *   Acknowledge the IRQ
  *
  ****************************************************************************/
 
-void arm_ack_irq(int irq)
+void riscv_ack_irq(int irq)
 {
-
+  UNUSED(irq);
 }
 
+/****************************************************************************
+ * Name: up_irq_enable
+ ****************************************************************************/
+
+irqstate_t up_irq_enable(void)
+{
+  irqstate_t flags;
+
+  __asm__ __volatile__
+    (
+      "csrrs %0, mstatus, %1\n"
+      : "=r" (flags)
+      : "r" (STATUS_IE)
+      : "memory"
+    );
+
+  return flags;
+}

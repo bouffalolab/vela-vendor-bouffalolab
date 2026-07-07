@@ -41,26 +41,13 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define NVIC_IRQ_FIRST  (16)   /* Vector number of the first interrupt */
+#define BL616CL_IRQ_FIRST 16
 
-/* IRQ numbers.  The IRQ number corresponds vector number and hence map
- * directly to bits in the INTC.  This does, however, waste several
- * words of memory in the IRQ to handle mapping tables.
- */
+#define BL616CL_IRQ_BMX_MCU_BUS_ERR      (BL616CL_IRQ_FIRST + 0)
+#define BL616CL_IRQ_UART0                (BL616CL_IRQ_FIRST + 28)
+#define BL616CL_IRQ_WDT1                 (BL616CL_IRQ_FIRST + 66)
 
-#define NR_IRQS (64)
-
-/* NVIC priority levels */
-
-#define NVIC_SYSH_PRIORITY_MIN  0xff /* All bits set in minimum priority */
-
-#define NVIC_SYSH_PRIORITY_DEFAULT  0x40 /* Midpoint is the default */
-
-#define NVIC_SYSH_PRIORITY_MAX   0x00 /* Zero is maximum priority */
-
-#define NVIC_SYSH_PRIORITY_STEP 0x40 /* Three bits priority used, bits[7-6] as group */
-
-#define NVIC_SYSH_PRIORITY_SUBSTEP  0x20 /* Three bits priority used, bit[5] as sub */
+#define NR_IRQS                          (BL616CL_IRQ_WDT1 + 1)
 
 /****************************************************************************
  * Public Types
