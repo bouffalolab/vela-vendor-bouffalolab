@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chips/bl616cl/bl616cl_allocateheap.c
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_allocateheap.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -78,23 +78,23 @@
  *
  ****************************************************************************/
 
-extern char __HeapBase[];
-extern char __HeapLimit[];
+extern char g_heapbase[] asm("__HeapBase");
+extern char g_heaplimit[] asm("__HeapLimit");
 
-void up_allocate_heap(FAR void** heap_start, size_t* heap_size)
+void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 {
-    *heap_start = __HeapBase;
-    *heap_size = (size_t)(__HeapLimit - __HeapBase);
+  *heap_start = g_heapbase;
+  *heap_size = (size_t)(g_heaplimit - g_heapbase);
 }
 
-/******************************************************************************
+/****************************************************************************
  * Name: riscv_addregion
  *
  * Description:
  *   Memory may be added in non-contiguous chunks.  Additional chunks are
  *   added by calling this function.
  *
- ******************************************************************************/
+ ****************************************************************************/
 
 #if CONFIG_MM_REGIONS > 1
 void riscv_addregion(void)

@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chips/bl616cl/include/irq.h
+ * apps/vendor/bouffalolab/chips/bl616cl/include/irq.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -51,7 +51,7 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Inline functions
+ * Inline Functions
  ****************************************************************************/
 
 /****************************************************************************
@@ -61,7 +61,8 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif

@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chips/bl616cl/bl616cl_irq.c
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_irq.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -54,8 +54,8 @@
 
 void up_irqinitialize(void)
 {
-    riscv_exception_attach();
-    up_irq_enable();
+  riscv_exception_attach();
+  up_irq_enable();
 }
 
 /****************************************************************************
@@ -68,7 +68,7 @@ void up_irqinitialize(void)
 
 void up_enable_irq(int irq)
 {
-    UNUSED(irq);
+  UNUSED(irq);
 }
 
 /****************************************************************************
@@ -81,7 +81,7 @@ void up_enable_irq(int irq)
 
 void up_disable_irq(int irq)
 {
-    UNUSED(irq);
+  UNUSED(irq);
 }
 
 /****************************************************************************
@@ -94,7 +94,7 @@ void up_disable_irq(int irq)
 
 void riscv_ack_irq(int irq)
 {
-    UNUSED(irq);
+  UNUSED(irq);
 }
 
 /****************************************************************************
@@ -103,13 +103,12 @@ void riscv_ack_irq(int irq)
 
 irqstate_t up_irq_enable(void)
 {
-    irqstate_t flags;
+  irqstate_t flags;
 
-    __asm__ __volatile__(
-        "csrrs %0, mstatus, %1\n"
-        : "=r"(flags)
-        : "r"(STATUS_IE)
-        : "memory");
+  __asm__ __volatile__("csrrs %0, mstatus, %1\n"
+                       : "=r"(flags)
+                       : "r"(STATUS_IE)
+                       : "memory");
 
-    return flags;
+  return flags;
 }

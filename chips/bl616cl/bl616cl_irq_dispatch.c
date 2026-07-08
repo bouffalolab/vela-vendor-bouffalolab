@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chips/bl616cl/bl616cl_irq_dispatch.c
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_irq_dispatch.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -34,14 +34,15 @@
  * Public Functions
  ****************************************************************************/
 
-void* riscv_dispatch_irq(uintreg_t mcause, uintreg_t* regs)
+void *riscv_dispatch_irq(uintreg_t mcause, uintreg_t *regs)
 {
-    int irq = mcause & 0xfff;
+  int irq = mcause & 0xfff;
 
-    if ((mcause & RISCV_IRQ_BIT) != 0) {
-        irq += RISCV_IRQ_ASYNC;
+  if ((mcause & RISCV_IRQ_BIT) != 0)
+    {
+      irq += RISCV_IRQ_ASYNC;
     }
 
-    riscv_ack_irq(irq);
-    return riscv_doirq(irq, regs);
+  riscv_ack_irq(irq);
+  return riscv_doirq(irq, regs);
 }

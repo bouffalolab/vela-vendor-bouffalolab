@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chips/bl616cl/bl616cl_irq.h
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_irq.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -38,13 +38,14 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C" {
+extern "C"
+{
 #else
 #define EXTERN extern
 #endif
 
 /****************************************************************************
- * Public Functions Prototypes
+ * Public Function Prototypes
  ****************************************************************************/
 
 #undef EXTERN
