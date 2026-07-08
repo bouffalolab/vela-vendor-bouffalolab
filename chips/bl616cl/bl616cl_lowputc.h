@@ -25,9 +25,11 @@
  * Included Files
  ****************************************************************************/
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #include <nuttx/arch.h>
 #include <nuttx/config.h>
-#include <nuttx/irq.h>
 
 #include "chip.h"
 
@@ -35,8 +37,51 @@
  * Public Types
  ****************************************************************************/
 
+struct bflb_device_s;
+
+struct bl616cl_uart_s
+{
+  uint8_t id;
+  uint8_t irq;
+  uint8_t txpin;
+  uint8_t rxpin;
+  uint32_t baud;
+  uint8_t data_bits;
+  uint8_t stop_b2;
+  uint8_t parity;
+  uint8_t tx_fifo_th;
+  uint8_t rx_fifo_th;
+  struct bflb_device_s *device;
+};
+
+#undef EXTERN
+#if defined(__cplusplus)
+#define EXTERN extern "C"
+extern "C"
+{
+#else
+#define EXTERN extern
+#endif
+
+/****************************************************************************
+ * Public Data
+ ****************************************************************************/
+
+#ifdef CONFIG_BL616CL_UART0
+EXTERN struct bl616cl_uart_s g_uart0_config;
+#endif
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
+
+void bl616cl_lowsetup(void);
+void bl616cl_lowputc_config(struct bl616cl_uart_s *config);
+void bl616cl_lowputc_rxint(bool enable);
+
+#undef EXTERN
+#if defined(__cplusplus)
+}
+#endif
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_LOWPUTC_H */

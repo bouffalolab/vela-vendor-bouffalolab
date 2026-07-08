@@ -23,10 +23,13 @@ set(SRCS
     bl616cl_start.c
     bl616cl_irq.c
     bl616cl_irq_dispatch.c
-    bl616cl_uart.c
+    bl616cl_lowputc.c
+    bl616cl_serial.c
     bl616cl_oneshot.c
     bl616cl_allocateheap.c)
 
 target_sources(arch PRIVATE ${SRCS})
 
 target_include_directories(arch PRIVATE ${NUTTX_CHIP_ABS_DIR}/include)
+
+target_compile_definitions(arch PRIVATE BL616CL)

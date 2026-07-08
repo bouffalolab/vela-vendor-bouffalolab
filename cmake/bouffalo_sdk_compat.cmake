@@ -9,7 +9,9 @@ function(bl_normalize_paths out_var)
       list(APPEND paths "${CMAKE_CURRENT_SOURCE_DIR}/${path}")
     endif()
   endforeach()
-  set(${out_var} ${paths} PARENT_SCOPE)
+  set(${out_var}
+      ${paths}
+      PARENT_SCOPE)
 endfunction()
 
 function(bl_include_directories)
@@ -48,7 +50,9 @@ function(bl_strip_compile_definitions out_var)
     string(REGEX REPLACE "^-D" "" clean_def "${def}")
     list(APPEND defs "${clean_def}")
   endforeach()
-  set(${out_var} ${defs} PARENT_SCOPE)
+  set(${out_var}
+      ${defs}
+      PARENT_SCOPE)
 endfunction()
 
 function(bl_sdk_apply_target_defaults target)
@@ -56,9 +60,9 @@ function(bl_sdk_apply_target_defaults target)
     return()
   endif()
 
-  target_compile_definitions(${target} PUBLIC APP_VER_X=0 APP_VER_Y=0
-                                              APP_VER_Z=0 ARCH_RISCV=1
-                                              CONFIG_IRQ_NUM=83)
+  target_compile_definitions(
+    ${target} PUBLIC APP_VER_X=0 APP_VER_Y=0 APP_VER_Z=0 ARCH_RISCV=1
+                     CONFIG_IRQ_NUM=83)
 
   target_include_directories(
     ${target}
@@ -86,6 +90,8 @@ macro(sdk_generate_library)
   add_library(${CURRENT_STATIC_LIBRARY} STATIC)
   set_target_properties(${CURRENT_STATIC_LIBRARY} PROPERTIES OUTPUT_NAME
                                                              "${library_name}")
+  set_property(GLOBAL APPEND PROPERTY NUTTX_EXTRA_LIBRARIES
+                                      ${CURRENT_STATIC_LIBRARY})
   bl_sdk_apply_target_defaults(${CURRENT_STATIC_LIBRARY})
 endmacro()
 
