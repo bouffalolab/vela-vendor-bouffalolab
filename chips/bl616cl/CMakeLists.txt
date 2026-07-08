@@ -1,5 +1,5 @@
 # ##############################################################################
-# vendor/bouffalolab/chip/bl616cl/src/CMakeLists.txt
+# vendor/bouffalolab/chips/bl616cl/CMakeLists.txt
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more contributor
 # license agreements.  See the NOTICE file distributed with this work for
@@ -20,12 +20,12 @@
 
 set(SRCS
     bl616cl_head.S
-    bouffalolab_start.c
-    bouffalolab_irq.c
-    bouffalolab_irq_dispatch.c
-    bouffalolab_uart.c
-    bouffalolab_oneshot.c
-    bouffalolab_allocateheap.c)
+    bl616cl_start.c
+    bl616cl_irq.c
+    bl616cl_irq_dispatch.c
+    bl616cl_uart.c
+    bl616cl_oneshot.c
+    bl616cl_allocateheap.c)
 
 target_sources(arch PRIVATE ${SRCS})
 

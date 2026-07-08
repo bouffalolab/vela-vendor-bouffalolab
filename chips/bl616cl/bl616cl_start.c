@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chip/bl616cl/bouffalolab_uart.h
+ * vendor/bouffalolab/chips/bl616cl/bl616cl_start.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,25 +18,36 @@
  *
  ****************************************************************************/
 
-#ifndef __VENDOR_BOUFFALOLAB_CHIP_BL616CL_BOUFFALOLAB_UART_H
-#define __VENDOR_BOUFFALOLAB_CHIP_BL616CL_BOUFFALOLAB_UART_H
-
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
 #include <nuttx/config.h>
+
 #include <nuttx/arch.h>
-#include <nuttx/irq.h>
+#include <nuttx/init.h>
 
-#include "chip.h"
+#include <arch/board/board.h>
+
+#include "riscv_internal.h"
 
 /****************************************************************************
- * Public Types
+ * Private Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Public Function Prototypes
+ * Public Functions
  ****************************************************************************/
 
-#endif /* __VENDOR_BOUFFALOLAB_CHIP_BL616CL_BOUFFALOLAB_UART_H */
+/****************************************************************************
+ * Name: __bl616cl_start
+ ****************************************************************************/
+
+void __bl616cl_start(void)
+{
+    riscv_earlyserialinit();
+    nx_start();
+
+    for (;;)
+        ;
+}

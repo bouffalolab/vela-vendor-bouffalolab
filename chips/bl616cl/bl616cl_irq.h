@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chip/bl616cl/bouffalolab_start.c
+ * vendor/bouffalolab/chips/bl616cl/bl616cl_irq.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,35 +18,39 @@
  *
  ****************************************************************************/
 
+#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_IRQ_H
+#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_IRQ_H
+
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
-#include <nuttx/config.h>
-
 #include <nuttx/arch.h>
-#include <nuttx/init.h>
-
-#include <arch/board/board.h>
-
-#include "riscv_internal.h"
+#include <nuttx/config.h>
+#include <nuttx/irq.h>
 
 /****************************************************************************
- * Private Functions
+ * Pre-processor Definitions
  ****************************************************************************/
+
+#ifndef __ASSEMBLY__
+
+#undef EXTERN
+#if defined(__cplusplus)
+#define EXTERN extern "C"
+extern "C" {
+#else
+#define EXTERN extern
+#endif
 
 /****************************************************************************
- * Public Functions
+ * Public Functions Prototypes
  ****************************************************************************/
 
-/****************************************************************************
- * Name: __bl616cl_start
- ****************************************************************************/
-
-void __bl616cl_start(void)
-{
-  riscv_earlyserialinit();
-  nx_start();
-
-  for (; ; );
+#undef EXTERN
+#if defined(__cplusplus)
 }
+#endif
+
+#endif /* __ASSEMBLY__ */
+#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_IRQ_H */

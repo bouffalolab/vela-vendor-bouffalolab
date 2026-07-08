@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chip/bl616cl/include/irq.h
+ * vendor/bouffalolab/chips/bl616cl/include/irq.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -29,13 +29,9 @@
  * Included Files
  ****************************************************************************/
 
-/* Include chip-specific IRQ definitions (including IRQ numbers) */
-
 #include <nuttx/config.h>
 
 #include <sys/types.h>
-
-#include <arch/chip/irq.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -43,15 +39,12 @@
 
 #define BL616CL_IRQ_FIRST 16
 
-#define BL616CL_IRQ_BMX_MCU_BUS_ERR      (BL616CL_IRQ_FIRST + 0)
-#define BL616CL_IRQ_UART0                (BL616CL_IRQ_FIRST + 28)
-#define BL616CL_IRQ_WDT1                 (BL616CL_IRQ_FIRST + 66)
+#define BL616CL_IRQ_BMX_MCU_BUS_ERR (BL616CL_IRQ_FIRST + 0)
+#define BL616CL_IRQ_MTIME (BL616CL_IRQ_FIRST + 7)
+#define BL616CL_IRQ_UART0 (BL616CL_IRQ_FIRST + 28)
+#define BL616CL_IRQ_WDT1 (BL616CL_IRQ_FIRST + 66)
 
-#define NR_IRQS                          (BL616CL_IRQ_WDT1 + 1)
-
-/****************************************************************************
- * Public Types
- ****************************************************************************/
+#define NR_IRQS (BL616CL_IRQ_WDT1 + 1)
 
 /****************************************************************************
  * Public Types
@@ -68,8 +61,7 @@
 #undef EXTERN
 #if defined(__cplusplus)
 #define EXTERN extern "C"
-extern "C"
-{
+extern "C" {
 #else
 #define EXTERN extern
 #endif

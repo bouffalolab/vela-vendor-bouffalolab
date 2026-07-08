@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chip/bl616cl/bouffalolab_irq.h
+ * vendor/bouffalolab/chips/bl616cl/bl616cl_oneshot.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,40 +18,36 @@
  *
  ****************************************************************************/
 
-#ifndef __VENDOR_BOUFFALOLAB_CHIP_BL616CL_BOUFFALOLAB_IRQ_H
-#define __VENDOR_BOUFFALOLAB_CHIP_BL616CL_BOUFFALOLAB_IRQ_H
-
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
 #include <nuttx/config.h>
-#include <nuttx/irq.h>
-#include <nuttx/arch.h>
+
+#include <arch/board/board.h>
+#include <arch/irq.h>
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-#ifndef __ASSEMBLY__
-
-#undef EXTERN
-#if defined(__cplusplus)
-#define EXTERN extern "C"
-extern "C"
-{
-#else
-#define EXTERN extern
-#endif
-
 /****************************************************************************
- * Public Functions Prototypes
+ * Private Functions
  ****************************************************************************/
 
-#undef EXTERN
-#if defined(__cplusplus)
-}
-#endif
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
 
-#endif /* __ASSEMBLY__ */
-#endif /* __VENDOR_BOUFFALOLAB_CHIP_BL616CL_BOUFFALOLAB_IRQ_H */
+/****************************************************************************
+ * Name: up_timer_initialize
+ *
+ * Description:
+ *   This function is called during start-up to initialize
+ *   the timer interrupt.
+ *
+ ****************************************************************************/
+
+void up_timer_initialize(void)
+{
+}

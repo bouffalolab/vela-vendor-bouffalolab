@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chip/bl616cl/include/chip.h
+ * vendor/bouffalolab/chips/bl616cl/include/chip.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -22,9 +22,14 @@
 #define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_CHIP_H
 
 /****************************************************************************
- * Included Files
+ * Pre-processor Definitions
  ****************************************************************************/
 
-#include "../chip.h"
+/* Public chip capabilities consumed by architecture common code.  Keep
+ * private peripheral register addresses in chips/bl616cl/chip.h.
+ */
+
+#define HAVE_UART_DEVICE 1
+#define HAVE_SERIAL_CONSOLE 1
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_CHIP_H */

@@ -25,32 +25,27 @@
  * Included Files
  ****************************************************************************/
 
+#include <arch/chip/chip.h>
 #include <nuttx/config.h>
+
 #include <stdint.h>
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define BL616CL_FLASH_XIP_BASE   0x80000000
-#define BL616CL_OCRAM_BASE       0x20fc0000
-#define BL616CL_OCRAM_SIZE       (224 * 1024)
-#define BL616CL_WRAM_BASE        0x20ff8000
-#define BL616CL_WRAM_SIZE        (160 * 1024)
-#define BL616CL_RAM_BASE         BL616CL_OCRAM_BASE
-#define BL616CL_RAM_SIZE         (BL616CL_OCRAM_SIZE + BL616CL_WRAM_SIZE)
+#define BL616CL_FLASH_XIP_BASE 0x80000000
+#define BL616CL_OCRAM_BASE 0x20fc0000
+#define BL616CL_OCRAM_SIZE (224 * 1024)
+#define BL616CL_WRAM_BASE 0x20ff8000
+#define BL616CL_WRAM_SIZE (160 * 1024)
+#define BL616CL_RAM_BASE BL616CL_OCRAM_BASE
+#define BL616CL_RAM_SIZE (BL616CL_OCRAM_SIZE + BL616CL_WRAM_SIZE)
 
-#define BL616CL_UART0_BASE       0x2000a000
-#define BL616CL_CLIC_BASE        0xe0800000
-
-#define BL616CL_IRQ_ASYNC_BASE   16
-#define BL616CL_IRQ_MTIME        7
-#define BL616CL_IRQ_LAST         (BL616CL_IRQ_ASYNC_BASE + 67)
+#define BL616CL_UART0_BASE 0x2000a000
+#define BL616CL_CLIC_BASE 0xe0800000
 
 #define BL616CL_UART_TXFIFO_SIZE 32
-#define BL616CL_UART_CLOCK       40000000
-
-#define HAVE_UART_DEVICE         1
-#define HAVE_SERIAL_CONSOLE      1
+#define BL616CL_UART_CLOCK 40000000
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_CHIP_H */

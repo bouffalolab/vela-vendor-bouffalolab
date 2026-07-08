@@ -1,5 +1,5 @@
 # ##############################################################################
-# vendor/bouffalolab/boards/bl616cldg/src/CMakeLists.txt
+# vendor/bouffalolab/boards/bl616cl/bl616cldg/src/CMakeLists.txt
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more contributor
 # license agreements.  See the NOTICE file distributed with this work for
@@ -18,7 +18,7 @@
 #
 # ##############################################################################
 
-set(SRCS bouffalolab_ap.c)
+set(SRCS bl616cldg_appinit.c)
 
 nuttx_add_romfs(
   NAME

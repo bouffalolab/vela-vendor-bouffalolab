@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chip/bl616cl/bouffalolab_start.h
+ * vendor/bouffalolab/chips/bl616cl/bl616cl_lowputc.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,19 +18,25 @@
  *
  ****************************************************************************/
 
-/****************************************************************************
- * Included Files
- ****************************************************************************/
-
-#ifndef __VENDOR_BOUFFALOLAB_CHIP_BL616CL_BOUFFALOLAB_START_H
-#define __VENDOR_BOUFFALOLAB_CHIP_BL616CL_BOUFFALOLAB_START_H
+#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_LOWPUTC_H
+#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_LOWPUTC_H
 
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
+#include <nuttx/arch.h>
+#include <nuttx/config.h>
+#include <nuttx/irq.h>
+
+#include "chip.h"
+
 /****************************************************************************
- * Pre-processor Definitions
+ * Public Types
  ****************************************************************************/
 
-#endif /* __VENDOR_BOUFFALOLAB_CHIP_BL616CL_BOUFFALOLAB_START_H */
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
+
+#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_LOWPUTC_H */

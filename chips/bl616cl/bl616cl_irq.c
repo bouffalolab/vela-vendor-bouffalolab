@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chip/bl616cl/bouffalolab_oneshot.c
+ * vendor/bouffalolab/chips/bl616cl/bl616cl_irq.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -24,11 +24,20 @@
 
 #include <nuttx/config.h>
 
-#include <arch/board/board.h>
+#include <nuttx/arch.h>
+#include <nuttx/irq.h>
+
 #include <arch/irq.h>
+
+#include "chip.h"
+#include "riscv_internal.h"
 
 /****************************************************************************
  * Pre-processor Definitions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Private Data
  ****************************************************************************/
 
 /****************************************************************************
@@ -40,15 +49,67 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: up_timer_initialize
+ * Name: up_irqinitialize
+ ****************************************************************************/
+
+void up_irqinitialize(void)
+{
+    riscv_exception_attach();
+    up_irq_enable();
+}
+
+/****************************************************************************
+ * Name: up_enable_irq
  *
  * Description:
- *   This function is called during start-up to initialize
- *   the timer interrupt.
+ *   Enable the interrupt specified by 'irq'
  *
  ****************************************************************************/
 
-void up_timer_initialize(void)
+void up_enable_irq(int irq)
 {
+    UNUSED(irq);
+}
 
+/****************************************************************************
+ * Name: up_disable_irq
+ *
+ * Description:
+ *   Disable the interrupt specified by 'irq'
+ *
+ ****************************************************************************/
+
+void up_disable_irq(int irq)
+{
+    UNUSED(irq);
+}
+
+/****************************************************************************
+ * Name: riscv_ack_irq
+ *
+ * Description:
+ *   Acknowledge the IRQ
+ *
+ ****************************************************************************/
+
+void riscv_ack_irq(int irq)
+{
+    UNUSED(irq);
+}
+
+/****************************************************************************
+ * Name: up_irq_enable
+ ****************************************************************************/
+
+irqstate_t up_irq_enable(void)
+{
+    irqstate_t flags;
+
+    __asm__ __volatile__(
+        "csrrs %0, mstatus, %1\n"
+        : "=r"(flags)
+        : "r"(STATUS_IE)
+        : "memory");
+
+    return flags;
 }

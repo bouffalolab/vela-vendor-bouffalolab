@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chip/bl616cl/bouffalolab_uart.c
+ * vendor/bouffalolab/chips/bl616cl/bl616cl_allocateheap.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -22,8 +22,8 @@
  * Included Files
  ****************************************************************************/
 
-#include <nuttx/config.h>
 #include <nuttx/arch.h>
+#include <nuttx/config.h>
 
 #include "chip.h"
 
@@ -81,10 +81,10 @@
 extern char __HeapBase[];
 extern char __HeapLimit[];
 
-void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
+void up_allocate_heap(FAR void** heap_start, size_t* heap_size)
 {
-  *heap_start = __HeapBase;
-  *heap_size = (size_t)(__HeapLimit - __HeapBase);
+    *heap_start = __HeapBase;
+    *heap_size = (size_t)(__HeapLimit - __HeapBase);
 }
 
 /******************************************************************************
@@ -99,6 +99,5 @@ void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 #if CONFIG_MM_REGIONS > 1
 void riscv_addregion(void)
 {
-
 }
 #endif

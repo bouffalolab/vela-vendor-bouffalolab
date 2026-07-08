@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/boards/bl616cldg/src/bouffalolab_ap.c
+ * vendor/bouffalolab/boards/bl616cl/bl616cldg/src/bl616cldg_appinit.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -43,7 +43,7 @@
 
 int bl616cldg_bringup(void)
 {
-  return OK;
+    return OK;
 }
 
 /****************************************************************************
@@ -72,7 +72,6 @@ int bl616cldg_bringup(void)
 #ifdef CONFIG_BOARD_EARLY_INITIALIZE
 void board_early_initialize(void)
 {
-
 }
 #endif
 
@@ -98,9 +97,9 @@ void board_early_initialize(void)
 #ifdef CONFIG_BOARD_LATE_INITIALIZE
 void board_late_initialize(void)
 {
-  /* Perform board-specific initialization */
+    /* Perform board-specific initialization */
 
-  bl616cldg_bringup();
+    bl616cldg_bringup();
 }
 #endif
 
@@ -132,13 +131,13 @@ void board_late_initialize(void)
 int board_app_initialize(uintptr_t arg)
 {
 #ifdef CONFIG_BOARD_LATE_INITIALIZE
-  /* Board initialization already performed by board_late_initialize() */
+    /* Board initialization already performed by board_late_initialize() */
 
-  return OK;
+    return OK;
 #else
-  /* Perform board-specific initialization */
+    /* Perform board-specific initialization */
 
-  return bl616cldg_bringup();
+    return bl616cldg_bringup();
 #endif
 }
 
@@ -163,6 +162,6 @@ int board_app_initialize(uintptr_t arg)
 #ifdef CONFIG_BOARDCTL_FINALINIT
 int board_app_finalinitialize(uintptr_t arg)
 {
-  return 0;
+    return 0;
 }
 #endif
