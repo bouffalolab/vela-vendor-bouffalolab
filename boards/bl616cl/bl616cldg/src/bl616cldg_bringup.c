@@ -34,6 +34,7 @@
 #include "bl616cldg.h"
 #include "bl616cldg_diagnostics.h"
 #include "bl616cldg_heap.h"
+#include "bl616cldg_peripheral.h"
 #include "bl616cldg_pm.h"
 
 /****************************************************************************
@@ -72,11 +73,7 @@ static int bl616cldg_clock_late_initialize(void)
 
 static int bl616cldg_peripheral_late_initialize(void)
 {
-  /* Do not copy SDK peripheral_clock_init() wholesale. Each NuttX driver
-   * should enable its own clock when it is registered.
-   */
-
-  return OK;
+  return bl616cldg_peripheral_initialize();
 }
 
 /****************************************************************************

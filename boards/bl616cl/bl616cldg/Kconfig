@@ -21,6 +21,14 @@ config BL616CLDG_PSRAM_HEAP
 		baseline bring-up because PSRAM must be initialized and owned
 		explicitly before it can be exposed to the NuttX heap.
 
+config BL616CLDG_PERIPHERAL_CLOCKS
+	bool "Enable BL616CLDG board peripheral clocks"
+	default n
+	---help---
+		Enable board-managed peripheral clock setup.  Keep this disabled
+		for baseline bring-up because each NuttX driver should own its
+		clock source and gate when it is registered.
+
 config BL616CLDG_PM_RECOVERY
 	bool "Enable BL616CLDG PM recovery"
 	default n
