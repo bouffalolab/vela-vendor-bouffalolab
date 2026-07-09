@@ -21,6 +21,7 @@
 set(SRCS
     bl616cl_head.S
     bl616cl_start.c
+    bl616cl_bod.c
     bl616cl_bus.c
     bl616cl_cpu.c
     bl616cl_memory.c

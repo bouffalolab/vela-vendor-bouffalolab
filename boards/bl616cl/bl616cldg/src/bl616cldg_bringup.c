@@ -26,6 +26,7 @@
 
 #include <sys/types.h>
 
+#include "bl616cl_bod.h"
 #include "bl616cl_bus.h"
 #include "bl616cl_sec_mutex.h"
 
@@ -80,11 +81,20 @@ static int bl616cldg_peripheral_late_initialize(void)
 
 static int bl616cldg_irq_late_initialize(void)
 {
-  /* up_irqinitialize() owns the CLIC table. Board IRQs such as WiFi, BOD and
+  /* up_irqinitialize() owns the CLIC table. Board IRQs such as WiFi and
    * bus-error handlers will be attached by their own drivers or debug hooks.
    */
 
   return OK;
+}
+
+/****************************************************************************
+ * Name: bl616cldg_power_late_initialize
+ ****************************************************************************/
+
+static int bl616cldg_power_late_initialize(void)
+{
+  return bl616cl_bod_initialize();
 }
 
 /****************************************************************************
@@ -173,6 +183,12 @@ int bl616cldg_bringup(void)
     }
 
   ret = bl616cldg_irq_late_initialize();
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = bl616cldg_power_late_initialize();
   if (ret < 0)
     {
       return ret;
