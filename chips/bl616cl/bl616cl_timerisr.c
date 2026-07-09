@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_oneshot.c
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_timerisr.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -24,16 +24,15 @@
 
 #include <nuttx/config.h>
 
-#include <arch/board/board.h>
+#include <assert.h>
+
+#include <nuttx/timers/arch_alarm.h>
+
 #include <arch/irq.h>
 
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
+#include "riscv_mtimer.h"
 
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
+#include "chip.h"
 
 /****************************************************************************
  * Public Functions
@@ -43,11 +42,20 @@
  * Name: up_timer_initialize
  *
  * Description:
- *   This function is called during start-up to initialize
- *   the timer interrupt.
+ *   This function is called during start-up to initialize the timer
+ *   interrupt.
  *
  ****************************************************************************/
 
 void up_timer_initialize(void)
 {
+  struct oneshot_lowerhalf_s *lower;
+
+  lower = riscv_mtimer_initialize(BL616CL_CORET_MTIME,
+                                  BL616CL_CORET_MTIMECMP,
+                                  RISCV_IRQ_MTIMER,
+                                  BL616CL_MTIMER_FREQ);
+
+  DEBUGASSERT(lower != NULL);
+  up_alarm_set_lowerhalf(lower);
 }
