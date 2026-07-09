@@ -13,4 +13,12 @@ config BL616CLDG_BOARD_DIAGNOSTICS
 		for baseline bring-up because SDK banner, version, flash-info and
 		anti-rollback paths are not kernel start requirements.
 
+config BL616CLDG_PSRAM_HEAP
+	bool "Enable BL616CLDG PSRAM heap"
+	default n
+	---help---
+		Enable BL616CLDG PSRAM heap registration.  Keep this disabled for
+		baseline bring-up because PSRAM must be initialized and owned
+		explicitly before it can be exposed to the NuttX heap.
+
 endif

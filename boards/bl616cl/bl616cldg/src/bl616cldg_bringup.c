@@ -33,6 +33,7 @@
 
 #include "bl616cldg.h"
 #include "bl616cldg_diagnostics.h"
+#include "bl616cldg_heap.h"
 
 /****************************************************************************
  * Private Functions
@@ -105,11 +106,7 @@ static int bl616cldg_power_late_initialize(void)
 
 static int bl616cldg_heap_late_initialize(void)
 {
-  /* up_allocate_heap() provides the base heap. PSRAM and WiFi shared memory
-   * must stay out of the generic heap until their ownership is explicit.
-   */
-
-  return OK;
+  return bl616cldg_heap_initialize();
 }
 
 /****************************************************************************
