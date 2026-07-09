@@ -51,14 +51,8 @@ __start:
   csrw    mstatus, zero
   csrw    mie, zero
 
-  /* Use numeric T-Head CSR encodings so the current GCC can assemble this. */
-
-  csrr    t0, 0x7c5
-  lui     t1, 0x100
-  or      t0, t0, t1
-  csrw    0x7c5, t0
-
   la      t0, exception_common
+  ori     t0, t0, 3
   csrw    mtvec, t0
 
   la      t0, __bl616cl_start

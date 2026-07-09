@@ -21,7 +21,12 @@
 set(SRCS
     bl616cl_head.S
     bl616cl_start.c
+    bl616cl_cpu.c
+    bl616cl_memory.c
+    bl616cl_cache.c
+    bl616cl_clock.c
     bl616cl_irq.c
+    bl616cl_irq_adapter.c
     bl616cl_irq_dispatch.c
     bl616cl_lowputc.c
     bl616cl_serial.c

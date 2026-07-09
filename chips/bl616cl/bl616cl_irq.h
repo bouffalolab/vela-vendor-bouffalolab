@@ -29,6 +29,8 @@
 #include <nuttx/config.h>
 #include <nuttx/irq.h>
 
+#include <stdint.h>
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -47,6 +49,16 @@ extern "C"
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
+
+int bl616cl_irq_raw_to_nuttx(int irq);
+int bl616cl_irq_nuttx_to_raw(int irq);
+void bl616cl_clic_enable_raw(int irq);
+void bl616cl_clic_disable_raw(int irq);
+void bl616cl_clic_set_pending_raw(int irq);
+void bl616cl_clic_clear_pending_raw(int irq);
+void bl616cl_clic_set_nlbits(uint8_t nlbits);
+void bl616cl_clic_set_priority_raw(int irq, uint8_t preemptprio,
+                                   uint8_t subprio);
 
 #undef EXTERN
 #if defined(__cplusplus)

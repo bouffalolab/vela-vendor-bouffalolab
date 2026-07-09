@@ -31,6 +31,11 @@
 
 #include "riscv_internal.h"
 
+#include "bl616cl_cache.h"
+#include "bl616cl_clock.h"
+#include "bl616cl_cpu.h"
+#include "bl616cl_memory.h"
+
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
@@ -45,6 +50,16 @@
 
 void __bl616cl_start(void)
 {
+  bl616cl_thead_cpu_init();
+  bl616cl_memory_early_init();
+  bl616cl_flash_early_init();
+  bl616cl_pmp_init();
+  bl616cl_cache_early_init();
+  bl616cl_clock_early_init();
+  bl616cl_pinmux_early_uart();
+  riscv_fpuconfig();
+  bl616cl_section_load();
+  bl616cl_cache_after_load();
   riscv_earlyserialinit();
   nx_start();
 

@@ -48,7 +48,26 @@ SECTIONS
     _einit = ABSOLUTE(.);
   } > flash
 
+  .copy.table : {
+    __mem_copy_sections = ABSOLUTE(.);
+    LONG(ADDR(.data));
+    LONG(ADDR(.data) + SIZEOF(.data));
+    LONG(LOADADDR(.data));
+    LONG(0xffffffff);
+    LONG(0xffffffff);
+    LONG(0xffffffff);
+  } > flash
+
+  .zero.table : {
+    __mem_setz_sections = ABSOLUTE(.);
+    LONG(ADDR(.bss));
+    LONG(ADDR(.bss) + SIZEOF(.bss));
+    LONG(0xffffffff);
+    LONG(0xffffffff);
+  } > flash
+
   _eronly = LOADADDR(.data);
+  __LD_CONFIG_EM_SEL = 0;
 
   .data : AT(_eronly) {
     _sdata = ABSOLUTE(.);
