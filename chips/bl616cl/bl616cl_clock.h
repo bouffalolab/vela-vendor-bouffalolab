@@ -32,6 +32,7 @@
  ****************************************************************************/
 
 void bl616cl_clock_early_init(void);
+void bl616cl_timer_clock_init(void);
 void bl616cl_pinmux_early_uart(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_CLOCK_H */

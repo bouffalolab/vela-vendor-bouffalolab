@@ -39,6 +39,19 @@
 #define BL616CL_GLB_UART_CFG2_OFFSET      0x158
 #define BL616CL_HBN_GPIO5_FIXUP_REG       0x2000f014
 #define BL616CL_HBN_GPIO5_UNCOMMON_BIT    (1u << 16)
+#define BL616CL_SDK_SYSTEM_CLOCK_XCLK     5
+#define BL616CL_SDK_MTIMER_SOURCE_XCLK    0
+#define BL616CL_SDK_ENABLE                1
+
+/****************************************************************************
+ * Private Function Prototypes
+ ****************************************************************************/
+
+extern uint32_t bl616cl_sdk_clock_system_clock_get(int type)
+  __asm__("Clock_System_Clock_Get");
+extern int bl616cl_sdk_cpu_set_mtimer_clk(uint8_t enable, int source,
+                                          uint16_t div)
+  __asm__("CPU_Set_MTimer_CLK");
 
 /****************************************************************************
  * Public Functions
@@ -53,6 +66,25 @@ void bl616cl_clock_early_init(void)
   /* Keep the boot clock tree for now. Board clock switching must later
    * move into RAM-safe code before changing the flash clock.
    */
+}
+
+/****************************************************************************
+ * Name: bl616cl_timer_clock_init
+ ****************************************************************************/
+
+void bl616cl_timer_clock_init(void)
+{
+  uint32_t div;
+  uint32_t xclk;
+
+  xclk = bl616cl_sdk_clock_system_clock_get(BL616CL_SDK_SYSTEM_CLOCK_XCLK);
+  div = xclk / BL616CL_MTIMER_FREQ;
+
+  DEBUGASSERT(div > 0);
+
+  (void)bl616cl_sdk_cpu_set_mtimer_clk(BL616CL_SDK_ENABLE,
+                                       BL616CL_SDK_MTIMER_SOURCE_XCLK,
+                                       div - 1);
 }
 
 /****************************************************************************

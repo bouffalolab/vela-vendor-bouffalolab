@@ -32,6 +32,7 @@
 
 #include "riscv_mtimer.h"
 
+#include "bl616cl_clock.h"
 #include "chip.h"
 
 /****************************************************************************
@@ -50,6 +51,8 @@
 void up_timer_initialize(void)
 {
   struct oneshot_lowerhalf_s *lower;
+
+  bl616cl_timer_clock_init();
 
   lower = riscv_mtimer_initialize(BL616CL_CORET_MTIME,
                                   BL616CL_CORET_MTIMECMP,
