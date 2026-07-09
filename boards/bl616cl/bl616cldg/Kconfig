@@ -21,4 +21,12 @@ config BL616CLDG_PSRAM_HEAP
 		baseline bring-up because PSRAM must be initialized and owned
 		explicitly before it can be exposed to the NuttX heap.
 
+config BL616CLDG_PM_RECOVERY
+	bool "Enable BL616CLDG PM recovery"
+	default n
+	---help---
+		Enable BL616CLDG low-power recovery registration.  Keep this
+		disabled for baseline bring-up because PSRAM, clock and UART
+		restore ordering must be designed against the openvela PM model.
+
 endif
