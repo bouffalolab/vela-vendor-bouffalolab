@@ -34,6 +34,7 @@ set(SRCS
     bl616cl_lowputc.c
     bl616cl_serial.c
     bl616cl_sec_mutex.c
+    bl616cl_system.c
     bl616cl_timerisr.c
     bl616cl_allocateheap.c)
 

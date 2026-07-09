@@ -35,6 +35,7 @@
 #include "bl616cl_clock.h"
 #include "bl616cl_cpu.h"
 #include "bl616cl_memory.h"
+#include "bl616cl_system.h"
 
 /****************************************************************************
  * Private Functions
@@ -59,7 +60,7 @@ void __bl616cl_start(void)
   bl616cl_pinmux_early_uart();
   riscv_fpuconfig();
   bl616cl_section_load();
-  bl616cl_cache_after_load();
+  bl616cl_system_post_init();
   riscv_earlyserialinit();
   nx_start();
 
