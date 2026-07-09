@@ -26,6 +26,8 @@
 
 #include <sys/types.h>
 
+#include "bl616cl_sec_mutex.h"
+
 #include "bl616cldg.h"
 
 /****************************************************************************
@@ -98,6 +100,20 @@ static int bl616cldg_heap_late_initialize(void)
 }
 
 /****************************************************************************
+ * Name: bl616cldg_security_late_initialize
+ ****************************************************************************/
+
+static int bl616cldg_security_late_initialize(void)
+{
+  /* SDK board_init() initializes the security-engine mutexes after board
+   * services are up. Keep the hook independent from flash or RF bring-up.
+   */
+
+  bl616cl_sec_mutex_init();
+  return OK;
+}
+
+/****************************************************************************
  * Name: bl616cldg_diagnostics_late_initialize
  ****************************************************************************/
 
@@ -153,6 +169,12 @@ int bl616cldg_bringup(void)
     }
 
   ret = bl616cldg_heap_late_initialize();
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = bl616cldg_security_late_initialize();
   if (ret < 0)
     {
       return ret;
