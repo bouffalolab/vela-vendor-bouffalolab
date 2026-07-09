@@ -18,7 +18,7 @@
 #
 # ##############################################################################
 
-set(SRCS bl616cldg_appinit.c)
+set(SRCS bl616cldg_appinit.c bl616cldg_bringup.c)
 
 nuttx_add_romfs(
   NAME

@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/boards/bl616cl/bl616cldg/bl616cldg.h
+ * apps/vendor/bouffalolab/boards/bl616cl/bl616cldg/src/bl616cldg.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -22,10 +22,9 @@
 #define __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_BL616CLDG_BL616CLDG_H
 
 /****************************************************************************
- * Pre-processor Definitions
+ * Public Function Prototypes
  ****************************************************************************/
 
 int bl616cldg_bringup(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_BL616CLDG_BL616CLDG_H */
-

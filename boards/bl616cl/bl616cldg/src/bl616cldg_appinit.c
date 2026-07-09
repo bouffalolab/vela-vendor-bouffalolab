@@ -21,30 +21,16 @@
 /****************************************************************************
  * Included Files
  ****************************************************************************/
-#include "riscv_internal.h"
+#include <nuttx/config.h>
+
+#include <sys/types.h>
+#include <stdint.h>
+
+#include "bl616cldg.h"
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
-
-/****************************************************************************
- * Name: bl616cldg_bringup
- *
- * Description:
- *   Perform architecture-specific initialization
- *
- *   CONFIG_BOARD_LATE_INITIALIZE=y
- *     Called from board_late_initialize().
- *
- *   CONFIG_BOARD_LATE_INITIALIZE=n && CONFIG_BOARDCTL=y
- *     Called from the NSH library
- *
- ****************************************************************************/
-
-int bl616cldg_bringup(void)
-{
-  return OK;
-}
 
 /****************************************************************************
  * Name: board_early_initialize
