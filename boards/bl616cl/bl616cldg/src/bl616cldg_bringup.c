@@ -32,6 +32,7 @@
 #include "bl616cl_sec_mutex.h"
 
 #include "bl616cldg.h"
+#include "bl616cldg_diagnostics.h"
 
 /****************************************************************************
  * Private Functions
@@ -131,12 +132,7 @@ static int bl616cldg_security_late_initialize(void)
 
 static int bl616cldg_diagnostics_late_initialize(void)
 {
-  /* SDK banner, version, anti-rollback and flash-info output are
-   * diagnostics, not kernel bring-up requirements. Keep them out of
-   * default late init.
-   */
-
-  return OK;
+  return bl616cldg_diagnostics_initialize();
 }
 
 /****************************************************************************
