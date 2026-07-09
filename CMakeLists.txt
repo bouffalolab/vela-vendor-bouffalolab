@@ -14,6 +14,11 @@
 # then generate this menu which sources them.
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/bouffalo_sdk_compat.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/bl_component.cmake)
+
+set(BL_USE_LIB_COMPONENTS
+    "${BL_USE_LIB_COMPONENTS}"
+    CACHE STRING "Bouffalo components forced to prebuilt library mode")
 
 set(BL_BOUFFALO_DRIVERS_DIR
     "${CMAKE_CURRENT_LIST_DIR}/drivers"
