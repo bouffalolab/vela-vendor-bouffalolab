@@ -46,8 +46,9 @@
 #define BL616CL_SF_CTRL_SF_IF_BK2_MODE     (1u << 29)
 #define BL616CL_SF_CTRL_SF_IF_BK2_EN       (1u << 30)
 
-#define BL616CL_GLB_SRAM_CFG3_OFFSET       0x60c
-#define BL616CL_GLB_EM_SEL_MASK            0x0f
+#define BL616CL_SDK_GLB_WRAM160KB_EM0KB    0
+#define BL616CL_SDK_GLB_WRAM144KB_EM16KB   1
+#define BL616CL_SDK_GLB_WRAM128KB_EM32KB   2
 
 #define BL616CL_SECTION_SENTINEL           0xffffffff
 
@@ -75,6 +76,13 @@ struct bl616cl_mem_section_s
 extern struct bl616cl_mem_load_section_s __mem_copy_sections[];
 extern struct bl616cl_mem_section_s __mem_setz_sections[];
 extern uint8_t __LD_CONFIG_EM_SEL;
+
+/****************************************************************************
+ * Private Function Prototypes
+ ****************************************************************************/
+
+extern int bl616cl_sdk_glb_set_em_sel(uint8_t em_sel)
+  __asm__("GLB_Set_EM_Sel");
 
 /****************************************************************************
  * Private Functions
@@ -122,29 +130,25 @@ static void bl616cl_psramb_tzc_access_not_lock(uint8_t region,
 static void bl616cl_em_select(void)
 {
   uintptr_t em_size;
-  uint32_t regval;
   uint32_t em_sel;
 
   em_size = (uintptr_t)&__LD_CONFIG_EM_SEL;
   switch (em_size)
     {
       case 16 * 1024:
-        em_sel = 0x01;
+        em_sel = BL616CL_SDK_GLB_WRAM144KB_EM16KB;
         break;
 
       case 32 * 1024:
-        em_sel = 0x03;
+        em_sel = BL616CL_SDK_GLB_WRAM128KB_EM32KB;
         break;
 
       default:
-        em_sel = 0x00;
+        em_sel = BL616CL_SDK_GLB_WRAM160KB_EM0KB;
         break;
     }
 
-  regval = getreg32(BL616CL_GLB_BASE + BL616CL_GLB_SRAM_CFG3_OFFSET);
-  regval &= ~BL616CL_GLB_EM_SEL_MASK;
-  regval |= em_sel;
-  putreg32(regval, BL616CL_GLB_BASE + BL616CL_GLB_SRAM_CFG3_OFFSET);
+  (void)bl616cl_sdk_glb_set_em_sel(em_sel);
 }
 
 /****************************************************************************
