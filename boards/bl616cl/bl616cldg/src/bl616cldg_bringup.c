@@ -26,6 +26,7 @@
 
 #include <sys/types.h>
 
+#include "bl616cl_bus.h"
 #include "bl616cl_sec_mutex.h"
 
 #include "bl616cldg.h"
@@ -128,6 +129,15 @@ static int bl616cldg_diagnostics_late_initialize(void)
 }
 
 /****************************************************************************
+ * Name: bl616cldg_debug_late_initialize
+ ****************************************************************************/
+
+static int bl616cldg_debug_late_initialize(void)
+{
+  return bl616cl_bus_error_initialize();
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -180,5 +190,11 @@ int bl616cldg_bringup(void)
       return ret;
     }
 
-  return bl616cldg_diagnostics_late_initialize();
+  ret = bl616cldg_diagnostics_late_initialize();
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  return bl616cldg_debug_late_initialize();
 }
