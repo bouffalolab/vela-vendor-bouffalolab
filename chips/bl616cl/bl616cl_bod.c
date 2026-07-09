@@ -38,18 +38,28 @@
  ****************************************************************************/
 
 #define BL616CL_BOD_ENABLE          1
+#define BL616CL_BOD_IRQ_ENABLE      1
 #define BL616CL_BOD_THRESHOLD_2P4   2
 #define BL616CL_BOD_POR_INDEPENDENT 0
+
+/****************************************************************************
+ * Private Types
+ ****************************************************************************/
+
+struct bl616cl_sdk_hbn_bod_cfg_s
+{
+  uint8_t enable_bod;
+  uint8_t enable_bod_int;
+  uint8_t bod_threshold;
+  uint8_t enable_por_in_bod;
+};
 
 /****************************************************************************
  * Private Function Prototypes
  ****************************************************************************/
 
-extern int bl616cl_sdk_hbn_set_bod_config(uint8_t enable, uint8_t threshold,
-                                          uint8_t mode)
-  __asm__("HBN_Set_BOD_Config");
-extern int bl616cl_sdk_hbn_enable_bod_irq(void)
-  __asm__("HBN_Enable_BOD_IRQ");
+extern int bl616cl_sdk_hbn_set_bod_cfg(
+  struct bl616cl_sdk_hbn_bod_cfg_s *cfg) __asm__("HBN_Set_BOD_Cfg");
 
 /****************************************************************************
  * Private Functions
@@ -83,6 +93,14 @@ static int bl616cl_bod_interrupt(int irq, void *context, void *arg)
 
 int bl616cl_bod_initialize(void)
 {
+  struct bl616cl_sdk_hbn_bod_cfg_s cfg =
+  {
+    .enable_bod = BL616CL_BOD_ENABLE,
+    .enable_bod_int = BL616CL_BOD_IRQ_ENABLE,
+    .bod_threshold = BL616CL_BOD_THRESHOLD_2P4,
+    .enable_por_in_bod = BL616CL_BOD_POR_INDEPENDENT,
+  };
+
   int ret;
 
   ret = irq_attach(BL616CL_IRQ_BOD, bl616cl_bod_interrupt, NULL);
@@ -91,15 +109,7 @@ int bl616cl_bod_initialize(void)
       return ret;
     }
 
-  ret = bl616cl_sdk_hbn_set_bod_config(BL616CL_BOD_ENABLE,
-                                       BL616CL_BOD_THRESHOLD_2P4,
-                                       BL616CL_BOD_POR_INDEPENDENT);
-  if (ret != OK)
-    {
-      return -EIO;
-    }
-
-  ret = bl616cl_sdk_hbn_enable_bod_irq();
+  ret = bl616cl_sdk_hbn_set_bod_cfg(&cfg);
   if (ret != OK)
     {
       return -EIO;
