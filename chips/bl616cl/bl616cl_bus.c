@@ -41,10 +41,16 @@
 
 #define BL616CL_MCU_MISC_MCU_BUS_CFG0_OFFSET 0x0000
 #define BL616CL_MCU_MISC_TIMEOUT_EN          (1u << 0)
-#define BL616CL_MCU_MISC_DEC_ERR_RSP         (1u << 2)
 
 #define BL616CL_MCU_BUS_CFG0 \
   (BL616CL_MCU_MISC_BASE + BL616CL_MCU_MISC_MCU_BUS_CFG0_OFFSET)
+
+/****************************************************************************
+ * Private Function Prototypes
+ ****************************************************************************/
+
+extern void bl616cl_sdk_glb_bus_decoder_err_disable(void)
+  __asm__("GLB_Bus_Decoder_Err_Disable");
 
 /****************************************************************************
  * Private Functions
@@ -72,9 +78,10 @@ static void bl616cl_bus_error_enable(void)
 {
   uint32_t regval;
 
+  bl616cl_sdk_glb_bus_decoder_err_disable();
+
   regval = getreg32(BL616CL_MCU_BUS_CFG0);
   regval |= BL616CL_MCU_MISC_TIMEOUT_EN;
-  regval &= ~BL616CL_MCU_MISC_DEC_ERR_RSP;
   putreg32(regval, BL616CL_MCU_BUS_CFG0);
 }
 
