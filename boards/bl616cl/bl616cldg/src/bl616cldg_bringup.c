@@ -28,6 +28,7 @@
 
 #include "bl616cl_bod.h"
 #include "bl616cl_bus.h"
+#include "bl616cl_flash.h"
 #include "bl616cl_sec_mutex.h"
 
 #include "bl616cldg.h"
@@ -42,11 +43,11 @@
 
 static int bl616cldg_flash_late_initialize(void)
 {
-  /* SDK board_init() calls bflb_flash_init() and retunes XIP flash here.
-   * Keep that disabled until the flash clock path runs from RAM-safe code.
+  /* SDK board_init() retunes XIP flash after bflb_flash_init(). Keep flash
+   * clock retuning disabled until that path runs from RAM-safe code.
    */
 
-  return OK;
+  return bl616cl_flash_initialize();
 }
 
 /****************************************************************************
