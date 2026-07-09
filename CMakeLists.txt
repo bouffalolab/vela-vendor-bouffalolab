@@ -50,11 +50,16 @@ if(COMMAND nuttx_add_kernel_library OR COMMAND nuttx_add_library)
 endif()
 
 if(TARGET bl_lhal AND "${CHIP}" STREQUAL "bl616cl")
+  set(BL616CL_STDLIB_GLB_SOURCE
+      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_glb.c)
+  set_source_files_properties(${BL616CL_STDLIB_GLB_SOURCE}
+                              PROPERTIES COMPILE_FLAGS "-Wno-strict-prototypes")
   target_sources(
     bl_lhal
     PRIVATE
       ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/port/bl616cl_clock.c
       ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_clock.c
+      ${BL616CL_STDLIB_GLB_SOURCE}
       ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_hbn.c)
 endif()
 

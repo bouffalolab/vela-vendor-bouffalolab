@@ -36,12 +36,17 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define BL616CL_GLB_UART_CFG0      (0x20000000u + 0x150u)
-#define BL616CL_GLB_UART_CLK_EN    (1u << 4)
-#define BL616CL_GLB_UART_CLK_DIV   (0xffu << 8)
-#define BL616CL_HBN_GLB            (0x2000f000u + 0x30u)
-#define BL616CL_HBN_UART_CLK_SEL   (1u << 2)
-#define BL616CL_HBN_UART_CLK_SEL2  (1u << 15)
+#define BL616CL_SDK_ENABLE         1
+#define BL616CL_SDK_UART_CLK_XCLK  2
+#define BL616CL_SDK_UART_CLK_DIV   0
+
+/****************************************************************************
+ * Private Function Prototypes
+ ****************************************************************************/
+
+extern int bl616cl_sdk_glb_set_uart_clk(uint8_t enable, uint8_t clk_sel,
+                                        uint8_t div)
+  __asm__("GLB_Set_UART_CLK");
 
 /****************************************************************************
  * Private Functions
@@ -68,8 +73,6 @@ static uint8_t bl616cl_data_bits(uint8_t bits)
 
 static void bl616cl_uart_clock_enable(uint8_t id)
 {
-  uint32_t cfgval;
-
   switch (id)
     {
       case 0:
@@ -84,21 +87,9 @@ static void bl616cl_uart_clock_enable(uint8_t id)
         break;
     }
 
-  cfgval = getreg32(BL616CL_GLB_UART_CFG0);
-  cfgval &= ~BL616CL_GLB_UART_CLK_EN;
-  putreg32(cfgval, BL616CL_GLB_UART_CFG0);
-
-  cfgval &= ~BL616CL_GLB_UART_CLK_DIV;
-  putreg32(cfgval, BL616CL_GLB_UART_CFG0);
-
-  cfgval = getreg32(BL616CL_HBN_GLB);
-  cfgval &= ~BL616CL_HBN_UART_CLK_SEL;
-  cfgval |= BL616CL_HBN_UART_CLK_SEL2;
-  putreg32(cfgval, BL616CL_HBN_GLB);
-
-  cfgval = getreg32(BL616CL_GLB_UART_CFG0);
-  cfgval |= BL616CL_GLB_UART_CLK_EN;
-  putreg32(cfgval, BL616CL_GLB_UART_CFG0);
+  (void)bl616cl_sdk_glb_set_uart_clk(BL616CL_SDK_ENABLE,
+                                     BL616CL_SDK_UART_CLK_XCLK,
+                                     BL616CL_SDK_UART_CLK_DIV);
 }
 
 static const char *bl616cl_uart_name(uint8_t id)
