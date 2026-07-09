@@ -38,6 +38,7 @@
 #include "bl616cldg_irq.h"
 #include "bl616cldg_peripheral.h"
 #include "bl616cldg_pm.h"
+#include "bl616cldg_time.h"
 
 /****************************************************************************
  * Private Functions
@@ -147,6 +148,15 @@ static int bl616cldg_diagnostics_late_initialize(void)
 }
 
 /****************************************************************************
+ * Name: bl616cldg_time_late_initialize
+ ****************************************************************************/
+
+static int bl616cldg_time_late_initialize(void)
+{
+  return bl616cldg_time_initialize();
+}
+
+/****************************************************************************
  * Name: bl616cldg_debug_late_initialize
  ****************************************************************************/
 
@@ -227,6 +237,12 @@ int bl616cldg_bringup(void)
     }
 
   ret = bl616cldg_diagnostics_late_initialize();
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = bl616cldg_time_late_initialize();
   if (ret < 0)
     {
       return ret;

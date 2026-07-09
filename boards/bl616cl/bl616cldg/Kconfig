@@ -53,4 +53,12 @@ config BL616CLDG_PM_RECOVERY
 		disabled for baseline bring-up because PSRAM, clock and UART
 		restore ordering must be designed against the openvela PM model.
 
+config BL616CLDG_BOARD_TIME
+	bool "Enable BL616CLDG board time hook"
+	default n
+	---help---
+		Enable BL616CLDG board time hooks.  Keep this disabled for
+		baseline bring-up because RTC ownership must be routed through
+		the openvela RTC driver model, not the SDK device framework.
+
 endif

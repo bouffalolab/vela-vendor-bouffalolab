@@ -27,7 +27,8 @@ set(SRCS
     bl616cldg_heap.c
     bl616cldg_irq.c
     bl616cldg_peripheral.c
-    bl616cldg_pm.c)
+    bl616cldg_pm.c
+    bl616cldg_time.c)
 
 nuttx_add_romfs(
   NAME
