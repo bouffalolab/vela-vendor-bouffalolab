@@ -5,6 +5,14 @@
 
 if ARCH_BOARD_CUSTOM
 
+config BL616CLDG_BOARD_CONSOLE
+	bool "Enable BL616CLDG board console hook"
+	default n
+	---help---
+		Enable board-managed console hooks for BL616CLDG.  Keep this
+		disabled for baseline bring-up because early output and console
+		registration are owned by the chip serial driver.
+
 config BL616CLDG_BOARD_DIAGNOSTICS
 	bool "Enable BL616CLDG board diagnostics"
 	default n

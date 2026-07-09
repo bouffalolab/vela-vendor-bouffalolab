@@ -22,6 +22,7 @@ set(SRCS
     bl616cldg_appinit.c
     bl616cldg_boot.c
     bl616cldg_bringup.c
+    bl616cldg_console.c
     bl616cldg_diagnostics.c
     bl616cldg_heap.c
     bl616cldg_irq.c
