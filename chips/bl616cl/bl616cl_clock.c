@@ -39,6 +39,10 @@
 #define BL616CL_GLB_UART_CFG2_OFFSET      0x158
 #define BL616CL_HBN_GPIO5_FIXUP_REG       0x2000f014
 #define BL616CL_HBN_GPIO5_UNCOMMON_BIT    (1u << 16)
+#define BL616CL_SDK_GLB_XTAL_40M          4
+#define BL616CL_SDK_GLB_PLL_WIFIPLL       1
+#define BL616CL_SDK_GLB_SYS_CLK_WIFIPLL   5
+#define BL616CL_SDK_HBN_MCU_XCLK_XTAL     1
 #define BL616CL_SDK_SYSTEM_CLOCK_XCLK     5
 #define BL616CL_SDK_MTIMER_SOURCE_XCLK    0
 #define BL616CL_SDK_ENABLE                1
@@ -49,6 +53,13 @@
 
 extern uint32_t bl616cl_sdk_clock_system_clock_get(int type)
   __asm__("Clock_System_Clock_Get");
+extern int bl616cl_sdk_glb_power_on_xtal_and_pll_clk(uint8_t xtal_type,
+                                                     uint8_t pll_type)
+  __asm__("GLB_Power_On_XTAL_And_PLL_CLK");
+extern int bl616cl_sdk_glb_set_mcu_system_clk(uint8_t clk_freq)
+  __asm__("GLB_Set_MCU_System_CLK");
+extern int bl616cl_sdk_hbn_set_mcu_xclk_sel(uint8_t xclk)
+  __asm__("HBN_Set_MCU_XCLK_Sel");
 extern int bl616cl_sdk_cpu_set_mtimer_clk(uint8_t enable, int source,
                                           uint16_t div)
   __asm__("CPU_Set_MTimer_CLK");
@@ -63,9 +74,17 @@ extern int bl616cl_sdk_cpu_set_mtimer_clk(uint8_t enable, int source,
 
 void bl616cl_clock_early_init(void)
 {
-  /* Keep the boot clock tree for now. Board clock switching must later
-   * move into RAM-safe code before changing the flash clock.
+  /* SDK system_clock_init() powers the XTAL/WIFIPLL and moves the MCU
+   * clock to WIFIPLL 320 MHz here. Flash retuning and WiFi clock ungate
+   * stay out of this early hook.
    */
+
+  (void)bl616cl_sdk_glb_power_on_xtal_and_pll_clk(
+    BL616CL_SDK_GLB_XTAL_40M,
+    BL616CL_SDK_GLB_PLL_WIFIPLL);
+  (void)bl616cl_sdk_glb_set_mcu_system_clk(
+    BL616CL_SDK_GLB_SYS_CLK_WIFIPLL);
+  (void)bl616cl_sdk_hbn_set_mcu_xclk_sel(BL616CL_SDK_HBN_MCU_XCLK_XTAL);
 }
 
 /****************************************************************************
