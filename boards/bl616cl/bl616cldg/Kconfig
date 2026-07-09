@@ -13,6 +13,14 @@ config BL616CLDG_BOARD_DIAGNOSTICS
 		for baseline bring-up because SDK banner, version, flash-info and
 		anti-rollback paths are not kernel start requirements.
 
+config BL616CLDG_BOARD_IRQS
+	bool "Enable BL616CLDG board IRQ hooks"
+	default n
+	---help---
+		Enable board-managed IRQ hooks for BL616CLDG.  Keep this disabled
+		for baseline bring-up because the chip layer owns CLIC setup and
+		wireless IRQs must be attached by their own drivers.
+
 config BL616CLDG_PSRAM_HEAP
 	bool "Enable BL616CLDG PSRAM heap"
 	default n

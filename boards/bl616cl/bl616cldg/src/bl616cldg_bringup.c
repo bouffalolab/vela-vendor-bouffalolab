@@ -34,6 +34,7 @@
 #include "bl616cldg.h"
 #include "bl616cldg_diagnostics.h"
 #include "bl616cldg_heap.h"
+#include "bl616cldg_irq.h"
 #include "bl616cldg_peripheral.h"
 #include "bl616cldg_pm.h"
 
@@ -82,11 +83,7 @@ static int bl616cldg_peripheral_late_initialize(void)
 
 static int bl616cldg_irq_late_initialize(void)
 {
-  /* up_irqinitialize() owns the CLIC table. Board IRQs such as WiFi and
-   * bus-error handlers will be attached by their own drivers or debug hooks.
-   */
-
-  return OK;
+  return bl616cldg_irq_initialize();
 }
 
 /****************************************************************************
