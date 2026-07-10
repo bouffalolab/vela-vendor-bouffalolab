@@ -25,15 +25,76 @@ ENTRY(__start)
 
 MEMORY
 {
-  flash (rx)  : ORIGIN = 0x80000000, LENGTH = 2M
-  ram   (rwx) : ORIGIN = 0x20fc0000, LENGTH = 384K
+  fw_header (rx)  : ORIGIN = 0x7ffff000, LENGTH = 4K
+  rom_header (rx)  : ORIGIN = 0x80000000, LENGTH = 6K
+  flash (rx)  : ORIGIN = 0x80001800, LENGTH = 4M - 6K
+  ram_nocache (!rx) : ORIGIN = 0x20fc0400, LENGTH = 319K
+  ram (!rx) : ORIGIN = 0x60fc0400, LENGTH = 319K
+  ram_wifi (wxa) : ORIGIN = 0x21010000, LENGTH = 64K
 }
 
 SECTIONS
 {
-  .text : {
-    _stext = ABSOLUTE(.);
+  .fw_header :
+  {
+    KEEP(*(.fw_header))
+  } > fw_header
+
+  __rom_header_start__ = ORIGIN(rom_header);
+
+  .init ORIGIN(rom_header) :
+  {
     KEEP(*(.text.entry))
+    KEEP(*(SORT_NONE(.init)))
+  } > rom_header
+
+  .multi_bins ORIGIN(rom_header) + 512 :
+  {
+    __multi_bins__ = ABSOLUTE(.);
+    LONG(0x464c4553) LONG(0x00000000)
+    LONG(LENGTH(fw_header))
+    LONG(__rom_end__ - __rom_header_start__ + LENGTH(fw_header))
+    LONG(0x0000504c) LONG(0x00000000)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x52415744) LONG(0x49464346)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x464d4f52) LONG(0x00000053)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x54524543) LONG(0x00000053)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x4f545541) LONG(0x5453494c)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0xffffffff) LONG(0xffffffff)
+    LONG(0xffffffff) LONG(0xffffffff)
+  } > rom_header
+
+  .rftlv.tool ORIGIN(rom_header) + 1K :
+  {
+    _ld_symbol_rftlv_address = ABSOLUTE(.);
+    LONG(0x46524c42)
+    LONG(0x41524150)
+    . = ORIGIN(rom_header) + 3K;
+  } > rom_header
+
+  .ver ORIGIN(rom_header) + 3K :
+  {
+    LONG(0x42464c42)
+    LONG(0x46524556)
+    KEEP(*(.bflb_verinf))
+    LONG(0x42464c42)
+    LONG(0x46524556)
+    KEEP(*(.verinfo))
+    . = ALIGN(4);
+    _version_info_section_start = ABSOLUTE(.);
+    KEEP(*(.version.*))
+    _version_info_section_end = ABSOLUTE(.);
+  } > rom_header
+
+  __rom_header_end__ = ORIGIN(rom_header) + LENGTH(rom_header);
+
+  .text ORIGIN(flash) :
+  {
+    _stext = ABSOLUTE(.);
     *(.text .text.*)
     *(.rodata .rodata.*)
     *(.srodata .srodata.*)
@@ -43,15 +104,20 @@ SECTIONS
     _etext = ABSOLUTE(.);
   } > flash
 
-  .init_section : {
+  .init_section :
+  {
     _sinit = ABSOLUTE(.);
     KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
     KEEP(*(.init_array))
     _einit = ABSOLUTE(.);
   } > flash
 
-  .copy.table : {
+  .copy.table :
+  {
     __mem_copy_sections = ABSOLUTE(.);
+    LONG(ADDR(.nocache_data));
+    LONG(ADDR(.nocache_data) + SIZEOF(.nocache_data));
+    LONG(LOADADDR(.nocache_data));
     LONG(ADDR(.ram_code));
     LONG(ADDR(.ram_code) + SIZEOF(.ram_code));
     LONG(LOADADDR(.ram_code));
@@ -66,7 +132,8 @@ SECTIONS
     LONG(0xffffffff);
   } > flash
 
-  .zero.table : {
+  .zero.table :
+  {
     __mem_setz_sections = ABSOLUTE(.);
     LONG(ADDR(.bss));
     LONG(ADDR(.bss) + SIZEOF(.bss));
@@ -76,40 +143,69 @@ SECTIONS
 
   __LD_CONFIG_EM_SEL = 0;
 
-  .ram_code : {
+  __ram_nocache_start__ = ORIGIN(ram_nocache);
+
+  .nocache_data :
+  {
+    . = ALIGN(4);
+    *(.nocache_ram)
+    . = ALIGN(4);
+  } > ram_nocache AT > flash
+
+  .nocache_noinit (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.nocache_noinit_ram)
+    *(.noncacheable)
+    . = ALIGN(4);
+  } > ram_nocache
+
+  __ram_nocache_end__ = ABSOLUTE(.);
+
+  .ram_skip_nocache_region (NOLOAD) :
+  {
+    . += (ABSOLUTE(__ram_nocache_end__) -
+          ABSOLUTE(ORIGIN(ram_nocache)));
+    . = ALIGN(32);
+  } > ram
+
+  .ram_code :
+  {
     . = ALIGN(4);
     *(.tcm_code*)
     *(.sclock_rlt_code*)
     . = ALIGN(4);
   } > ram AT > flash
 
-  .ram_rodata : {
+  .ram_rodata :
+  {
     . = ALIGN(4);
     *(.tcm_const*)
     *(.sclock_rlt_const*)
     . = ALIGN(4);
   } > ram AT > flash
 
-  .data : {
+  .data :
+  {
     _sdata = ABSOLUTE(.);
     __global_pointer$ = . + 0x800;
     *(.data .data.*)
     *(.sdata .sdata.*)
+    *(.sdata2 .sdata2.*)
     *(.tcm_data*)
-    *(.nocache_ram)
     *(.gnu.linkonce.d.*)
     . = ALIGN(4);
     _edata = ABSOLUTE(.);
   } > ram AT > flash
 
-  .noinit (NOLOAD) : {
+  .noinit (NOLOAD) :
+  {
     *(.noinit .noinit.*)
-    *(.nocache_noinit_ram)
-    *(.noncacheable)
     . = ALIGN(16);
   } > ram
 
-  .bss (NOLOAD) : {
+  .bss (NOLOAD) :
+  {
     _sbss = ABSOLUTE(.);
     *(.bss .bss.*)
     *(.sbss .sbss.*)
@@ -125,9 +221,26 @@ SECTIONS
   __HeapBase = ABSOLUTE(.);
   __HeapLimit = ORIGIN(ram) + LENGTH(ram);
 
-  ASSERT(__HeapBase < __HeapLimit, "BL616CL RAM overflow")
+  __rom_end__ = LOADADDR(.data) + SIZEOF(.data);
 
-  /DISCARD/ : {
+  ASSERT(SIZEOF(.fw_header) == 256,
+         "BL616CL firmware header must be 256 bytes")
+  ASSERT(SIZEOF(.init) <= 512, "BL616CL reset entry exceeds ROM header")
+  ASSERT(ADDR(.rftlv.tool) == ORIGIN(rom_header) + 1K,
+         "BL616CL RF TLV offset is invalid")
+  ASSERT(ADDR(.ver) == ORIGIN(rom_header) + 3K,
+         "BL616CL version offset is invalid")
+  ASSERT(ADDR(.text) == ORIGIN(flash),
+         "BL616CL XIP text must follow the ROM header")
+  ASSERT(__rom_end__ <= ORIGIN(flash) + LENGTH(flash),
+         "BL616CL flash image overflow")
+  ASSERT(__ram_nocache_end__ <= ORIGIN(ram_nocache) + LENGTH(ram_nocache),
+         "BL616CL nocache RAM overflow")
+  ASSERT(__HeapBase < __HeapLimit, "BL616CL cacheable RAM overflow")
+  ASSERT(__HeapLimit == 0x61010000, "BL616CL heap overlaps WiFi RAM")
+
+  /DISCARD/ :
+  {
     *(.note.GNU-stack)
     *(.riscv.attributes)
   }

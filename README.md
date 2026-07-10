@@ -13,7 +13,7 @@ Bouffalo Lab 芯片原厂维护的、基于 **openvela** 的适配层：芯片�
 |---|---|---|
 | `chips/` | 芯片移植（custom chip） | kernel/arch 侧按 defconfig 的 `CONFIG_ARCH_CHIP_CUSTOM_DIR` 纳入 |
 | `boards/` | 板级（custom board） | kernel/arch 侧按 defconfig 的 `CONFIG_ARCH_BOARD_CUSTOM_DIR` 纳入 |
-| `drivers/` | 驱动，**各自独立 `.a`** | 顶层 `nuttx_add_subdirectory()` 自动发现 |
+| `drivers/` | Bouffalo drivers release 独立仓，驱动各自生成 `.a` | 顶层 `nuttx_add_subdirectory()` 自动发现 |
 | `components/` | 中间件/可复用组件，**各自独立 `.a`** | 顶层 `nuttx_add_subdirectory()` 自动发现 |
 | `examples/` | 示例 app（`nuttx_add_application`） | 顶层 `nuttx_add_subdirectory()` 自动发现 |
 | `tools/` | 宿主侧脚本（烧录/镜像/签名），**不编入固件** | 故意无 `CMakeLists.txt` → 不纳入构建 |
@@ -42,27 +42,36 @@ Bouffalo Lab 芯片原厂维护的、基于 **openvela** 的适配层：芯片�
 构建走 **cmake + Ninja**（不再用 make，本仓不提供 `Make.defs`/`Makefile`）。
 
 ```bash
-# 编译（--cmake 切换到 CMake，并默认启用 -GNinja；--dis-ninja 可关闭）
-./build.sh vendor/bouffalolab/boards/bl616cl/bl616cldg/configs/nsh --cmake -j8
+python3 vendor/bouffalolab/bl_build.py \
+  vendor/bouffalolab/boards/bl616cl/bl616cldg/configs/nsh --clean
+python3 vendor/bouffalolab/bl_build.py \
+  vendor/bouffalolab/boards/bl616cl/bl616cldg/configs/nsh -j14
 ```
 
-> 注意：target 用**到 `configs/<name>` 的全路径**（vendor 自定义板），不是 in-tree 短名的
-> `board:config` 冒号式；缺省不加 `--cmake` 时 build.sh 会走 Make。
+target 使用到 `configs/<name>` 的完整路径。`bl_build.py` 补齐 OpenVela
+预置工具链和 Python 依赖环境，只走 CMake/Ninja。
 
 配置菜单（任选其一）：
 
 ```bash
-./build.sh vendor/bouffalolab/boards/bl616cl/bl616cldg/configs/nsh --cmake menuconfig
-# 或直接对 cmake 构建目录操作（目录名 = cmake_out/<board>_<config>）
-cmake --build cmake_out/bl616cldg_nsh -t menuconfig
+python3 vendor/bouffalolab/bl_build.py \
+  vendor/bouffalolab/boards/bl616cl/bl616cldg/configs/nsh --menuconfig
 ```
 
 菜单中可见 `Bouffalo Lab`（→ Drivers / Examples / Components）。
 
+BL616CLDG 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，产出：
+
+- `cmake_out/bl616cldg_nsh/final_nuttx`：静态分析用 ELF；
+- `cmake_out/bl616cldg_nsh/nuttx.raw.bin`：处理前备份；
+- `cmake_out/bl616cldg_nsh/nuttx.bin`：boot2 可加载的应用镜像。
+
 ## 现状
 
-`bl616cl/bl616cldg` 为**初始脚手架**：`nsh/defconfig` 当前是 ARM 占位（来自模板），
-真实 BL616（RISC-V / E907）移植，以及 lhal / wireless / phyrf 的接入为后续工作。
+`bl616cl/bl616cldg` 已具备 RISC-V/E907 reset、cache/RAM section、UART0、
+MTimer、NuttX IRQ adapter、基础 board late bring-up 和 boot2 应用镜像构建
+链。当前验证范围是 clean CMake/Ninja 构建、ELF 和镜像静态检查；尚未烧录
+验证，WiFi/RF、PSRAM、PM 和 flash 高频切换仍属后续阶段。
 
 ## License
 

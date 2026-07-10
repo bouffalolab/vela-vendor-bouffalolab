@@ -24,6 +24,7 @@ set(SRCS
     bl616cldg_bringup.c
     bl616cldg_console.c
     bl616cldg_diagnostics.c
+    bl616cldg_fw_header.c
     bl616cldg_heap.c
     bl616cldg_irq.c
     bl616cldg_peripheral.c

@@ -20,6 +20,37 @@
 
 add_subdirectory(src)
 
+target_link_options(nuttx PRIVATE -Wl,--build-id=none
+                    -Wl,-u,g_bl616cldg_fw_header)
+
+get_filename_component(BOUFFALOLAB_VENDOR_DIR "${NUTTX_BOARD_ABS_DIR}/../../.."
+                       ABSOLUTE)
+set(BL616CL_POSTPROCESS
+    "${BOUFFALOLAB_VENDOR_DIR}/tools/bl616cldg/postprocess_bl616cl.py")
+set(BL616CL_POSTPROCESS_STAMP "${CMAKE_BINARY_DIR}/nuttx.postprocessed")
+set(BL616CL_POSTPROCESS_INPUTS
+    ${NUTTX_BOARD_ABS_DIR}/config/bl_factory_params_IoTKitA_auto.dts
+    ${NUTTX_BOARD_ABS_DIR}/config/boot2_bl616cl_isp_release_v8.2.1.bin
+    ${NUTTX_BOARD_ABS_DIR}/config/partition_cfg_4M.toml
+    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_fw_post_proc/bflb_fw_post_proc-ubuntu
+    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_fw_post_proc/bflb_fw_post_proc-macos
+    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_fw_post_proc/bflb_fw_post_proc.exe)
+
+add_custom_command(
+  OUTPUT ${BL616CL_POSTPROCESS_STAMP}
+  COMMAND
+    ${Python3_EXECUTABLE} ${BL616CL_POSTPROCESS} --image
+    ${CMAKE_BINARY_DIR}/nuttx.bin --board-config ${NUTTX_BOARD_ABS_DIR}/config
+  COMMAND ${CMAKE_COMMAND} -E touch ${BL616CL_POSTPROCESS_STAMP}
+  DEPENDS ${CMAKE_BINARY_DIR}/nuttx.bin ${BL616CL_POSTPROCESS}
+          ${BL616CL_POSTPROCESS_INPUTS}
+  BYPRODUCTS ${CMAKE_BINARY_DIR}/nuttx.raw.bin
+  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+  COMMENT "Postprocess BL616CL firmware image")
+
+add_custom_target(nuttx_post_build DEPENDS ${CMAKE_BINARY_DIR}/nuttx.bin
+                                           ${BL616CL_POSTPROCESS_STAMP})
+
 file(GLOB EXTRA_LIBS
      ${NUTTX_BOARD_ABS_DIR}/libs/${CONFIG_ARCH_BOARD_CUSTOM_NAME}/*.a)
 
