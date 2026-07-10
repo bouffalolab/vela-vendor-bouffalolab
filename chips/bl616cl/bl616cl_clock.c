@@ -46,6 +46,8 @@
 #define BL616CL_SDK_SYSTEM_CLOCK_XCLK     5
 #define BL616CL_SDK_MTIMER_SOURCE_XCLK    0
 #define BL616CL_SDK_ENABLE                1
+#define BL616CL_CLOCK_SAFE                \
+  __attribute__((section(".sclock_rlt_code.bl616cl_clock_early_init")))
 
 /****************************************************************************
  * Private Function Prototypes
@@ -72,7 +74,7 @@ extern int bl616cl_sdk_cpu_set_mtimer_clk(uint8_t enable, int source,
  * Name: bl616cl_clock_early_init
  ****************************************************************************/
 
-void bl616cl_clock_early_init(void)
+void BL616CL_CLOCK_SAFE bl616cl_clock_early_init(void)
 {
   /* SDK system_clock_init() powers the XTAL/WIFIPLL and moves the MCU
    * clock to WIFIPLL 320 MHz here. Flash retuning and WiFi clock ungate

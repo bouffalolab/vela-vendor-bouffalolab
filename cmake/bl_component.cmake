@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
+set(BL_COMPONENT_HELPER_DIR "${CMAKE_CURRENT_LIST_DIR}")
+
 function(bl_component_abs_path out_var path)
   if(IS_ABSOLUTE "${path}")
     set(result "${path}")
@@ -142,7 +144,8 @@ function(bl_add_component)
     COMMAND ${CMAKE_COMMAND} -E make_directory "${libs_dir}/${chip}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:${target}>
             "${libs_dir}/${chip}/lib${BL_NAME}.a"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${libs_dir}/include"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different "${source_include}"
-            "${libs_dir}/include")
+    COMMAND
+      ${CMAKE_COMMAND} "-DSOURCE_DIR=${source_include}"
+      "-DDESTINATION_DIR=${libs_dir}/include" -P
+      "${BL_COMPONENT_HELPER_DIR}/bl_sync_directory.cmake")
 endfunction()

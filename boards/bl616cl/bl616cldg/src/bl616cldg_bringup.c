@@ -28,7 +28,6 @@
 
 #include "bl616cl_bod.h"
 #include "bl616cl_bus.h"
-#include "bl616cl_flash.h"
 #include "bl616cl_sec_mutex.h"
 
 #include "bl616cldg.h"
@@ -43,32 +42,6 @@
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
-
-/****************************************************************************
- * Name: bl616cldg_flash_late_initialize
- ****************************************************************************/
-
-static int bl616cldg_flash_late_initialize(void)
-{
-  /* SDK board_init() retunes XIP flash after bflb_flash_init(). Keep flash
-   * clock retuning disabled until that path runs from RAM-safe code.
-   */
-
-  return bl616cl_flash_initialize();
-}
-
-/****************************************************************************
- * Name: bl616cldg_clock_late_initialize
- ****************************************************************************/
-
-static int bl616cldg_clock_late_initialize(void)
-{
-  /* SDK system_clock_init() switches MCU clock and sets the MTimer divider.
-   * The chip layer owns the current early clock and timer lower-half setup.
-   */
-
-  return OK;
-}
 
 /****************************************************************************
  * Name: bl616cldg_peripheral_late_initialize
@@ -181,18 +154,6 @@ static int bl616cldg_debug_late_initialize(void)
 int bl616cldg_bringup(void)
 {
   int ret;
-
-  ret = bl616cldg_flash_late_initialize();
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  ret = bl616cldg_clock_late_initialize();
-  if (ret < 0)
-    {
-      return ret;
-    }
 
   ret = bl616cldg_peripheral_late_initialize();
   if (ret < 0)

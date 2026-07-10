@@ -34,6 +34,7 @@
 #include "bl616cl_cache.h"
 #include "bl616cl_clock.h"
 #include "bl616cl_cpu.h"
+#include "bl616cl_flash.h"
 #include "bl616cl_memory.h"
 #include "bl616cl_system.h"
 
@@ -56,11 +57,18 @@ void __bl616cl_start(void)
   bl616cl_flash_early_init();
   bl616cl_pmp_init();
   bl616cl_cache_early_init();
-  bl616cl_clock_early_init();
-  bl616cl_pinmux_early_uart();
-  riscv_fpuconfig();
   bl616cl_section_load();
   bl616cl_system_post_init();
+
+  if (bl616cl_flash_initialize() != 0)
+    {
+      for (; ; )
+        {
+        }
+    }
+
+  bl616cl_clock_early_init();
+  bl616cl_pinmux_early_uart();
   riscv_earlyserialinit();
   nx_start();
 

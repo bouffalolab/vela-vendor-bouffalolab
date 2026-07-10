@@ -36,12 +36,13 @@
  * Name: bl616cl_flash_initialize
  *
  * Description:
- *   Initialize the SDK LHAL flash state after the NuttX board late path is
- *   available.  Flash clock retuning is intentionally kept out of this hook.
+ *   Initialize the SDK LHAL flash state after RAM-safe sections are loaded
+ *   and before the system clock is changed.  Flash clock retuning is kept
+ *   out of this hook.
  *
  ****************************************************************************/
 
-int bl616cl_flash_initialize(void)
+int ATTR_TCM_SECTION bl616cl_flash_initialize(void)
 {
   return bflb_flash_init();
 }

@@ -18,6 +18,8 @@
  *
  ****************************************************************************/
 
+#include <nuttx/config.h>
+
 OUTPUT_ARCH(riscv)
 ENTRY(__start)
 
@@ -50,6 +52,12 @@ SECTIONS
 
   .copy.table : {
     __mem_copy_sections = ABSOLUTE(.);
+    LONG(ADDR(.ram_code));
+    LONG(ADDR(.ram_code) + SIZEOF(.ram_code));
+    LONG(LOADADDR(.ram_code));
+    LONG(ADDR(.ram_rodata));
+    LONG(ADDR(.ram_rodata) + SIZEOF(.ram_rodata));
+    LONG(LOADADDR(.ram_rodata));
     LONG(ADDR(.data));
     LONG(ADDR(.data) + SIZEOF(.data));
     LONG(LOADADDR(.data));
@@ -66,17 +74,39 @@ SECTIONS
     LONG(0xffffffff);
   } > flash
 
-  _eronly = LOADADDR(.data);
   __LD_CONFIG_EM_SEL = 0;
 
-  .data : AT(_eronly) {
+  .ram_code : {
+    . = ALIGN(4);
+    *(.tcm_code*)
+    *(.sclock_rlt_code*)
+    . = ALIGN(4);
+  } > ram AT > flash
+
+  .ram_rodata : {
+    . = ALIGN(4);
+    *(.tcm_const*)
+    *(.sclock_rlt_const*)
+    . = ALIGN(4);
+  } > ram AT > flash
+
+  .data : {
     _sdata = ABSOLUTE(.);
     __global_pointer$ = . + 0x800;
     *(.data .data.*)
     *(.sdata .sdata.*)
+    *(.tcm_data*)
+    *(.nocache_ram)
     *(.gnu.linkonce.d.*)
     . = ALIGN(4);
     _edata = ABSOLUTE(.);
+  } > ram AT > flash
+
+  .noinit (NOLOAD) : {
+    *(.noinit .noinit.*)
+    *(.nocache_noinit_ram)
+    *(.noncacheable)
+    . = ALIGN(16);
   } > ram
 
   .bss (NOLOAD) : {
@@ -89,14 +119,13 @@ SECTIONS
   } > ram
 
   . = ALIGN(16);
-  __HeapBase = ABSOLUTE(.);
-  __IdleStackSize = 2048;
-  . = ORIGIN(ram) + LENGTH(ram) - __IdleStackSize;
-  __HeapLimit = ABSOLUTE(.);
-  . = ALIGN(16);
   __StackBase = ABSOLUTE(.);
-  . += __IdleStackSize;
+  . += CONFIG_IDLETHREAD_STACKSIZE;
   __StackTop = ABSOLUTE(.);
+  __HeapBase = ABSOLUTE(.);
+  __HeapLimit = ORIGIN(ram) + LENGTH(ram);
+
+  ASSERT(__HeapBase < __HeapLimit, "BL616CL RAM overflow")
 
   /DISCARD/ : {
     *(.note.GNU-stack)

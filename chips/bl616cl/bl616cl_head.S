@@ -48,12 +48,16 @@ __start:
 
   .option pop
 
-  csrw    mstatus, zero
+  csrci   mstatus, 8
   csrw    mie, zero
 
   la      t0, exception_common
   ori     t0, t0, 3
   csrw    mtvec, t0
+
+#ifdef CONFIG_ARCH_FPU
+  call    riscv_fpuconfig
+#endif
 
   la      t0, __bl616cl_start
   jr      t0
