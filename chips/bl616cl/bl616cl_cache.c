@@ -54,7 +54,7 @@ static inline void bl616cl_dsb(void)
 
 static inline void bl616cl_isb(void)
 {
-  __asm__ __volatile__(".word 0x01f0000f" : : : "memory");
+  __asm__ __volatile__(".word 0x0000100f" : : : "memory");
 }
 
 static inline void bl616cl_icache_invalidate_all(void)
@@ -86,13 +86,22 @@ void bl616cl_cache_early_init(void)
 
   bl616cl_dsb();
   bl616cl_isb();
-  bl616cl_icache_invalidate_all();
   bl616cl_dcache_invalidate_all();
 
   value = bl616cl_csr_read(BL616CL_CSR_MHCR);
-  value |= BL616CL_MHCR_IE | BL616CL_MHCR_DE | BL616CL_MHCR_WB |
-           BL616CL_MHCR_WA | BL616CL_MHCR_RS | BL616CL_MHCR_BPE |
-           BL616CL_MHCR_L0BTB;
+  value |= BL616CL_MHCR_DE | BL616CL_MHCR_WB | BL616CL_MHCR_WA |
+           BL616CL_MHCR_RS | BL616CL_MHCR_BPE | BL616CL_MHCR_L0BTB;
+  bl616cl_csr_write(BL616CL_CSR_MHCR, value);
+
+  bl616cl_dsb();
+  bl616cl_isb();
+
+  bl616cl_dsb();
+  bl616cl_isb();
+  bl616cl_icache_invalidate_all();
+
+  value = bl616cl_csr_read(BL616CL_CSR_MHCR);
+  value |= BL616CL_MHCR_IE;
   bl616cl_csr_write(BL616CL_CSR_MHCR, value);
 
   bl616cl_dsb();
@@ -107,6 +116,10 @@ void bl616cl_cache_after_load(void)
 {
   bl616cl_dsb();
   bl616cl_dcache_clean_all();
+  bl616cl_dsb();
+
+  bl616cl_dsb();
+  bl616cl_isb();
   bl616cl_icache_invalidate_all();
   bl616cl_dsb();
   bl616cl_isb();

@@ -56,10 +56,6 @@ config BL616CL_UART0_TXPIN
 endif # BL616CL_UART0
 endif # BL616CL_UART
 
-config BL616CL_MTIME
-	bool "Machine timer"
-	default y
-
 endmenu
 
 endif

@@ -31,112 +31,6 @@
 #include "bl616cl_sec_mutex.h"
 
 #include "bl616cldg.h"
-#include "bl616cldg_console.h"
-#include "bl616cldg_diagnostics.h"
-#include "bl616cldg_heap.h"
-#include "bl616cldg_irq.h"
-#include "bl616cldg_peripheral.h"
-#include "bl616cldg_pm.h"
-#include "bl616cldg_time.h"
-
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
-
-/****************************************************************************
- * Name: bl616cldg_peripheral_late_initialize
- ****************************************************************************/
-
-static int bl616cldg_peripheral_late_initialize(void)
-{
-  return bl616cldg_peripheral_initialize();
-}
-
-/****************************************************************************
- * Name: bl616cldg_irq_late_initialize
- ****************************************************************************/
-
-static int bl616cldg_irq_late_initialize(void)
-{
-  return bl616cldg_irq_initialize();
-}
-
-/****************************************************************************
- * Name: bl616cldg_console_late_initialize
- ****************************************************************************/
-
-static int bl616cldg_console_late_initialize(void)
-{
-  return bl616cldg_console_initialize();
-}
-
-/****************************************************************************
- * Name: bl616cldg_power_late_initialize
- ****************************************************************************/
-
-static int bl616cldg_power_late_initialize(void)
-{
-  return bl616cl_bod_initialize();
-}
-
-/****************************************************************************
- * Name: bl616cldg_pm_late_initialize
- ****************************************************************************/
-
-static int bl616cldg_pm_late_initialize(void)
-{
-  return bl616cldg_pm_initialize();
-}
-
-/****************************************************************************
- * Name: bl616cldg_heap_late_initialize
- ****************************************************************************/
-
-static int bl616cldg_heap_late_initialize(void)
-{
-  return bl616cldg_heap_initialize();
-}
-
-/****************************************************************************
- * Name: bl616cldg_security_late_initialize
- ****************************************************************************/
-
-static int bl616cldg_security_late_initialize(void)
-{
-  /* SDK board_init() initializes the security-engine mutexes after board
-   * services are up. Keep the hook independent from flash or RF bring-up.
-   */
-
-  bl616cl_sec_mutex_init();
-  return OK;
-}
-
-/****************************************************************************
- * Name: bl616cldg_diagnostics_late_initialize
- ****************************************************************************/
-
-static int bl616cldg_diagnostics_late_initialize(void)
-{
-  return bl616cldg_diagnostics_initialize();
-}
-
-/****************************************************************************
- * Name: bl616cldg_time_late_initialize
- ****************************************************************************/
-
-static int bl616cldg_time_late_initialize(void)
-{
-  return bl616cldg_time_initialize();
-}
-
-/****************************************************************************
- * Name: bl616cldg_debug_late_initialize
- ****************************************************************************/
-
-static int bl616cldg_debug_late_initialize(void)
-{
-  return bl616cl_bus_error_initialize();
-}
 
 /****************************************************************************
  * Public Functions
@@ -155,59 +49,19 @@ int bl616cldg_bringup(void)
 {
   int ret;
 
-  ret = bl616cldg_peripheral_late_initialize();
+  ret = bl616cl_bod_initialize();
   if (ret < 0)
     {
       return ret;
     }
 
-  ret = bl616cldg_irq_late_initialize();
+  bl616cl_sec_mutex_init();
+
+  ret = bl616cl_bus_error_initialize();
   if (ret < 0)
     {
       return ret;
     }
 
-  ret = bl616cldg_console_late_initialize();
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  ret = bl616cldg_power_late_initialize();
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  ret = bl616cldg_pm_late_initialize();
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  ret = bl616cldg_heap_late_initialize();
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  ret = bl616cldg_security_late_initialize();
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  ret = bl616cldg_diagnostics_late_initialize();
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  ret = bl616cldg_time_late_initialize();
-  if (ret < 0)
-    {
-      return ret;
-    }
-
-  return bl616cldg_debug_late_initialize();
+  return OK;
 }

@@ -13,29 +13,20 @@ if(CONFIG_BL_COMPONENT_BAR)
 endif()
 ```
 
-## 导入独立 git 仓库（如复用 bouffalo_sdk 的 lhal）
+## 源码/预编译库双模组件
 
-两个 SDK 的 CMakeLists 不通用，所以用「外层包装」避免 openvela 读到内仓的 CMakeLists：
-
-```
-components/lhal/
-├── CMakeLists.txt   ← 本仓(openvela 风格)。★绝不 add_subdirectory(lhal) / nuttx_add_subdirectory()
-└── lhal/            ← 独立 git 仓(自带 bouffalo_sdk 的 CMakeLists，openvela 永不读)
-```
-
-原理：`nuttx_add_subdirectory()` 只 glob 一层、且只处理被显式 add 的目录，CMake 本身不递归。
-外层只要不去 add 内层、而是**直接引内层源码**，内层 CMakeLists 就是惰性文件：
+通用组件使用顶层已加载的 `bl_add_component()`；组件自己的 CMake 不需要重复
+`include()` helper：
 
 ```cmake
-# components/lhal/CMakeLists.txt
-if(CONFIG_BL_LHAL)
-  set(LHAL ${CMAKE_CURRENT_LIST_DIR}/lhal)
-  nuttx_add_kernel_library(lhal)
-  file(GLOB SRCS ${LHAL}/src/*.c)
-  target_sources(lhal PRIVATE ${SRCS})                          # 直接引内层，不 add_subdirectory
-  target_include_directories(lhal PRIVATE ${LHAL}/src)
-  nuttx_export_header(TARGET lhal INCLUDE_DIRECTORIES ${LHAL}/include)
-endif()
+# components/wl80211/CMakeLists.txt
+bl_add_component(NAME wl80211)
 ```
 
-释放态（闭源发预编译库）改用：`nuttx_add_extra_library(<path>/liblhal.a)`（参考 `external/liblhdc`）。
+helper 默认优先使用 `components/<name>/<name>/` 源码；源码不存在或组件被
+`BL_USE_LIB_COMPONENTS` 指定时，改用 `components/<name>/libs/<chip>/lib<name>.a`。
+源码和预编译模式都导出相同的组件头文件。
+
+`vendor/bouffalolab/drivers` 是独立 drivers release repo，不属于 components
+双模目录。其 CMake 文件面向 Bouffalo SDK，OpenVela 由父仓 wrapper 显式选择
+已适配源码，不执行 drivers release repo 内的 CMake 文件。

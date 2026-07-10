@@ -13,29 +13,27 @@ Bouffalo Lab 芯片原厂维护的、基于 **openvela** 的适配层：芯片�
 |---|---|---|
 | `chips/` | 芯片移植（custom chip） | kernel/arch 侧按 defconfig 的 `CONFIG_ARCH_CHIP_CUSTOM_DIR` 纳入 |
 | `boards/` | 板级（custom board） | kernel/arch 侧按 defconfig 的 `CONFIG_ARCH_BOARD_CUSTOM_DIR` 纳入 |
-| `drivers/` | Bouffalo drivers release 独立仓，驱动各自生成 `.a` | 顶层 `nuttx_add_subdirectory()` 自动发现 |
+| `drivers/` | Bouffalo drivers release 独立仓，驱动各自生成 `.a` | 父仓 OpenVela wrapper 显式选择支持的源码；当前为 `bl616cl_lhal.cmake` |
 | `components/` | 中间件/可复用组件，**各自独立 `.a`** | 顶层 `nuttx_add_subdirectory()` 自动发现 |
 | `examples/` | 示例 app（`nuttx_add_application`） | 顶层 `nuttx_add_subdirectory()` 自动发现 |
 | `tools/` | 宿主侧脚本（烧录/镜像/签名），**不编入固件** | 故意无 `CMakeLists.txt` → 不纳入构建 |
 
 各子目录的 `README.md` 给了"如何新增一项"的可抄骨架。
 
-## 接入 openvela 的两条路径
+## 接入 openvela 的三条路径
 
 1. **chips/ + boards/**：不被顶层 glob，而是由 kernel/arch 侧根据 defconfig 里的
    `CONFIG_ARCH_CHIP_CUSTOM_DIR` / `CONFIG_ARCH_BOARD_CUSTOM_DIR` 显式
    `add_subdirectory` 进来——只拉点名的那一个目录。
 
-2. **drivers/ + examples/ + components/**：由本仓顶层 `CMakeLists.txt` 的
+2. **examples/ + components/**：由本仓顶层 `CMakeLists.txt` 的
    `nuttx_add_subdirectory()` 发现。它只 glob **一层** `*/CMakeLists.txt`、非递归、
-   逐层 opt-in，并生成 Kconfig 菜单：
+   逐层 opt-in，并生成对应 Kconfig 菜单。
 
-   ```
-   vendor → Bouffalo Lab → { Bouffalo Drivers / Examples / Components }
-   ```
-
-   > 因为非递归，把独立 git 仓（如复用 bouffalo_sdk 的 `lhal`）以"外层包装 + 内层独立仓"
-   > 方式导入时，内仓自带的 CMakeLists 不会被自动读取。详见 `components/README.md`。
+3. **drivers/**：release repo 的 CMake 文件面向 Bouffalo SDK，OpenVela 不执行这些
+   文件。父仓通过 `cmake/bl616cl_lhal.cmake` 显式选择已适配源码，并用
+   `nuttx_add_kernel_library()` 生成 `bl_lhal`；IRQ、security mutex 等 OS 相关接口由
+   chip 适配层提供。
 
 ## 构建
 
@@ -58,7 +56,7 @@ python3 vendor/bouffalolab/bl_build.py \
   vendor/bouffalolab/boards/bl616cl/bl616cldg/configs/nsh --menuconfig
 ```
 
-菜单中可见 `Bouffalo Lab`（→ Drivers / Examples / Components）。
+菜单中可见 `Bouffalo Lab`（→ Examples / Components）。
 
 BL616CLDG 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，产出：
 

@@ -18,18 +18,8 @@
 #
 # ##############################################################################
 
-set(SRCS
-    bl616cldg_appinit.c
-    bl616cldg_boot.c
-    bl616cldg_bringup.c
-    bl616cldg_console.c
-    bl616cldg_diagnostics.c
-    bl616cldg_fw_header.c
-    bl616cldg_heap.c
-    bl616cldg_irq.c
-    bl616cldg_peripheral.c
-    bl616cldg_pm.c
-    bl616cldg_time.c)
+set(SRCS bl616cldg_appinit.c bl616cldg_boot.c bl616cldg_bringup.c
+         bl616cldg_fw_header.c)
 
 nuttx_add_romfs(
   NAME

@@ -24,6 +24,8 @@
 
 #include <nuttx/config.h>
 
+#include <syslog.h>
+
 #include "bl616cldg.h"
 
 /****************************************************************************
@@ -57,6 +59,12 @@ void board_early_initialize(void)
 #ifdef CONFIG_BOARD_LATE_INITIALIZE
 void board_late_initialize(void)
 {
-  bl616cldg_bringup();
+  int ret;
+
+  ret = bl616cldg_bringup();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: BL616CLDG bringup failed: %d\n", ret);
+    }
 }
 #endif
