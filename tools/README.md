@@ -7,5 +7,9 @@
 
 - `bflb_fw_post_proc/`：从当前 Bouffalo SDK 同步的 Linux、macOS、Windows
   官方固件后处理工具及来源校验信息。
-- `bl616cldg/postprocess_bl616cl.py`：BL616CLDG 的 CMake postbuild wrapper；
-  保留 raw 镜像，在临时目录运行官方工具，只回写 boot2 应用镜像。
+- `bouffalo_flash_cube/`：BL616CL whole image 拼包和烧录所需的三平台 CLI
+  最小运行集。
+- `bl616cldg/postprocess_bl616cl.sh`：BL616CLDG 的 CMake postbuild
+  wrapper；在临时目录生成处理后的 app 和 4 MiB whole image。
+- `bl616cldg/flash_bl616cl.sh`：显式把 `nuttx.whole.bin` 从 flash `0x0`
+  写入的 UART 入口；普通构建不会调用。

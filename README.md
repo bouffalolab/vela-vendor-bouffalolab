@@ -63,13 +63,27 @@ BL616CLDG 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，产出�
 - `cmake_out/bl616cldg_nsh/final_nuttx`：静态分析用 ELF；
 - `cmake_out/bl616cldg_nsh/nuttx.raw.bin`：处理前备份；
 - `cmake_out/bl616cldg_nsh/nuttx.bin`：boot2 可加载的应用镜像。
+- `cmake_out/bl616cldg_nsh/nuttx.whole.bin`：包含 boot2、双 partition、
+  app 和 MFG 的 4 MiB whole image，可从 flash `0x0` 写入。
+
+显式烧录 whole image：
+
+```bash
+vendor/bouffalolab/tools/bl616cldg/flash_bl616cl.sh \
+  --image cmake_out/bl616cldg_nsh/nuttx.whole.bin \
+  --port /dev/ttyACM0
+```
+
+构建不会隐式执行烧录。该入口默认 baudrate 为 2000000，可通过
+`--baudrate` 覆盖。
 
 ## 现状
 
 `bl616cl/bl616cldg` 已具备 RISC-V/E907 reset、cache/RAM section、UART0、
 MTimer、NuttX IRQ adapter、基础 board late bring-up 和 boot2 应用镜像构建
-链。当前验证范围是 clean CMake/Ninja 构建、ELF 和镜像静态检查；尚未烧录
-验证，WiFi/RF、PSRAM、PM 和 flash 高频切换仍属后续阶段。
+链。CMake postbuild 已生成并静态验证 4 MiB whole image；当前验证范围是
+clean CMake/Ninja 构建、ELF 和镜像布局，尚未烧录验证。WiFi/RF、PSRAM、
+PM 和 flash 高频切换仍属后续阶段。
 
 ## License
 
