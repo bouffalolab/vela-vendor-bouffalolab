@@ -51,23 +51,16 @@ bl_include_directories(
 if(COMMAND nuttx_add_kernel_library AND "${CHIP}" STREQUAL "bl616cl")
   include(${CMAKE_CURRENT_LIST_DIR}/cmake/bl616cl_lhal.cmake)
 
-  set(BL616CL_STDLIB_AON_SOURCE
-      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_aon.c)
-  set(BL616CL_STDLIB_COMMON_SOURCE
-      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_common.c)
-  set(BL616CL_STDLIB_GLB_SOURCE
-      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_glb.c)
-  set_source_files_properties(
-    ${BL616CL_STDLIB_COMMON_SOURCE} ${BL616CL_STDLIB_GLB_SOURCE}
-    PROPERTIES COMPILE_FLAGS "-Wno-strict-prototypes")
+  target_compile_options(
+    bl_lhal PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wno-strict-prototypes>)
   target_sources(
     bl_lhal
     PRIVATE
       ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/port/bl616cl_clock.c
-      ${BL616CL_STDLIB_AON_SOURCE}
+      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_aon.c
       ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_clock.c
-      ${BL616CL_STDLIB_COMMON_SOURCE}
-      ${BL616CL_STDLIB_GLB_SOURCE}
+      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_common.c
+      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_glb.c
       ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_hbn.c)
 endif()
 

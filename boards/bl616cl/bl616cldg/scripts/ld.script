@@ -33,12 +33,23 @@ MEMORY
   ram_wifi (wxa) : ORIGIN = 0x21010000, LENGTH = 64K
 }
 
+PHDRS
+{
+  fw_header   PT_LOAD FLAGS(4); /* R  */
+  rom_header  PT_LOAD FLAGS(5); /* RX */
+  flash       PT_LOAD FLAGS(5); /* RX */
+  ram_nocache PT_LOAD FLAGS(6); /* RW */
+  ram_code    PT_LOAD FLAGS(5); /* RX */
+  ram_rodata  PT_LOAD FLAGS(4); /* R  */
+  ram_data    PT_LOAD FLAGS(6); /* RW */
+}
+
 SECTIONS
 {
   .fw_header :
   {
     KEEP(*(.fw_header))
-  } > fw_header
+  } > fw_header :fw_header
 
   __rom_header_start__ = ORIGIN(rom_header);
 
@@ -46,7 +57,7 @@ SECTIONS
   {
     KEEP(*(.text.entry))
     KEEP(*(SORT_NONE(.init)))
-  } > rom_header
+  } > rom_header :rom_header
 
   .multi_bins ORIGIN(rom_header) + 512 :
   {
@@ -66,7 +77,7 @@ SECTIONS
     LONG(0x00000000) LONG(0x00000000)
     LONG(0xffffffff) LONG(0xffffffff)
     LONG(0xffffffff) LONG(0xffffffff)
-  } > rom_header
+  } > rom_header :rom_header
 
   .rftlv.tool ORIGIN(rom_header) + 1K :
   {
@@ -74,7 +85,7 @@ SECTIONS
     LONG(0x46524c42)
     LONG(0x41524150)
     . = ORIGIN(rom_header) + 3K;
-  } > rom_header
+  } > rom_header :rom_header
 
   .ver ORIGIN(rom_header) + 3K :
   {
@@ -88,7 +99,7 @@ SECTIONS
     _version_info_section_start = ABSOLUTE(.);
     KEEP(*(.version.*))
     _version_info_section_end = ABSOLUTE(.);
-  } > rom_header
+  } > rom_header :rom_header
 
   __rom_header_end__ = ORIGIN(rom_header) + LENGTH(rom_header);
 
@@ -102,7 +113,7 @@ SECTIONS
     *(.gnu.linkonce.r.*)
     . = ALIGN(4);
     _etext = ABSOLUTE(.);
-  } > flash
+  } > flash :flash
 
   .init_section :
   {
@@ -110,7 +121,7 @@ SECTIONS
     KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
     KEEP(*(.init_array))
     _einit = ABSOLUTE(.);
-  } > flash
+  } > flash :flash
 
   .copy.table :
   {
@@ -130,7 +141,7 @@ SECTIONS
     LONG(0xffffffff);
     LONG(0xffffffff);
     LONG(0xffffffff);
-  } > flash
+  } > flash :flash
 
   .zero.table :
   {
@@ -139,7 +150,7 @@ SECTIONS
     LONG(ADDR(.bss) + SIZEOF(.bss));
     LONG(0xffffffff);
     LONG(0xffffffff);
-  } > flash
+  } > flash :flash
 
   __LD_CONFIG_EM_SEL = 0;
 
@@ -150,7 +161,7 @@ SECTIONS
     . = ALIGN(4);
     *(.nocache_ram)
     . = ALIGN(4);
-  } > ram_nocache AT > flash
+  } > ram_nocache AT > flash :ram_nocache
 
   .nocache_noinit (NOLOAD) :
   {
@@ -158,7 +169,7 @@ SECTIONS
     *(.nocache_noinit_ram)
     *(.noncacheable)
     . = ALIGN(4);
-  } > ram_nocache
+  } > ram_nocache :ram_nocache
 
   __ram_nocache_end__ = ABSOLUTE(.);
 
@@ -167,7 +178,7 @@ SECTIONS
     . += (ABSOLUTE(__ram_nocache_end__) -
           ABSOLUTE(ORIGIN(ram_nocache)));
     . = ALIGN(32);
-  } > ram
+  } > ram :NONE
 
   .ram_code :
   {
@@ -175,7 +186,7 @@ SECTIONS
     *(.tcm_code*)
     *(.sclock_rlt_code*)
     . = ALIGN(4);
-  } > ram AT > flash
+  } > ram AT > flash :ram_code
 
   .ram_rodata :
   {
@@ -183,7 +194,7 @@ SECTIONS
     *(.tcm_const*)
     *(.sclock_rlt_const*)
     . = ALIGN(4);
-  } > ram AT > flash
+  } > ram AT > flash :ram_rodata
 
   .data :
   {
@@ -196,13 +207,13 @@ SECTIONS
     *(.gnu.linkonce.d.*)
     . = ALIGN(4);
     _edata = ABSOLUTE(.);
-  } > ram AT > flash
+  } > ram AT > flash :ram_data
 
   .noinit (NOLOAD) :
   {
     *(.noinit .noinit.*)
     . = ALIGN(16);
-  } > ram
+  } > ram :ram_data
 
   .bss (NOLOAD) :
   {
@@ -212,7 +223,7 @@ SECTIONS
     *(COMMON)
     . = ALIGN(16);
     _ebss = ABSOLUTE(.);
-  } > ram
+  } > ram :ram_data
 
   . = ALIGN(16);
   __StackBase = ABSOLUTE(.);

@@ -13,5 +13,6 @@
   GUI、文档和调试工具，不跟踪上游 `*.bin`、`*.ini` 烧录产物。
 - `bl616cldg/postprocess_bl616cl.sh`：BL616CLDG 的 CMake postbuild
   wrapper；在临时目录生成处理后的 app 和 4 MiB whole image。
-- `bl616cldg/flash_bl616cl.sh`：显式把 `nuttx.whole.bin` 从 flash `0x0`
-  写入的 UART 入口；普通构建不会调用。
+
+编译和 UART 烧录统一通过仓库根目录的 `bl_build.py` 执行；本目录只保留它调用的
+固件后处理和 FlashCube 运行资产。

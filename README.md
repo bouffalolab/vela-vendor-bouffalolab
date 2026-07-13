@@ -16,7 +16,7 @@ Bouffalo Lab 芯片原厂维护的、基于 **openvela** 的适配层：芯片�
 | `drivers/` | Bouffalo drivers release 独立仓，驱动各自生成 `.a` | 父仓 OpenVela wrapper 显式选择支持的源码；当前为 `bl616cl_lhal.cmake` |
 | `components/` | 中间件/可复用组件，**各自独立 `.a`** | 顶层 `nuttx_add_subdirectory()` 自动发现 |
 | `examples/` | 示例 app（`nuttx_add_application`） | 顶层 `nuttx_add_subdirectory()` 自动发现 |
-| `tools/` | 宿主侧脚本（烧录/镜像/签名），**不编入固件** | 故意无 `CMakeLists.txt` → 不纳入构建 |
+| `tools/` | 宿主侧工具（镜像/签名/FlashCube），**不编入固件** | 故意无 `CMakeLists.txt` → 不纳入构建 |
 
 各子目录的 `README.md` 给了"如何新增一项"的可抄骨架。
 
@@ -69,13 +69,29 @@ BL616CLDG 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，产出�
 显式烧录 whole image：
 
 ```bash
-vendor/bouffalolab/tools/bl616cldg/flash_bl616cl.sh \
-  --image cmake_out/bl616cldg_nsh/nuttx.whole.bin \
-  --port /dev/ttyACM0
+python3 vendor/bouffalolab/bl_build.py \
+  --flash --baudrate 2000000 --port /dev/ttyUSB0
 ```
 
-构建不会隐式执行烧录。该入口默认 baudrate 为 2000000，可通过
-`--baudrate` 覆盖。
+`--flash` 是纯烧录操作，不执行 CMake configure/build。未指定镜像或 defconfig
+时，只有 `cmake_out/*/nuttx.whole.bin` 存在唯一候选才自动选择；多候选会
+列出路径并要求显式选择。也可以直接指定镜像：
+
+```bash
+python3 vendor/bouffalolab/bl_build.py \
+  --flash --image cmake_out/bl616cldg_nsh/nuttx.whole.bin \
+  --port /dev/ttyUSB0
+```
+
+或者附带完整 defconfig，仅用于定位对应输出目录，不会重新编译：
+
+```bash
+python3 vendor/bouffalolab/bl_build.py \
+  vendor/bouffalolab/boards/bl616cl/bl616cldg/configs/nsh \
+  --flash --port /dev/ttyUSB0
+```
+
+默认 baudrate 为 2000000，可通过 `--baudrate` 覆盖。
 
 ## 现状
 
