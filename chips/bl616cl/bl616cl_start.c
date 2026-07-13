@@ -60,12 +60,7 @@ void __bl616cl_start(void)
   bl616cl_section_load();
   bl616cl_system_post_init();
 
-  if (bl616cl_flash_initialize() != 0)
-    {
-      for (; ; )
-        {
-        }
-    }
+  (void)bl616cl_flash_initialize();
 
   bl616cl_clock_early_init();
   bl616cl_pinmux_early_uart();
