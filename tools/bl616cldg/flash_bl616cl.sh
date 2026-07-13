@@ -34,6 +34,12 @@ read_magic()
   od -An -tx1 -N4 -j "$2" "$1" | tr -d ' \n'
 }
 
+range_is_erased()
+{
+  od -An -v -tu1 -N "$3" -j "$2" "$1" |
+    awk '{ for (i = 1; i <= NF; i++) if ($i != 255) exit 1 }'
+}
+
 while [ "$#" -gt 0 ]
 do
   case "$1" in
@@ -71,9 +77,12 @@ fi
 if [ "$(read_magic "$IMAGE" $((0x000000)))" != 42464e50 ] ||
    [ "$(read_magic "$IMAGE" $((0x00e000)))" != 42465054 ] ||
    [ "$(read_magic "$IMAGE" $((0x00f000)))" != 42465054 ] ||
-   [ "$(read_magic "$IMAGE" $((0x010000)))" != 42464e50 ] ||
-   [ "$(read_magic "$IMAGE" $((0x210000)))" != 42464e50 ]; then
+   [ "$(read_magic "$IMAGE" $((0x010000)))" != 42464e50 ]; then
   fail "whole image layout is invalid: $IMAGE"
+fi
+
+if ! range_is_erased "$IMAGE" $((0x210000)) $((0x1f0000)); then
+  fail "whole image MFG partition is not erased: $IMAGE"
 fi
 
 case "$(uname -s)" in

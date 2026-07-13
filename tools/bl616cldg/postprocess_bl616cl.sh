@@ -9,10 +9,8 @@ TOOLS_DIR=$(cd "$SCRIPT_DIR/.." && pwd -P)
 POST_TOOL_DIR="$TOOLS_DIR/bflb_fw_post_proc"
 FLASH_TOOL_DIR="$TOOLS_DIR/bouffalo_flash_cube"
 FLASH_CONFIG="$SCRIPT_DIR/flash_factory_cfg.ini"
-MFG_NAME=mfg_bl616cl_m0_sdk_5c976f45_autoboot.bin
 FLASH_SIZE=$((0x400000))
 APP_SIZE=$((0x200000))
-MFG_SIZE=$((0x168000))
 IMAGE=
 RAW_IMAGE=
 BOARD_CONFIG=
@@ -138,7 +136,6 @@ for file in \
   "$BOARD_CONFIG/bl_factory_params_IoTKitA_auto.dts" \
   "$BOARD_CONFIG/boot2_bl616cl_isp_release_v8.2.1.bin" \
   "$BOARD_CONFIG/partition_cfg_4M.toml" \
-  "$BOARD_CONFIG/$MFG_NAME" \
   "$POST_TOOL" \
   "$FLASH_TOOL" \
   "$FLASH_CONFIG" \
@@ -160,24 +157,18 @@ cp "$RAW_IMAGE" "$BUILD_STAGE/nuttx.bin"
   --chipname=bl616cl \
   --imgfile="$BUILD_STAGE/nuttx.bin" \
   --appkeys=shared \
-  --brdcfgdir="$BOARD_CONFIG" \
-  --mfgfile="$BOARD_CONFIG/$MFG_NAME"
+  --brdcfgdir="$BOARD_CONFIG"
 
 for file in \
   "$BUILD_STAGE/nuttx.bin" \
   "$BUILD_STAGE/boot2_bl616cl_isp_release_v8.2.1.bin" \
-  "$BUILD_STAGE/partition.bin" \
-  "$BUILD_STAGE/$MFG_NAME"
+  "$BUILD_STAGE/partition.bin"
 do
   require_file "$file"
 done
 
 if [ "$(file_size "$BUILD_STAGE/nuttx.bin")" -gt "$APP_SIZE" ]; then
   fail "application image exceeds the 0x200000-byte partition"
-fi
-
-if [ "$(file_size "$BUILD_STAGE/$MFG_NAME")" -gt "$MFG_SIZE" ]; then
-  fail "MFG image exceeds the 0x168000-byte partition"
 fi
 
 cp "$FLASH_TOOL" "$FLASH_STAGE/$FLASH_TOOL_NAME"
@@ -204,7 +195,6 @@ compare_segment "$PACKED_IMAGE" $((0x000000)) \
 compare_segment "$PACKED_IMAGE" $((0x00e000)) "$BUILD_STAGE/partition.bin"
 compare_segment "$PACKED_IMAGE" $((0x00f000)) "$BUILD_STAGE/partition.bin"
 compare_segment "$PACKED_IMAGE" $((0x010000)) "$BUILD_STAGE/nuttx.bin"
-compare_segment "$PACKED_IMAGE" $((0x210000)) "$BUILD_STAGE/$MFG_NAME"
 
 PADDED_IMAGE="$WORK_DIR/nuttx.whole.bin"
 dd if=/dev/zero bs=1048576 count=4 2>/dev/null | \
@@ -214,7 +204,6 @@ write_segment "$PADDED_IMAGE" $((0x000000)) \
 write_segment "$PADDED_IMAGE" $((0x00e000)) "$BUILD_STAGE/partition.bin"
 write_segment "$PADDED_IMAGE" $((0x00f000)) "$BUILD_STAGE/partition.bin"
 write_segment "$PADDED_IMAGE" $((0x010000)) "$BUILD_STAGE/nuttx.bin"
-write_segment "$PADDED_IMAGE" $((0x210000)) "$BUILD_STAGE/$MFG_NAME"
 
 STAGED_APP="$IMAGE_DIR/.nuttx.bin.postprocessed.$$"
 STAGED_WHOLE="$IMAGE_DIR/.nuttx.whole.bin.postprocessed.$$"

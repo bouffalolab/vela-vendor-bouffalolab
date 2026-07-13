@@ -32,7 +32,6 @@ set(BL616CL_RAW_IMAGE "${CMAKE_BINARY_DIR}/nuttx.raw.bin")
 set(BL616CL_POSTPROCESS_INPUTS
     ${NUTTX_BOARD_ABS_DIR}/config/bl_factory_params_IoTKitA_auto.dts
     ${NUTTX_BOARD_ABS_DIR}/config/boot2_bl616cl_isp_release_v8.2.1.bin
-    ${NUTTX_BOARD_ABS_DIR}/config/mfg_bl616cl_m0_sdk_5c976f45_autoboot.bin
     ${NUTTX_BOARD_ABS_DIR}/config/partition_cfg_4M.toml
     ${BOUFFALOLAB_VENDOR_DIR}/tools/bl616cldg/flash_factory_cfg.ini
     ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_fw_post_proc/bflb_fw_post_proc-ubuntu

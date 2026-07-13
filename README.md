@@ -64,7 +64,7 @@ BL616CLDG 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，产出�
 - `cmake_out/bl616cldg_nsh/nuttx.raw.bin`：处理前备份；
 - `cmake_out/bl616cldg_nsh/nuttx.bin`：boot2 可加载的应用镜像。
 - `cmake_out/bl616cldg_nsh/nuttx.whole.bin`：包含 boot2、双 partition、
-  app 和 MFG 的 4 MiB whole image，可从 flash `0x0` 写入。
+  app 的 4 MiB whole image，可从 flash `0x0` 写入；MFG 分区保持擦除态。
 
 显式烧录 whole image：
 
