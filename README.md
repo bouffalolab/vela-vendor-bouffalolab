@@ -91,7 +91,8 @@ python3 vendor/bouffalolab/bl_build.py \
   --flash --port /dev/ttyUSB0
 ```
 
-默认 baudrate 为 2000000，可通过 `--baudrate` 覆盖。
+默认 baudrate 为 2000000，可通过 `--baudrate` 覆盖。烧录成功后 FlashCube
+使用 `--reset`，通过板载 DTR/RTS 自动下载电路复位到正常启动状态。
 
 ## 现状
 

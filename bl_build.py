@@ -253,6 +253,7 @@ def flash_whole_image(
             f"--port={port}",
             f"--baudrate={baudrate}",
             f"--firmware={image}",
+            "--reset",
         ]
         return subprocess.run(
             cmd, cwd=root, env=build_env(root), check=False
