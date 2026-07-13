@@ -226,7 +226,6 @@ static int bl616cl_interrupt(int irq, void *context, FAR void *arg)
   if ((intstatus & UART_INTSTS_TX_FIFO) != 0)
     {
       uart_xmitchars(dev);
-      bflb_uart_txint_mask(priv->device, true);
     }
 
   if ((intstatus & (UART_INTSTS_RX_FIFO | UART_INTSTS_RTO)) != 0)
@@ -442,7 +441,16 @@ static void bl616cl_txint(struct uart_dev_s *dev, bool enable)
   irqstate_t flags;
 
   flags = enter_critical_section();
-  bflb_uart_txint_mask(priv->device, !enable);
+  if (enable)
+    {
+      bflb_uart_txint_mask(priv->device, false);
+      uart_xmitchars(dev);
+    }
+  else
+    {
+      bflb_uart_txint_mask(priv->device, true);
+    }
+
   leave_critical_section(flags);
 }
 
