@@ -61,7 +61,8 @@ if(COMMAND nuttx_add_kernel_library AND "${CHIP}" STREQUAL "bl616cl")
       ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_clock.c
       ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_common.c
       ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_glb.c
-      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_hbn.c)
+      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_hbn.c
+      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_pm.c)
 endif()
 
 nuttx_add_subdirectory()

@@ -47,6 +47,8 @@
 extern int bl616cl_sdk_glb_set_uart_clk(uint8_t enable, uint8_t clk_sel,
                                         uint8_t div)
   __asm__("GLB_Set_UART_CLK");
+extern int bl616cl_sdk_pm_disable_gpio_keep(uint32_t pin)
+  __asm__("pm_disable_gpio_keep");
 
 /****************************************************************************
  * Private Functions
@@ -156,6 +158,9 @@ void bl616cl_lowputc_config(struct bl616cl_uart_s *config)
     {
       return;
     }
+
+  (void)bl616cl_sdk_pm_disable_gpio_keep(config->txpin);
+  (void)bl616cl_sdk_pm_disable_gpio_keep(config->rxpin);
 
   bflb_gpio_uart_init(gpio, config->txpin,
                       (config->id * 4) + GPIO_UART_FUNC_UART0_TX);
