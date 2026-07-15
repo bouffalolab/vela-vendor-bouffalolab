@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/boards/bl616cl/bl616cldg/src/bl616cldg_fw_header.c
+ * apps/vendor/bouffalolab/boards/bl616cl/bl616cldg/src/bl616cldg_fw_header.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with

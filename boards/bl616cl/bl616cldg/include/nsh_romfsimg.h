@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/boards/bl616cl/bl616cldg/include/nsh_romfsimg.h
+ * apps/vendor/bouffalolab/boards/bl616cl/bl616cldg/include/nsh_romfsimg.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with

@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/boards/bl616cldg/include/board.h
+ * apps/vendor/bouffalolab/boards/bl616cl/bl616cldg/include/board.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -26,4 +26,3 @@
  ****************************************************************************/
 
 #endif /* __VENDOR_BOUFFALOLAB_BOARDS_BL616CLDG_INCLUDE_BOARD_H */
-
