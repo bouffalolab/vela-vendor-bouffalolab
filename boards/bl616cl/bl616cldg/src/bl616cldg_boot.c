@@ -33,21 +33,6 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: board_early_initialize
- *
- * Description:
- *   This hook runs after up_initialize() on the startup thread. Keep it for
- *   board-specific early hardware that is safe before the bring-up thread.
- *
- ****************************************************************************/
-
-#ifdef CONFIG_BOARD_EARLY_INITIALIZE
-void board_early_initialize(void)
-{
-}
-#endif
-
-/****************************************************************************
  * Name: board_late_initialize
  *
  * Description:
