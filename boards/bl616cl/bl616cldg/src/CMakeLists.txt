@@ -32,7 +32,7 @@ nuttx_add_romfs(
   RCRAWS
   etc/group
   PATH
-  ${CMAKE_CURRENT_LIST_DIR}/etc)
+  ${CMAKE_CURRENT_BINARY_DIR}/etc)
 
 target_link_libraries(board PRIVATE romfs_etc)
 

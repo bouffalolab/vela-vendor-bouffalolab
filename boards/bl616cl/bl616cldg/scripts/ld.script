@@ -101,6 +101,19 @@ SECTIONS
     _version_info_section_end = ABSOLUTE(.);
   } > rom_header :rom_header
 
+  .init_code :
+  {
+    KEEP(*riscv_fpu.S.o(.text))
+    KEEP(*bl616cl_start.c.o(.text.__bl616cl_start))
+    KEEP(*bl616cl_cpu.c.o(.text.bl616cl_* .rodata.g_bl616cl_pmp_entry))
+    KEEP(*bl616cl_memory.c.o(.text.bl616cl_memory_early_init
+                             .text.bl616cl_flash_early_init))
+    KEEP(*bl616cl_cache.c.o(.text.bl616cl_cache_early_init))
+    KEEP(*rv_pmp.c.o(.text.rvpmp_* .rodata.rvpmp_*))
+    KEEP(*bl616cl_glb.c.o(.text.GLB_Set_EM_Sel))
+  } > rom_header :rom_header
+
+  __rom_header_used_end__ = ABSOLUTE(.);
   __rom_header_end__ = ORIGIN(rom_header) + LENGTH(rom_header);
 
   .text ORIGIN(flash) :
@@ -241,6 +254,8 @@ SECTIONS
          "BL616CL RF TLV offset is invalid")
   ASSERT(ADDR(.ver) == ORIGIN(rom_header) + 3K,
          "BL616CL version offset is invalid")
+  ASSERT(__rom_header_used_end__ <= __rom_header_end__,
+         "BL616CL pre-cache code exceeds ROM header")
   ASSERT(ADDR(.text) == ORIGIN(flash),
          "BL616CL XIP text must follow the ROM header")
   ASSERT(__rom_end__ <= ORIGIN(flash) + LENGTH(flash),
