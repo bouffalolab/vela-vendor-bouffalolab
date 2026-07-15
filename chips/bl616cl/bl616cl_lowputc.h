@@ -25,7 +25,6 @@
  * Included Files
  ****************************************************************************/
 
-#include <stdbool.h>
 #include <stdint.h>
 
 #include <nuttx/arch.h>
@@ -77,7 +76,6 @@ EXTERN struct bl616cl_uart_s g_uart0_config;
 
 void bl616cl_lowsetup(void);
 void bl616cl_lowputc_config(struct bl616cl_uart_s *config);
-void bl616cl_lowputc_rxint(bool enable);
 
 #undef EXTERN
 #if defined(__cplusplus)

@@ -230,25 +230,3 @@ void bl616cl_lowsetup(void)
   bl616cl_lowputc_config(&g_uart0_config);
 #endif
 }
-
-/****************************************************************************
- * Name: bl616cl_lowputc_rxint
- *
- * Description:
- *   Enable or disable RX interrupts for low-level UART users.
- *
- ****************************************************************************/
-
-void bl616cl_lowputc_rxint(bool enable)
-{
-#if defined(CONFIG_BL616CL_UART0)
-  if (g_uart0_config.device == NULL)
-    {
-      return;
-    }
-
-  bflb_uart_rxint_mask(g_uart0_config.device, !enable);
-#else
-  UNUSED(enable);
-#endif
-}
