@@ -22,7 +22,7 @@ COMMAND_OPTIONS = {
     "build": ("--help", "-j", "--jobs", "--use-lib"),
     "clean": ("--help",),
     "menuconfig": ("--help",),
-    "flash": ("--help", "--config", "--board", "--image", "--port", "--baudrate"),
+    "flash": ("--help", "--addr", "--config", "--board", "--image", "--port", "--baudrate"),
     "completion": ("--help",),
 }
 FLASH_SIZE = 0x400000
@@ -300,11 +300,16 @@ def stage_flash_tool(root: Path, stage: Path) -> Path:
     return staged_tool
 
 
-def flash_whole_image(
-    root: Path, image: Path, port: str, baudrate: int
+def flash_bin_image(
+    root: Path, image: Path, addr: str, port: str, baudrate: int
 ) -> int:
+    """Burn a single binary to a flash address (default 0x0)."""
     image = image.resolve()
-    validate_whole_image(image)
+    if not image.is_file():
+        raise FileNotFoundError(f"image does not exist: {image}")
+    if image.stat().st_size == FLASH_SIZE:
+        # A 4 MiB file is a whole image: keep the layout checks.
+        validate_whole_image(image)
 
     with tempfile.TemporaryDirectory(prefix="bl616cl-flash.") as temp_dir:
         stage = Path(temp_dir)
@@ -317,6 +322,7 @@ def flash_whole_image(
             f"--port={port}",
             f"--baudrate={baudrate}",
             f"--firmware={image}",
+            f"--addr={addr}",
             "--reset",
         ]
         return subprocess.run(
@@ -350,29 +356,22 @@ def flash_config_image(
         ).returncode
 
 
-def select_flash_image(
-    root: Path, board: Optional[Path], image: Optional[Path]
-) -> Path:
-    if image is not None:
-        return image
-
-    if board is not None:
-        return build_dir(root, board) / "nuttx.whole.bin"
-
+def select_flash_config(root: Path) -> Path:
+    """Auto-discover the single flash_prog_cfg.ini under cmake_out."""
     candidates = sorted(
         path
-        for path in (root / "cmake_out").glob("*/nuttx.whole.bin")
+        for path in (root / "cmake_out").glob("*/flash_prog_cfg.ini")
         if path.is_file()
     )
     if not candidates:
         raise FileNotFoundError(
-            f"no flash image found under {root / 'cmake_out'}; "
-            "build first or use --image"
+            f"no flash config found under {root / 'cmake_out'}; "
+            "build first or pass a board / --config / --image"
         )
     if len(candidates) > 1:
         listing = "\n".join(f"  {path}" for path in candidates)
         raise ValueError(
-            "multiple flash images found; specify --board or --image:\n"
+            "multiple flash configs found; specify a board:\n"
             f"{listing}"
         )
 
@@ -413,6 +412,8 @@ def complete_candidates(root: Path, words: Sequence[str]) -> list:
 
     opts = list(COMMAND_OPTIONS[first])
     prev = words[-2]
+    if prev == "--addr":
+        return ["0x0"]
     if prev == "--config":
         return sorted(
             str(path) for path in root.glob("cmake_out/*/flash_prog_cfg.ini")
@@ -428,7 +429,9 @@ def complete_candidates(root: Path, words: Sequence[str]) -> list:
     if first == "completion":
         return ["bash", "zsh", "fish"]
     if first == "flash":
-        return opts
+        if words[-1].startswith("-") or len(words) >= 3:
+            return opts
+        return [*board_candidates(root), *opts]
     if first in ("build", "clean", "menuconfig"):
         if words[-1].startswith("-") or len(words) >= 3:
             return opts
@@ -523,19 +526,34 @@ def make_parser() -> argparse.ArgumentParser:
     )
 
     p_flash = sub.add_parser(
-        "flash", help="flash a built whole image (never builds)"
+        "flash", help="flash firmware over UART (never builds)"
     )
     source = p_flash.add_mutually_exclusive_group()
     source.add_argument(
-        "--config",
-        type=Path,
-        help="FlashCube config ini describing per-partition firmware "
-        "(e.g. cmake_out/<board>_<config>/flash_prog_cfg.ini)",
+        "board",
+        nargs="?",
+        help="board target; flashes its flash_prog_cfg.ini "
+        "(same as --board)",
     )
     source.add_argument(
-        "--board", help="board target to locate its whole image"
+        "--board", dest="board_opt", help="board target to flash by config"
     )
-    source.add_argument("--image", type=Path, help="path to a whole image")
+    source.add_argument(
+        "--config",
+        type=Path,
+        help="FlashCube config ini describing per-partition firmware",
+    )
+    source.add_argument(
+        "--image",
+        type=Path,
+        help="single binary to burn at --addr (whole images checked "
+        "when 4 MiB)",
+    )
+    p_flash.add_argument(
+        "--addr",
+        default=None,
+        help="flash address for --image (default: 0x0)",
+    )
     p_flash.add_argument("--port", required=True, help="UART port")
     p_flash.add_argument(
         "--baudrate", type=int, default=2_000_000, help="UART baudrate"
@@ -553,6 +571,18 @@ def make_parser() -> argparse.ArgumentParser:
     )
 
     return parser
+
+
+def highlight(text: str) -> str:
+    """Highlight a path when stderr is a terminal."""
+    if sys.stderr.isatty():
+        return f"\033[1;36m{text}\033[0m"
+    return text
+
+
+def info(message: str) -> None:
+    """Print an informational line to stderr."""
+    print(f"bl_build: {message}", file=sys.stderr)
 
 
 def resolve_or_none(root: Path, target: str) -> Optional[Path]:
@@ -586,13 +616,34 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.command == "flash":
         try:
+            if args.addr is not None and args.image is None:
+                raise ValueError("--addr requires --image")
+            if args.image is not None:
+                addr = args.addr or "0x0"
+                info(f"flashing {highlight(str(args.image))} to {highlight(addr)}")
+                return flash_bin_image(
+                    root, args.image, addr, args.port, args.baudrate,
+                )
             if args.config is not None:
+                info(f"flashing via config: {highlight(str(args.config))}")
                 return flash_config_image(
                     root, args.config, args.port, args.baudrate
                 )
-            board = resolve_board(root, args.board) if args.board else None
-            image = select_flash_image(root, board, args.image)
-            return flash_whole_image(root, image, args.port, args.baudrate)
+            board_target = args.board or args.board_opt
+            if board_target is None:
+                config = select_flash_config(root)
+                info(
+                    "auto-detected flash config: "
+                    f"{highlight(config.relative_to(root))}"
+                )
+            else:
+                board = resolve_board(root, board_target)
+                config = build_dir(root, board) / "flash_prog_cfg.ini"
+                info(
+                    f"flashing board {highlight(board_target)} via config: "
+                    f"{highlight(config.relative_to(root))}"
+                )
+            return flash_config_image(root, config, args.port, args.baudrate)
         except (OSError, RuntimeError, ValueError) as error:
             print(f"bl_build: {error}", file=sys.stderr)
             return 1
@@ -601,12 +652,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if board is None:
         return 1
     out_dir = build_dir(root, board)
+    board_rel = highlight(board.relative_to(root))
 
     if args.command == "clean":
+        info(f"cleaning output: {highlight(out_dir.relative_to(root))}")
         if out_dir.exists():
             shutil.rmtree(out_dir)
         return 0
 
+    info(f"configuring board {board_rel}")
     ret = cmake_configure(root, out_dir, board, getattr(args, "use_lib", ""))
     if ret != 0:
         return ret

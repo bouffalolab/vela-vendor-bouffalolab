@@ -73,38 +73,24 @@ BL616CLDG 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，产出�
 - `cmake_out/bl616cldg_nsh/flash_prog_cfg.ini`：按分区烧录的 FlashCube 配置
   （boot2 / partition / app 三段，均指向绝对路径）。
 
-显式烧录 whole image：
+烧录 firmware（纯烧录操作，不执行 CMake configure/build）：
 
 ```bash
-./bl_build.py flash --port /dev/ttyUSB0
+# 指定 board：按构建时生成的 flash_prog_cfg.ini 分区烧录（推荐）
+./bl_build.py flash bl616cl/bl616cldg/configs/nsh --port /dev/ttyUSB0
+./bl_build.py flash nsh --port /dev/ttyUSB0       # board 可简写
+./bl_build.py flash --port /dev/ttyUSB0           # 唯一输出目录时自动定位
+
+# 显式指定 FlashCube 配置 ini（与 board/--image 互斥）
+./bl_build.py flash --config <ini> --port /dev/ttyUSB0
+
+# 直接烧单个 bin 到指定地址（--addr 仅与 --image 搭配，默认 0x0）
+./bl_build.py flash --image <boot2>.bin --addr 0x0 --port /dev/ttyUSB0
+./bl_build.py flash --image cmake_out/bl616cldg_nsh/nuttx.bin \
+  --addr 0x10000 --port /dev/ttyUSB0
 ```
 
-`flash` 是纯烧录操作，不执行 CMake configure/build。未指定镜像或 board 时，
-只有 `cmake_out/*/nuttx.whole.bin` 存在唯一候选才自动选择；多候选会
-列出路径并要求显式选择。也可以直接指定镜像：
-
-```bash
-./bl_build.py flash \
-  --image cmake_out/bl616cldg_nsh/nuttx.whole.bin --port /dev/ttyUSB0
-```
-
-或者附 board 目标，仅用于定位对应输出目录，不会重新编译：
-
-```bash
-./bl_build.py flash \
-  --board bl616cl/bl616cldg/configs/nsh --port /dev/ttyUSB0
-```
-
-按分区烧录（boot2 / partition / app 分段写入，配置由构建时生成）：
-
-```bash
-./bl_build.py flash \
-  --config cmake_out/bl616cldg_nsh/flash_prog_cfg.ini --port /dev/ttyUSB0
-```
-
-`--config` 接受任意 FlashCube 配置 ini（与 `--board`/`--image` 互斥）；烧录
-过程不再触碰固件本身，`bflb_fw_post_proc` 只在编译时执行一次。
-
+`--image` 文件为 4 MiB 时视为 whole image，仍执行魔数/MFG 布局校验。
 默认 baudrate 为 2000000，可通过 `--baudrate` 覆盖。烧录成功后 FlashCube
 使用 `--reset`，通过板载 DTR/RTS 自动下载电路复位到正常启动状态。
 
