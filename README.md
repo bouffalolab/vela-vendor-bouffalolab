@@ -40,20 +40,23 @@ Bouffalo Lab 芯片原厂维护的、基于 **openvela** 的适配层：芯片�
 构建走 **cmake + Ninja**（不再用 make，本仓不提供 `Make.defs`/`Makefile`）。
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py \
-  vendor/bouffalolab/boards/bl616cl/bl616cldg/configs/nsh --clean
-python3 vendor/bouffalolab/bl_build.py \
-  vendor/bouffalolab/boards/bl616cl/bl616cldg/configs/nsh -j14
+./bl_build.py clean bl616cl/bl616cldg/configs/nsh
+./bl_build.py build bl616cl/bl616cldg/configs/nsh -j8
 ```
 
-target 使用到 `configs/<name>` 的完整路径。`bl_build.py` 补齐 OpenVela
-预置工具链和 Python 依赖环境，只走 CMake/Ninja。
+SDK 根目录的 `bl_build.py` 是 repo manifest 的 linkfile 软链接（指向本仓
+`vendor/bouffalolab/bl_build.py`），在根目录直接执行即可；也可以显式运行
+`python3 vendor/bouffalolab/bl_build.py`。
+
+target 指向到 `configs/<name>` 的 board 目录；`vendor/bouffalolab/boards/` 前缀可省略，
+无歧义时 chip、`configs/` 层也可省略（`bl616cldg/nsh`、`nsh` 均可用）。
+`bl_build.py` 补齐 OpenVela 预置工具链和 Python 依赖环境，只走 CMake/Ninja。
+默认并行度 = 物理核数一半，可用 `-j N` / `--jobs N` 覆盖。
 
 配置菜单（任选其一）：
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py \
-  vendor/bouffalolab/boards/bl616cl/bl616cldg/configs/nsh --menuconfig
+./bl_build.py menuconfig bl616cl/bl616cldg/configs/nsh
 ```
 
 菜单中可见 `Bouffalo Lab`（→ Examples / Components）。
@@ -69,30 +72,30 @@ BL616CLDG 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，产出�
 显式烧录 whole image：
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py \
-  --flash --baudrate 2000000 --port /dev/ttyUSB0
+./bl_build.py flash --port /dev/ttyUSB0
 ```
 
-`--flash` 是纯烧录操作，不执行 CMake configure/build。未指定镜像或 defconfig
-时，只有 `cmake_out/*/nuttx.whole.bin` 存在唯一候选才自动选择；多候选会
+`flash` 是纯烧录操作，不执行 CMake configure/build。未指定镜像或 board 时，
+只有 `cmake_out/*/nuttx.whole.bin` 存在唯一候选才自动选择；多候选会
 列出路径并要求显式选择。也可以直接指定镜像：
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py \
-  --flash --image cmake_out/bl616cldg_nsh/nuttx.whole.bin \
-  --port /dev/ttyUSB0
+./bl_build.py flash \
+  --image cmake_out/bl616cldg_nsh/nuttx.whole.bin --port /dev/ttyUSB0
 ```
 
-或者附带完整 defconfig，仅用于定位对应输出目录，不会重新编译：
+或者附 board 目标，仅用于定位对应输出目录，不会重新编译：
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py \
-  vendor/bouffalolab/boards/bl616cl/bl616cldg/configs/nsh \
-  --flash --port /dev/ttyUSB0
+./bl_build.py flash \
+  --board bl616cl/bl616cldg/configs/nsh --port /dev/ttyUSB0
 ```
 
 默认 baudrate 为 2000000，可通过 `--baudrate` 覆盖。烧录成功后 FlashCube
 使用 `--reset`，通过板载 DTR/RTS 自动下载电路复位到正常启动状态。
+
+shell 补全（bash/zsh/fish）：`./bl_build.py completion <shell>` 输出补全脚本，
+安装方式见脚本内的注释。
 
 ## 现状
 
