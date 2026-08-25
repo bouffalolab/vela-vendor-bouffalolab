@@ -22,7 +22,7 @@ COMMAND_OPTIONS = {
     "build": ("--help", "-j", "--jobs", "--use-lib"),
     "clean": ("--help",),
     "menuconfig": ("--help",),
-    "flash": ("--help", "--board", "--image", "--port", "--baudrate"),
+    "flash": ("--help", "--config", "--board", "--image", "--port", "--baudrate"),
     "completion": ("--help",),
 }
 FLASH_SIZE = 0x400000
@@ -262,18 +262,10 @@ def flash_tool_name(
     raise RuntimeError(f"unsupported host platform: {system}")
 
 
-def flash_whole_image(
-    root: Path, image: Path, port: str, baudrate: int
-) -> int:
-    image = image.resolve()
-    validate_whole_image(image)
-
+def stage_flash_tool(root: Path, stage: Path) -> Path:
+    """Stage the FlashCube binary and chip assets into the given directory."""
     flash_tool_dir = (
-        root
-        / "vendor"
-        / "bouffalolab"
-        / "tools"
-        / "bouffalo_flash_cube"
+        root / "vendor" / "bouffalolab" / "tools" / "bouffalo_flash_cube"
     )
     tool_name = flash_tool_name()
     flash_tool = flash_tool_dir / tool_name
@@ -301,12 +293,22 @@ def flash_whole_image(
                 f"required flash runtime asset does not exist: {path}"
             )
 
+    staged_tool = stage / tool_name
+    shutil.copy2(flash_tool, staged_tool)
+    shutil.copytree(flash_tool_dir / "chips", stage / "chips")
+    staged_tool.chmod(staged_tool.stat().st_mode | 0o100)
+    return staged_tool
+
+
+def flash_whole_image(
+    root: Path, image: Path, port: str, baudrate: int
+) -> int:
+    image = image.resolve()
+    validate_whole_image(image)
+
     with tempfile.TemporaryDirectory(prefix="bl616cl-flash.") as temp_dir:
         stage = Path(temp_dir)
-        staged_tool = stage / tool_name
-        shutil.copy2(flash_tool, staged_tool)
-        shutil.copytree(flash_tool_dir / "chips", stage / "chips")
-        staged_tool.chmod(staged_tool.stat().st_mode | 0o100)
+        staged_tool = stage_flash_tool(root, stage)
 
         cmd = [
             str(staged_tool),
@@ -315,6 +317,32 @@ def flash_whole_image(
             f"--port={port}",
             f"--baudrate={baudrate}",
             f"--firmware={image}",
+            "--reset",
+        ]
+        return subprocess.run(
+            cmd, cwd=root, env=build_env(root), check=False
+        ).returncode
+
+
+def flash_config_image(
+    root: Path, config: Path, port: str, baudrate: int
+) -> int:
+    """Flash per-partition firmware described by a FlashCube config ini."""
+    config = config.resolve()
+    if not config.is_file():
+        raise FileNotFoundError(f"flash config does not exist: {config}")
+
+    with tempfile.TemporaryDirectory(prefix="bl616cl-flash.") as temp_dir:
+        stage = Path(temp_dir)
+        staged_tool = stage_flash_tool(root, stage)
+
+        cmd = [
+            str(staged_tool),
+            "--interface=uart",
+            "--chipname=bl616cl",
+            f"--config={config}",
+            f"--port={port}",
+            f"--baudrate={baudrate}",
             "--reset",
         ]
         return subprocess.run(
@@ -385,6 +413,10 @@ def complete_candidates(root: Path, words: Sequence[str]) -> list:
 
     opts = list(COMMAND_OPTIONS[first])
     prev = words[-2]
+    if prev == "--config":
+        return sorted(
+            str(path) for path in root.glob("cmake_out/*/flash_prog_cfg.ini")
+        )
     if prev == "--board":
         return board_candidates(root)
     if prev in ("-j", "--jobs"):
@@ -495,6 +527,12 @@ def make_parser() -> argparse.ArgumentParser:
     )
     source = p_flash.add_mutually_exclusive_group()
     source.add_argument(
+        "--config",
+        type=Path,
+        help="FlashCube config ini describing per-partition firmware "
+        "(e.g. cmake_out/<board>_<config>/flash_prog_cfg.ini)",
+    )
+    source.add_argument(
         "--board", help="board target to locate its whole image"
     )
     source.add_argument("--image", type=Path, help="path to a whole image")
@@ -548,6 +586,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.command == "flash":
         try:
+            if args.config is not None:
+                return flash_config_image(
+                    root, args.config, args.port, args.baudrate
+                )
             board = resolve_board(root, args.board) if args.board else None
             image = select_flash_image(root, board, args.image)
             return flash_whole_image(root, image, args.port, args.baudrate)

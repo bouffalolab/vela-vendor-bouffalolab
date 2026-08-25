@@ -68,6 +68,10 @@ BL616CLDG 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，产出�
 - `cmake_out/bl616cldg_nsh/nuttx.bin`：boot2 可加载的应用镜像。
 - `cmake_out/bl616cldg_nsh/nuttx.whole.bin`：包含 boot2、双 partition、
   app 的 4 MiB whole image，可从 flash `0x0` 写入；MFG 分区保持擦除态。
+- `cmake_out/bl616cldg_nsh/partition.bin`：分区表（编译时由 `bflb_fw_post_proc`
+  生成一次并落盘，供按分区烧录）。
+- `cmake_out/bl616cldg_nsh/flash_prog_cfg.ini`：按分区烧录的 FlashCube 配置
+  （boot2 / partition / app 三段，均指向绝对路径）。
 
 显式烧录 whole image：
 
@@ -90,6 +94,16 @@ BL616CLDG 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，产出�
 ./bl_build.py flash \
   --board bl616cl/bl616cldg/configs/nsh --port /dev/ttyUSB0
 ```
+
+按分区烧录（boot2 / partition / app 分段写入，配置由构建时生成）：
+
+```bash
+./bl_build.py flash \
+  --config cmake_out/bl616cldg_nsh/flash_prog_cfg.ini --port /dev/ttyUSB0
+```
+
+`--config` 接受任意 FlashCube 配置 ini（与 `--board`/`--image` 互斥）；烧录
+过程不再触碰固件本身，`bflb_fw_post_proc` 只在编译时执行一次。
 
 默认 baudrate 为 2000000，可通过 `--baudrate` 覆盖。烧录成功后 FlashCube
 使用 `--reset`，通过板载 DTR/RTS 自动下载电路复位到正常启动状态。

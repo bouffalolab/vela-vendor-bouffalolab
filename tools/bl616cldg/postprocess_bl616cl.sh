@@ -196,6 +196,33 @@ compare_segment "$PACKED_IMAGE" $((0x00e000)) "$BUILD_STAGE/partition.bin"
 compare_segment "$PACKED_IMAGE" $((0x00f000)) "$BUILD_STAGE/partition.bin"
 compare_segment "$PACKED_IMAGE" $((0x010000)) "$BUILD_STAGE/nuttx.bin"
 
+# Persist the partition table and a per-partition flash config next to the
+# firmware, so `bl_build.py flash --config` can run without re-running
+# bflb_fw_post_proc (which must run only during the build).
+cp "$BUILD_STAGE/partition.bin" "$IMAGE_DIR/partition.bin"
+cat > "$IMAGE_DIR/flash_prog_cfg.ini" <<EOF
+[cfg]
+erase = 1
+skip_mode = 0x0, 0x0
+boot2_isp_mode = 1
+
+[boot2]
+filedir = $BOARD_CONFIG/boot2_bl616cl_isp_release_v8.2.1.bin
+address = 0x000000
+
+[partition]
+filedir = $IMAGE_DIR/partition.bin
+address = 0xE000
+
+[partition_b]
+filedir = $IMAGE_DIR/partition.bin
+address = 0xF000
+
+[FW]
+filedir = $IMAGE_DIR/nuttx.bin
+address = @partition
+EOF
+
 PADDED_IMAGE="$WORK_DIR/nuttx.whole.bin"
 dd if=/dev/zero bs=1048576 count=4 2>/dev/null | \
   LC_ALL=C tr '\000' '\377' > "$PADDED_IMAGE"
