@@ -204,7 +204,7 @@ cat > "$IMAGE_DIR/flash_prog_cfg.ini" <<EOF
 [cfg]
 erase = 1
 skip_mode = 0x0, 0x0
-boot2_isp_mode = 1
+boot2_isp_mode = 0
 
 [boot2]
 filedir = $BOARD_CONFIG/boot2_bl616cl_isp_release_v8.2.1.bin
