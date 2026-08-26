@@ -56,6 +56,15 @@ config BL616CL_UART0_TXPIN
 endif # BL616CL_UART0
 endif # BL616CL_UART
 
+config BL616CL_WDT
+	bool "Watchdog Timer (WDT)"
+	default n
+	select WATCHDOG
+	---help---
+		Enable the BL616CL watchdog timer lower half driver.
+		The timeout unit is milliseconds and the maximum value
+		is 65535 ms.
+
 endmenu
 
 endif

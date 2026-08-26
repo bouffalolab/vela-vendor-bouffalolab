@@ -24,11 +24,17 @@
 
 #include <nuttx/config.h>
 
+#include <syslog.h>
+
 #include <sys/types.h>
 
 #include "bl616cl_bod.h"
 #include "bl616cl_bus.h"
 #include "bl616cl_sec_mutex.h"
+
+#ifdef CONFIG_BL616CL_WDT
+#  include "bl616cl_wdt.h"
+#endif
 
 #include "bl616cldg.h"
 
@@ -62,6 +68,16 @@ int bl616cldg_bringup(void)
     {
       return ret;
     }
+
+#ifdef CONFIG_BL616CL_WDT
+  ret = bl616cl_wdt_initialize("/dev/watchdog0");
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize watchdog driver: %d\n",
+             ret);
+      return ret;
+    }
+#endif
 
   return OK;
 }

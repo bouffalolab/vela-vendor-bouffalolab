@@ -37,6 +37,10 @@ set(SRCS
     bl616cl_timerisr.c
     bl616cl_allocateheap.c)
 
+if(CONFIG_BL616CL_WDT)
+  list(APPEND SRCS bl616cl_wdt.c)
+endif()
+
 target_sources(arch PRIVATE ${SRCS})
 
 target_include_directories(arch PRIVATE ${NUTTX_CHIP_ABS_DIR}/include)

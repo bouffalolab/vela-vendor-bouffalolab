@@ -14,6 +14,7 @@ target_sources(
           ${BL616CL_LHAL_DIR}/src/bflb_ef_ctrl.c
           ${BL616CL_LHAL_DIR}/src/bflb_gpio.c
           ${BL616CL_LHAL_DIR}/src/bflb_uart.c
+          ${BL616CL_LHAL_DIR}/src/bflb_wdg.c
           ${BL616CL_LHAL_DIR}/src/bflb_flash.c
           ${BL616CL_LHAL_DIR}/src/flash/bflb_sf_cfg.c
           ${BL616CL_LHAL_DIR}/src/flash/bflb_xip_sflash.c
