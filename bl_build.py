@@ -22,7 +22,15 @@ COMMAND_OPTIONS = {
     "build": ("--help", "-j", "--jobs", "--use-lib"),
     "clean": ("--help",),
     "menuconfig": ("--help",),
-    "flash": ("--help", "--addr", "--config", "--board", "--image", "--port", "--baudrate"),
+    "flash": (
+        "--help",
+        "--addr",
+        "--config",
+        "--board",
+        "--image",
+        "--port",
+        "--baudrate",
+    ),
     "completion": ("--help",),
 }
 FLASH_SIZE = 0x400000
@@ -101,8 +109,7 @@ def resolve_board(root: Path, target: str) -> Path:
     )
     if not candidates:
         raise ValueError(
-            f"board target not found: {target} "
-            f"(looked under {BOARD_ROOT}/)"
+            f"board target not found: {target} " f"(looked under {BOARD_ROOT}/)"
         )
     if len(candidates) > 1:
         listing = "\n".join(f"  {path.relative_to(root)}" for path in candidates)
@@ -238,15 +245,11 @@ def validate_whole_image(image: Path) -> None:
         while remaining:
             chunk = stream.read(min(remaining, 64 * 1024))
             if any(byte != 0xFF for byte in chunk):
-                raise ValueError(
-                    f"whole image MFG partition is not erased: {image}"
-                )
+                raise ValueError(f"whole image MFG partition is not erased: {image}")
             remaining -= len(chunk)
 
 
-def flash_tool_name(
-    system: Optional[str] = None, machine: Optional[str] = None
-) -> str:
+def flash_tool_name(system: Optional[str] = None, machine: Optional[str] = None) -> str:
     system = system or platform.system()
     machine = (machine or platform.machine()).lower()
     if system.startswith("Linux"):
@@ -264,9 +267,7 @@ def flash_tool_name(
 
 def stage_flash_tool(root: Path, stage: Path) -> Path:
     """Stage the FlashCube binary and chip assets into the given directory."""
-    flash_tool_dir = (
-        root / "vendor" / "bouffalolab" / "tools" / "bouffalo_flash_cube"
-    )
+    flash_tool_dir = root / "vendor" / "bouffalolab" / "tools" / "bouffalo_flash_cube"
     tool_name = flash_tool_name()
     flash_tool = flash_tool_dir / tool_name
     required_files = (
@@ -281,11 +282,7 @@ def stage_flash_tool(root: Path, stage: Path) -> Path:
         / "bl616cl"
         / "efuse_bootheader"
         / "efuse_bootheader_cfg.conf",
-        flash_tool_dir
-        / "chips"
-        / "bl616cl"
-        / "efuse_bootheader"
-        / "flash_para.bin",
+        flash_tool_dir / "chips" / "bl616cl" / "efuse_bootheader" / "flash_para.bin",
     )
     for path in required_files:
         if not path.is_file():
@@ -330,9 +327,7 @@ def flash_bin_image(
         ).returncode
 
 
-def flash_config_image(
-    root: Path, config: Path, port: str, baudrate: int
-) -> int:
+def flash_config_image(root: Path, config: Path, port: str, baudrate: int) -> int:
     """Flash per-partition firmware described by a FlashCube config ini."""
     config = config.resolve()
     if not config.is_file():
@@ -371,8 +366,7 @@ def select_flash_config(root: Path) -> Path:
     if len(candidates) > 1:
         listing = "\n".join(f"  {path}" for path in candidates)
         raise ValueError(
-            "multiple flash configs found; specify a board:\n"
-            f"{listing}"
+            "multiple flash configs found; specify a board:\n" f"{listing}"
         )
 
     return candidates[0]
@@ -415,9 +409,7 @@ def complete_candidates(root: Path, words: Sequence[str]) -> list:
     if prev == "--addr":
         return ["0x0"]
     if prev == "--config":
-        return sorted(
-            str(path) for path in root.glob("cmake_out/*/flash_prog_cfg.ini")
-        )
+        return sorted(str(path) for path in root.glob("cmake_out/*/flash_prog_cfg.ini"))
     if prev == "--board":
         return board_candidates(root)
     if prev in ("-j", "--jobs"):
@@ -484,8 +476,8 @@ def make_parser() -> argparse.ArgumentParser:
         "(CMake + Ninja).",
         epilog=(
             "examples:\n"
-            "  bl_build.py build bl616cl/bl616cldg/configs/nsh -j8\n"
-            "  bl_build.py menuconfig bl616cldg/nsh\n"
+            "  bl_build.py build bl616cl/ai-m64l-32s-kit/configs/nsh -j8\n"
+            "  bl_build.py menuconfig ai-m64l-32s-kit/nsh\n"
             "  bl_build.py flash --port /dev/ttyUSB0\n"
             "  bl_build.py completion bash   # print a shell completion script\n"
             "\n"
@@ -499,11 +491,13 @@ def make_parser() -> argparse.ArgumentParser:
 
     p_build = sub.add_parser("build", help="configure and build a board")
     p_build.add_argument(
-        "board", help="board target, e.g. bl616cl/bl616cldg/configs/nsh"
+        "board", help="board target, e.g. bl616cl/ai-m64l-32s-kit/configs/nsh"
     )
     p_build.add_argument(
-        "-j", "--jobs", default=default_jobs(),
-        help=f"parallel jobs (default: {default_jobs()})"
+        "-j",
+        "--jobs",
+        default=default_jobs(),
+        help=f"parallel jobs (default: {default_jobs()})",
     )
     p_build.add_argument(
         "--use-lib",
@@ -511,29 +505,24 @@ def make_parser() -> argparse.ArgumentParser:
         help="comma-separated components linked from prebuilt libs",
     )
 
-    p_clean = sub.add_parser(
-        "clean", help="remove the board's build output directory"
-    )
+    p_clean = sub.add_parser("clean", help="remove the board's build output directory")
     p_clean.add_argument(
-        "board", help="board target, e.g. bl616cl/bl616cldg/configs/nsh"
+        "board", help="board target, e.g. bl616cl/ai-m64l-32s-kit/configs/nsh"
     )
 
     p_menuconfig = sub.add_parser(
         "menuconfig", help="configure the board and open the Kconfig menu"
     )
     p_menuconfig.add_argument(
-        "board", help="board target, e.g. bl616cl/bl616cldg/configs/nsh"
+        "board", help="board target, e.g. bl616cl/ai-m64l-32s-kit/configs/nsh"
     )
 
-    p_flash = sub.add_parser(
-        "flash", help="flash firmware over UART (never builds)"
-    )
+    p_flash = sub.add_parser("flash", help="flash firmware over UART (never builds)")
     source = p_flash.add_mutually_exclusive_group()
     source.add_argument(
         "board",
         nargs="?",
-        help="board target; flashes its flash_prog_cfg.ini "
-        "(same as --board)",
+        help="board target; flashes its flash_prog_cfg.ini " "(same as --board)",
     )
     source.add_argument(
         "--board", dest="board_opt", help="board target to flash by config"
@@ -546,8 +535,7 @@ def make_parser() -> argparse.ArgumentParser:
     source.add_argument(
         "--image",
         type=Path,
-        help="single binary to burn at --addr (whole images checked "
-        "when 4 MiB)",
+        help="single binary to burn at --addr (whole images checked " "when 4 MiB)",
     )
     p_flash.add_argument(
         "--addr",
@@ -622,13 +610,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 addr = args.addr or "0x0"
                 info(f"flashing {highlight(str(args.image))} to {highlight(addr)}")
                 return flash_bin_image(
-                    root, args.image, addr, args.port, args.baudrate,
+                    root,
+                    args.image,
+                    addr,
+                    args.port,
+                    args.baudrate,
                 )
             if args.config is not None:
                 info(f"flashing via config: {highlight(str(args.config))}")
-                return flash_config_image(
-                    root, args.config, args.port, args.baudrate
-                )
+                return flash_config_image(root, args.config, args.port, args.baudrate)
             board_target = args.board or args.board_opt
             if board_target is None:
                 config = select_flash_config(root)

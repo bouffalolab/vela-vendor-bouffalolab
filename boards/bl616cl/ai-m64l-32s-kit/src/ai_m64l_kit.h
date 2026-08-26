@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/boards/bl616cldg/src/etc/init.d/rcS
+ * apps/vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/src/ai_m64l_kit.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,4 +18,17 @@
  *
  ****************************************************************************/
 
-#include <nuttx/config.h>
+#ifndef __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_AI_M64L_KIT_AI_M64L_KIT_H
+#define __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_AI_M64L_KIT_AI_M64L_KIT_H
+
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
+
+int ai_m64l_kit_bringup(void);
+
+#ifdef CONFIG_BL616CL_GPIO
+int ai_m64l_kit_gpio_initialize(void);
+#endif
+
+#endif /* __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_AI_M64L_KIT_AI_M64L_KIT_H */

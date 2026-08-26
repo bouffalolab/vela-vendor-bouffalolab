@@ -5,7 +5,7 @@ Bouffalo Lab 芯片原厂维护的、基于 **openvela** 的适配层：芯片�
 通过 BL Vela SDK 的 repo manifest（`vendor/bouffalolab`，remote `bouffalo`，
 默认 revision `trunk`）接入整树。
 
-当前脚手架：chip = `bl616cl`，board = `bl616cldg`。
+当前脚手架：chip = `bl616cl`，board = `ai-m64l-32s-kit`。
 
 ## 目录布局
 
@@ -40,8 +40,8 @@ Bouffalo Lab 芯片原厂维护的、基于 **openvela** 的适配层：芯片�
 构建走 **cmake + Ninja**（不再用 make，本仓不提供 `Make.defs`/`Makefile`）。
 
 ```bash
-./bl_build.py clean bl616cl/bl616cldg/configs/nsh
-./bl_build.py build bl616cl/bl616cldg/configs/nsh -j8
+./bl_build.py clean bl616cl/ai-m64l-32s-kit/configs/nsh
+./bl_build.py build bl616cl/ai-m64l-32s-kit/configs/nsh -j8
 ```
 
 SDK 根目录的 `bl_build.py` 是 repo manifest 的 linkfile 软链接（指向本仓
@@ -49,35 +49,35 @@ SDK 根目录的 `bl_build.py` 是 repo manifest 的 linkfile 软链接（指向
 `python3 vendor/bouffalolab/bl_build.py`。
 
 target 指向到 `configs/<name>` 的 board 目录；`vendor/bouffalolab/boards/` 前缀可省略，
-无歧义时 chip、`configs/` 层也可省略（`bl616cldg/nsh`、`nsh` 均可用）。
+无歧义时 chip、`configs/` 层也可省略（`ai-m64l-32s-kit/nsh`、`nsh` 均可用）。
 `bl_build.py` 补齐 OpenVela 预置工具链和 Python 依赖环境，只走 CMake/Ninja。
 默认并行度 = 物理核数一半，可用 `-j N` / `--jobs N` 覆盖。
 
 配置菜单（任选其一）：
 
 ```bash
-./bl_build.py menuconfig bl616cl/bl616cldg/configs/nsh
+./bl_build.py menuconfig bl616cl/ai-m64l-32s-kit/configs/nsh
 ```
 
 菜单中可见 `Bouffalo Lab`（→ Examples / Components）。
 
-BL616CLDG 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，产出：
+Ai-M64L-32S-Kit 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，产出：
 
-- `cmake_out/bl616cldg_nsh/final_nuttx`：静态分析用 ELF；
-- `cmake_out/bl616cldg_nsh/nuttx.raw.bin`：处理前备份；
-- `cmake_out/bl616cldg_nsh/nuttx.bin`：boot2 可加载的应用镜像。
-- `cmake_out/bl616cldg_nsh/nuttx.whole.bin`：包含 boot2、双 partition、
+- `cmake_out/ai-m64l-32s-kit_nsh/final_nuttx`：静态分析用 ELF；
+- `cmake_out/ai-m64l-32s-kit_nsh/nuttx.raw.bin`：处理前备份；
+- `cmake_out/ai-m64l-32s-kit_nsh/nuttx.bin`：boot2 可加载的应用镜像。
+- `cmake_out/ai-m64l-32s-kit_nsh/nuttx.whole.bin`：包含 boot2、双 partition、
   app 的 4 MiB whole image，可从 flash `0x0` 写入；MFG 分区保持擦除态。
-- `cmake_out/bl616cldg_nsh/partition.bin`：分区表（编译时由 `bflb_fw_post_proc`
+- `cmake_out/ai-m64l-32s-kit_nsh/partition.bin`：分区表（编译时由 `bflb_fw_post_proc`
   生成一次并落盘，供按分区烧录）。
-- `cmake_out/bl616cldg_nsh/flash_prog_cfg.ini`：按分区烧录的 FlashCube 配置
+- `cmake_out/ai-m64l-32s-kit_nsh/flash_prog_cfg.ini`：按分区烧录的 FlashCube 配置
   （boot2 / partition / app 三段，均指向绝对路径）。
 
 烧录 firmware（纯烧录操作，不执行 CMake configure/build）：
 
 ```bash
 # 指定 board：按构建时生成的 flash_prog_cfg.ini 分区烧录（推荐）
-./bl_build.py flash bl616cl/bl616cldg/configs/nsh --port /dev/ttyUSB0
+./bl_build.py flash bl616cl/ai-m64l-32s-kit/configs/nsh --port /dev/ttyUSB0
 ./bl_build.py flash nsh --port /dev/ttyUSB0       # board 可简写
 ./bl_build.py flash --port /dev/ttyUSB0           # 唯一输出目录时自动定位
 
@@ -86,7 +86,7 @@ BL616CLDG 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，产出�
 
 # 直接烧单个 bin 到指定地址（--addr 仅与 --image 搭配，默认 0x0）
 ./bl_build.py flash --image <boot2>.bin --addr 0x0 --port /dev/ttyUSB0
-./bl_build.py flash --image cmake_out/bl616cldg_nsh/nuttx.bin \
+./bl_build.py flash --image cmake_out/ai-m64l-32s-kit_nsh/nuttx.bin \
   --addr 0x10000 --port /dev/ttyUSB0
 ```
 
@@ -99,11 +99,12 @@ shell 补全（bash/zsh/fish）：`./bl_build.py completion <shell>` 输出补�
 
 ## 现状
 
-`bl616cl/bl616cldg` 已具备 RISC-V/E907 reset、cache/RAM section、UART0、
-MTimer、NuttX IRQ adapter、基础 board late bring-up 和 boot2 应用镜像构建
-链。CMake postbuild 已生成并静态验证 4 MiB whole image；当前验证范围是
-clean CMake/Ninja 构建、ELF 和镜像布局，尚未烧录验证。WiFi/RF、PSRAM、
-PM 和 flash 高频切换仍属后续阶段。
+`bl616cl/ai-m64l-32s-kit` 已具备 RISC-V/E907 reset、cache/RAM section、UART0、
+MTimer、NuttX IRQ adapter、watchdog、GPIO、timer、oneshot、基础 board late
+bring-up 和 boot2 应用镜像构建链。CMake postbuild 已生成并静态验证 4 MiB
+whole image；clean CMake/Ninja 构建、FlashCube 烧录、2 Mbps NSH 启动、MCU
+外设测试和 ostest 已在 Ai-M64L-32S-Kit 实板通过。WiFi/RF、PSRAM、PM 和
+flash 高频切换仍属后续阶段。
 
 ## License
 

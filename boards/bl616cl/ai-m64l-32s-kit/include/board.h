@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/boards/bl616cl/bl616cldg/src/bl616cldg.h
+ * apps/vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/include/board.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,17 +18,11 @@
  *
  ****************************************************************************/
 
-#ifndef __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_BL616CLDG_BL616CLDG_H
-#define __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_BL616CLDG_BL616CLDG_H
+#ifndef __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_AI_M64L_KIT_INCLUDE_BOARD_H
+#define __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_AI_M64L_KIT_INCLUDE_BOARD_H
 
 /****************************************************************************
- * Public Function Prototypes
+ * Pre-processor Definitions
  ****************************************************************************/
 
-int bl616cldg_bringup(void);
-
-#ifdef CONFIG_BL616CL_GPIO
-int bl616cldg_gpio_initialize(void);
-#endif
-
-#endif /* __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_BL616CLDG_BL616CLDG_H */
+#endif /* __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_AI_M64L_KIT_INCLUDE_BOARD_H */

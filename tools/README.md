@@ -11,7 +11,7 @@
   中同步 FlashCube 工具树；对应 FlashCube commit
   `11d409a9ff451ba3d8658d4ed4e6f3b9da587193`，包含全部平台工具、芯片配置、
   GUI、文档和调试工具，不跟踪上游 `*.bin`、`*.ini` 烧录产物。
-- `bl616cldg/postprocess_bl616cl.sh`：BL616CLDG 的 CMake postbuild
+- `ai-m64l-32s-kit/postprocess_bl616cl.sh`：Ai-M64L-32S-Kit 的 CMake postbuild
   wrapper；在临时目录生成处理后的 app 和 4 MiB whole image。
 
 编译和 UART 烧录统一通过仓库根目录的 `bl_build.py` 执行；本目录只保留它调用的

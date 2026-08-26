@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/boards/bl616cl/bl616cldg/src/bl616cldg_fw_header.h
+ * apps/vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/src/ai_m64l_kit_fw_header.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,8 +18,8 @@
  *
  ****************************************************************************/
 
-#ifndef __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_BL616CLDG_SRC_BL616CLDG_FW_HEADER_H
-#define __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_BL616CLDG_SRC_BL616CLDG_FW_HEADER_H
+#ifndef __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_AI_M64L_KIT_SRC_AI_M64L_KIT_FW_HEADER_H
+#define __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_AI_M64L_KIT_SRC_AI_M64L_KIT_FW_HEADER_H
 
 /****************************************************************************
  * Included Files
@@ -31,7 +31,7 @@
  * Public Types
  ****************************************************************************/
 
-struct __attribute__((packed, aligned(4))) bl616cldg_spi_flash_cfg_s
+struct __attribute__((packed, aligned(4))) ai_m64l_kit_spi_flash_cfg_s
 {
   uint8_t io_mode;
   uint8_t cread_support;
@@ -107,14 +107,14 @@ struct __attribute__((packed, aligned(4))) bl616cldg_spi_flash_cfg_s
   uint8_t qe_data;
 };
 
-struct __attribute__((packed, aligned(4))) bl616cldg_boot_flash_cfg_s
+struct __attribute__((packed, aligned(4))) ai_m64l_kit_boot_flash_cfg_s
 {
   uint32_t magiccode;
-  struct bl616cldg_spi_flash_cfg_s cfg;
+  struct ai_m64l_kit_spi_flash_cfg_s cfg;
   uint32_t crc32;
 };
 
-struct __attribute__((packed, aligned(4))) bl616cldg_sys_clk_cfg_s
+struct __attribute__((packed, aligned(4))) ai_m64l_kit_sys_clk_cfg_s
 {
   uint8_t xtal_type;
   uint8_t mcu_clk;
@@ -130,14 +130,14 @@ struct __attribute__((packed, aligned(4))) bl616cldg_sys_clk_cfg_s
   uint8_t reserved;
 };
 
-struct __attribute__((packed, aligned(4))) bl616cldg_boot_clk_cfg_s
+struct __attribute__((packed, aligned(4))) ai_m64l_kit_boot_clk_cfg_s
 {
   uint32_t magiccode;
-  struct bl616cldg_sys_clk_cfg_s cfg;
+  struct ai_m64l_kit_sys_clk_cfg_s cfg;
   uint32_t crc32;
 };
 
-struct __attribute__((packed, aligned(4))) bl616cldg_boot_basic_cfg_s
+struct __attribute__((packed, aligned(4))) ai_m64l_kit_boot_basic_cfg_s
 {
   uint32_t sign_type : 2;
   uint32_t encrypt_type : 2;
@@ -165,7 +165,7 @@ struct __attribute__((packed, aligned(4))) bl616cldg_boot_basic_cfg_s
   uint32_t hash[8];
 };
 
-struct __attribute__((packed, aligned(4))) bl616cldg_boot_cpu_cfg_s
+struct __attribute__((packed, aligned(4))) ai_m64l_kit_boot_cpu_cfg_s
 {
   uint8_t config_enable;
   uint8_t halt_cpu;
@@ -184,10 +184,10 @@ struct __attribute__((packed, aligned(4))) bootheader_s
 {
   uint32_t magiccode;
   uint32_t revision;
-  struct bl616cldg_boot_flash_cfg_s flash_cfg;
-  struct bl616cldg_boot_clk_cfg_s clk_cfg;
-  struct bl616cldg_boot_basic_cfg_s basic_cfg;
-  struct bl616cldg_boot_cpu_cfg_s cpu_cfg;
+  struct ai_m64l_kit_boot_flash_cfg_s flash_cfg;
+  struct ai_m64l_kit_boot_clk_cfg_s clk_cfg;
+  struct ai_m64l_kit_boot_basic_cfg_s basic_cfg;
+  struct ai_m64l_kit_boot_cpu_cfg_s cpu_cfg;
   uint32_t boot2_pt_table_0_reserved;
   uint32_t boot2_pt_table_1_reserved;
   uint32_t flash_cfg_table_addr;
@@ -202,6 +202,6 @@ struct __attribute__((packed, aligned(4))) bootheader_s
  * Public Data
  ****************************************************************************/
 
-extern const struct bootheader_s g_bl616cldg_fw_header;
+extern const struct bootheader_s g_ai_m64l_kit_fw_header;
 
-#endif /* __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_BL616CLDG_SRC_BL616CLDG_FW_HEADER_H */
+#endif /* __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_AI_M64L_KIT_SRC_AI_M64L_KIT_FW_HEADER_H */

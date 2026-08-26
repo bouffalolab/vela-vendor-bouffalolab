@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/boards/bl616cl/bl616cldg/src/bl616cldg_appinit.c
+ * apps/vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/src/ai_m64l_kit_appinit.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -26,7 +26,7 @@
 #include <sys/types.h>
 #include <stdint.h>
 
-#include "bl616cldg.h"
+#include "ai_m64l_kit.h"
 
 /****************************************************************************
  * Public Functions
@@ -66,6 +66,6 @@ int board_app_initialize(uintptr_t arg)
 #else
   /* Perform board-specific initialization */
 
-  return bl616cldg_bringup();
+  return ai_m64l_kit_bringup();
 #endif
 }

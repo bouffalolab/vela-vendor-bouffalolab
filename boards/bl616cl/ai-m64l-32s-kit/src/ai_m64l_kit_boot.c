@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/boards/bl616cl/bl616cldg/src/bl616cldg_boot.c
+ * apps/vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/src/ai_m64l_kit_boot.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -30,7 +30,7 @@
 #  include "bl616cl_systemreset.h"
 #endif
 
-#include "bl616cldg.h"
+#include "ai_m64l_kit.h"
 
 /****************************************************************************
  * Public Functions
@@ -40,7 +40,7 @@
  * Name: board_late_initialize
  *
  * Description:
- *   This hook runs in the AppBringUp thread and starts BL616CLDG board
+ *   This hook runs in the AppBringUp thread and starts Ai-M64L-32S-Kit board
  *   initialization that may depend on scheduler context.
  *
  ****************************************************************************/
@@ -54,10 +54,10 @@ void board_late_initialize(void)
   bl616cl_reset_reason_initialize();
 #endif
 
-  ret = bl616cldg_bringup();
+  ret = ai_m64l_kit_bringup();
   if (ret < 0)
     {
-      syslog(LOG_ERR, "ERROR: BL616CLDG bringup failed: %d\n", ret);
+      syslog(LOG_ERR, "ERROR: Ai-M64L-32S-Kit bringup failed: %d\n", ret);
     }
 }
 #endif

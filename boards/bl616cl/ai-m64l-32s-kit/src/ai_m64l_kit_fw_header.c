@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/boards/bl616cl/bl616cldg/src/bl616cldg_fw_header.c
+ * apps/vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/src/ai_m64l_kit_fw_header.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -24,16 +24,16 @@
 
 #include <assert.h>
 
-#include "bl616cldg_fw_header.h"
+#include "ai_m64l_kit_fw_header.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define BL616CLDG_FW_HEADER_MAGIC       0x504e4642
-#define BL616CLDG_FLASH_CFG_MAGIC       0x47464346
-#define BL616CLDG_CLOCK_CFG_MAGIC       0x47464350
-#define BL616CLDG_FW_HEADER_PLACEHOLDER 0xdeadbeef
+#define AI_M64L_KIT_FW_HEADER_MAGIC       0x504e4642
+#define AI_M64L_KIT_FLASH_CFG_MAGIC       0x47464346
+#define AI_M64L_KIT_CLOCK_CFG_MAGIC       0x47464350
+#define AI_M64L_KIT_FW_HEADER_PLACEHOLDER 0xdeadbeef
 
 /****************************************************************************
  * Public Data
@@ -42,14 +42,14 @@
 static_assert(sizeof(struct bootheader_s) == 256,
               "BL616CL firmware header must be 256 bytes");
 
-const struct bootheader_s g_bl616cldg_fw_header
+const struct bootheader_s g_ai_m64l_kit_fw_header
   __attribute__((section(".fw_header"))) =
 {
-  .magiccode = BL616CLDG_FW_HEADER_MAGIC,
+  .magiccode = AI_M64L_KIT_FW_HEADER_MAGIC,
   .revision = 0x00000001,
   .flash_cfg =
   {
-    .magiccode = BL616CLDG_FLASH_CFG_MAGIC,
+    .magiccode = AI_M64L_KIT_FLASH_CFG_MAGIC,
     .cfg =
     {
       .io_mode = 0x11,
@@ -131,11 +131,11 @@ const struct bootheader_s g_bl616cldg_fw_header
       .pd_delay = 20,
       .qe_data = 0,
     },
-    .crc32 = BL616CLDG_FW_HEADER_PLACEHOLDER,
+    .crc32 = AI_M64L_KIT_FW_HEADER_PLACEHOLDER,
   },
   .clk_cfg =
   {
-    .magiccode = BL616CLDG_CLOCK_CFG_MAGIC,
+    .magiccode = AI_M64L_KIT_CLOCK_CFG_MAGIC,
     .cfg =
     {
       .xtal_type = 0x07,
@@ -150,7 +150,7 @@ const struct bootheader_s g_bl616cldg_fw_header
       .wifipll_pu = 0x01,
       .aupll_pu = 0x00,
     },
-    .crc32 = BL616CLDG_FW_HEADER_PLACEHOLDER,
+    .crc32 = AI_M64L_KIT_FW_HEADER_PLACEHOLDER,
   },
   .basic_cfg =
   {
@@ -179,7 +179,7 @@ const struct bootheader_s g_bl616cldg_fw_header
     .img_len_cnt = 0x00010000,
     .hash =
     {
-      BL616CLDG_FW_HEADER_PLACEHOLDER
+      AI_M64L_KIT_FW_HEADER_PLACEHOLDER
     },
   },
   .cpu_cfg =
@@ -200,7 +200,7 @@ const struct bootheader_s g_bl616cldg_fw_header
   .boot2_pt_table_1_reserved = 0x00000000,
   .flash_cfg_table_addr = 0x00000000,
   .flash_cfg_table_len = 0x00000000,
-  .crc32 = BL616CLDG_FW_HEADER_PLACEHOLDER,
+  .crc32 = AI_M64L_KIT_FW_HEADER_PLACEHOLDER,
 };
 
 /****************************************************************************

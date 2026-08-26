@@ -1,5 +1,5 @@
 # ##############################################################################
-# vendor/bouffalolab/boards/bl616cl/bl616cldg/src/CMakeLists.txt
+# vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/src/CMakeLists.txt
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more contributor
 # license agreements.  See the NOTICE file distributed with this work for
@@ -18,15 +18,15 @@
 #
 # ##############################################################################
 
-set(SRCS bl616cldg_appinit.c bl616cldg_boot.c bl616cldg_bringup.c
-         bl616cldg_fw_header.c)
+set(SRCS ai_m64l_kit_appinit.c ai_m64l_kit_boot.c ai_m64l_kit_bringup.c
+         ai_m64l_kit_fw_header.c)
 
 if(CONFIG_BL616CL_GPIO)
-  list(APPEND SRCS bl616cldg_gpio.c)
+  list(APPEND SRCS ai_m64l_kit_gpio.c)
 endif()
 
 if(CONFIG_BOARDCTL_RESET OR CONFIG_BOARDCTL_RESET_CAUSE)
-  list(APPEND SRCS bl616cldg_reset.c)
+  list(APPEND SRCS ai_m64l_kit_reset.c)
 endif()
 
 nuttx_add_romfs(

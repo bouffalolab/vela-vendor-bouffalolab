@@ -1,5 +1,5 @@
 # ##############################################################################
-# vendor/bouffalolab/boards/bl616cldg/CMakeLists.txt
+# vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/CMakeLists.txt
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more contributor
 # license agreements.  See the NOTICE file distributed with this work for
@@ -21,19 +21,19 @@
 add_subdirectory(src)
 
 target_link_options(nuttx PRIVATE -Wl,--build-id=none
-                    -Wl,-u,g_bl616cldg_fw_header)
+                    -Wl,-u,g_ai_m64l_kit_fw_header)
 
 get_filename_component(BOUFFALOLAB_VENDOR_DIR "${NUTTX_BOARD_ABS_DIR}/../../.."
                        ABSOLUTE)
 set(BL616CL_POSTPROCESS
-    "${BOUFFALOLAB_VENDOR_DIR}/tools/bl616cldg/postprocess_bl616cl.sh")
+    "${BOUFFALOLAB_VENDOR_DIR}/tools/ai-m64l-32s-kit/postprocess_bl616cl.sh")
 set(BL616CL_POSTPROCESS_STAMP "${CMAKE_BINARY_DIR}/nuttx.postprocessed")
 set(BL616CL_RAW_IMAGE "${CMAKE_BINARY_DIR}/nuttx.raw.bin")
 set(BL616CL_POSTPROCESS_INPUTS
     ${NUTTX_BOARD_ABS_DIR}/config/bl_factory_params_IoTKitA_auto.dts
     ${NUTTX_BOARD_ABS_DIR}/config/boot2_bl616cl_isp_release_v8.2.1.bin
     ${NUTTX_BOARD_ABS_DIR}/config/partition_cfg_4M.toml
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bl616cldg/flash_factory_cfg.ini
+    ${BOUFFALOLAB_VENDOR_DIR}/tools/ai-m64l-32s-kit/flash_factory_cfg.ini
     ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_fw_post_proc/bflb_fw_post_proc-ubuntu
     ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_fw_post_proc/bflb_fw_post_proc-macos
     ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_fw_post_proc/bflb_fw_post_proc.exe

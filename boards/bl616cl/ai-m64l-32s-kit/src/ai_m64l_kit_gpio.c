@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/boards/bl616cl/bl616cldg/src/bl616cldg_gpio.c
+ * apps/vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/src/ai_m64l_kit_gpio.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -53,13 +53,13 @@
  * registered.
  */
 
-struct bl616cldg_gpio_pin_s
+struct ai_m64l_kit_gpio_pin_s
 {
   uint8_t pin;                  /* Pin number == /dev/gpioN minor */
   enum gpio_pintype_e pintype;  /* Default pintype at registration */
 };
 
-static const struct bl616cldg_gpio_pin_s g_bl616cldg_gpio_pins[] =
+static const struct ai_m64l_kit_gpio_pin_s g_ai_m64l_kit_gpio_pins[] =
 {
   { 19, GPIO_OUTPUT_PIN },
   { 22, GPIO_OUTPUT_PIN },
@@ -75,11 +75,11 @@ static const struct bl616cldg_gpio_pin_s g_bl616cldg_gpio_pins[] =
  ****************************************************************************/
 
 /****************************************************************************
- * Name: bl616cldg_gpio_initialize
+ * Name: ai_m64l_kit_gpio_initialize
  *
  * Description:
  *   Initialize the GPIO controller and register the board test pins listed
- *   in g_bl616cldg_gpio_pins as /dev/gpioN character devices. The pintype
+ *   in g_ai_m64l_kit_gpio_pins as /dev/gpioN character devices. The pintype
  *   can be changed at runtime through GPIOC_SETPINTYPE.
  *
  * Input Parameters:
@@ -90,7 +90,7 @@ static const struct bl616cldg_gpio_pin_s g_bl616cldg_gpio_pins[] =
  *
  ****************************************************************************/
 
-int bl616cldg_gpio_initialize(void)
+int ai_m64l_kit_gpio_initialize(void)
 {
   FAR struct ioexpander_dev_s *ioe;
   unsigned int i;
@@ -103,10 +103,10 @@ int bl616cldg_gpio_initialize(void)
       return -ENODEV;
     }
 
-  for (i = 0; i < nitems(g_bl616cldg_gpio_pins); i++)
+  for (i = 0; i < nitems(g_ai_m64l_kit_gpio_pins); i++)
     {
-      FAR const struct bl616cldg_gpio_pin_s *p =
-        &g_bl616cldg_gpio_pins[i];
+      FAR const struct ai_m64l_kit_gpio_pin_s *p =
+        &g_ai_m64l_kit_gpio_pins[i];
 
       ret = gpio_lower_half(ioe, p->pin, p->pintype, p->pin);
       if (ret < 0)

@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/boards/bl616cl/bl616cldg/src/bl616cldg_bringup.c
+ * apps/vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/src/ai_m64l_kit_bringup.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -50,14 +50,14 @@
 #  include "bl616cl_tim.h"
 #endif
 
-#include "bl616cldg.h"
+#include "ai_m64l_kit.h"
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: bl616cldg_bringup
+ * Name: ai_m64l_kit_bringup
  *
  * Description:
  *   Perform board-specific late initialization after nx_start() has entered
@@ -65,7 +65,7 @@
  *
  ****************************************************************************/
 
-int bl616cldg_bringup(void)
+int ai_m64l_kit_bringup(void)
 {
   int ret;
 
@@ -94,7 +94,7 @@ int bl616cldg_bringup(void)
 #endif
 
 #ifdef CONFIG_BL616CL_GPIO
-  ret = bl616cldg_gpio_initialize();
+  ret = ai_m64l_kit_gpio_initialize();
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize GPIO driver: %d\n",
