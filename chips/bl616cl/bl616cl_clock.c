@@ -77,8 +77,8 @@ extern int bl616cl_sdk_cpu_set_mtimer_clk(uint8_t enable, int source,
 void BL616CL_CLOCK_SAFE bl616cl_clock_early_init(void)
 {
   /* SDK system_clock_init() powers the XTAL/WIFIPLL and moves the MCU
-   * clock to WIFIPLL 320 MHz here. Flash retuning and WiFi clock ungate
-   * stay out of this early hook.
+   * clock to WIFIPLL 320 MHz here. GLB_Set_MCU_System_CLK() also ungates
+   * the WiFi PLL; flash retuning stays out of this early hook.
    */
 
   (void)bl616cl_sdk_glb_power_on_xtal_and_pll_clk(

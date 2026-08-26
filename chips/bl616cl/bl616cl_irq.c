@@ -171,10 +171,23 @@ void bl616cl_clic_set_priority_raw(int irq, uint8_t preemptprio,
                                    uint8_t subprio)
 {
   uint8_t ctl;
+  uint8_t clic_int_cfg;
+  uint8_t nlbits;
 
   if (bl616cl_irq_raw_valid(irq))
     {
-      ctl = (preemptprio << 4) | (subprio & 0x0f);
+      nlbits = (getreg8(BL616CL_CLIC_BASE + BL616CL_CLICCFG_OFFSET) >>
+                BL616CL_CLICCFG_NLBITS_SHIFT) & 0x0f;
+      if (nlbits > 8)
+        {
+          nlbits = 8;
+        }
+
+      clic_int_cfg = getreg8(bl616cl_clic_int_addr(
+        irq, BL616CL_CLICINT_CTL_OFFSET));
+      ctl = (clic_int_cfg & 0x0f) |
+            (preemptprio << (8 - nlbits)) |
+            ((subprio & (0x0f >> nlbits)) << 4);
       putreg8(ctl, bl616cl_clic_int_addr(irq, BL616CL_CLICINT_CTL_OFFSET));
     }
 }
