@@ -1,0 +1,7 @@
+interface:
+  display_name: "Bouffalo OpenVela Porting Design"
+  short_description: "发现并设计 Bouffalo SDK 到 OpenVela 的移植规范"
+  default_prompt: "使用 $design-bouffalo-openvela-porting 审查本次移植输入并生成执行前设计与验证 Map。"
+
+policy:
+  allow_implicit_invocation: false
