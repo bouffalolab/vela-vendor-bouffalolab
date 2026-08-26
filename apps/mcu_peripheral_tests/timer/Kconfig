@@ -1,0 +1,22 @@
+config BL_MCU_PERIPHERAL_TESTS_TIMER
+	tristate "MCU peripheral timer tests"
+	default n
+	depends on TIMER && !DISABLE_SIGNALS
+	---help---
+		Enable the MCU peripheral TIMER case runner.
+
+if BL_MCU_PERIPHERAL_TESTS_TIMER
+
+config BL_MCU_PERIPHERAL_TESTS_TIMER_PROGNAME
+	string "Program name"
+	default "mcu_timer_test"
+
+config BL_MCU_PERIPHERAL_TESTS_TIMER_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_TIMER_STACKSIZE
+	int "Stack size"
+	default DEFAULT_TASK_STACKSIZE
+
+endif

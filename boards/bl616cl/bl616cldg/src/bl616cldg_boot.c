@@ -26,6 +26,10 @@
 
 #include <syslog.h>
 
+#ifdef CONFIG_BOARDCTL_RESET_CAUSE
+#  include "bl616cl_systemreset.h"
+#endif
+
 #include "bl616cldg.h"
 
 /****************************************************************************
@@ -45,6 +49,10 @@
 void board_late_initialize(void)
 {
   int ret;
+
+#ifdef CONFIG_BOARDCTL_RESET_CAUSE
+  bl616cl_reset_reason_initialize();
+#endif
 
   ret = bl616cldg_bringup();
   if (ret < 0)

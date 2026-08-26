@@ -25,6 +25,10 @@ if(CONFIG_BL616CL_GPIO)
   list(APPEND SRCS bl616cldg_gpio.c)
 endif()
 
+if(CONFIG_BOARDCTL_RESET OR CONFIG_BOARDCTL_RESET_CAUSE)
+  list(APPEND SRCS bl616cldg_reset.c)
+endif()
+
 nuttx_add_romfs(
   NAME
   etc
