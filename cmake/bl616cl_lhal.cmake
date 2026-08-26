@@ -13,6 +13,7 @@ target_sources(
   PRIVATE ${BL616CL_LHAL_DIR}/src/bflb_common.c
           ${BL616CL_LHAL_DIR}/src/bflb_ef_ctrl.c
           ${BL616CL_LHAL_DIR}/src/bflb_gpio.c
+          ${BL616CL_LHAL_DIR}/src/bflb_timer.c
           ${BL616CL_LHAL_DIR}/src/bflb_uart.c
           ${BL616CL_LHAL_DIR}/src/bflb_wdg.c
           ${BL616CL_LHAL_DIR}/src/bflb_flash.c

@@ -65,6 +65,21 @@ config BL616CL_WDT
 		The timeout unit is milliseconds and the maximum value
 		is 65535 ms.
 
+config BL616CL_TIMER
+	bool "Timer"
+	default n
+	select TIMER
+	---help---
+		Enable the BL616CL timer lower-half driver.
+
+if BL616CL_TIMER
+
+config BL616CL_TIMER0
+	bool "Timer 0"
+	default y
+
+endif # BL616CL_TIMER
+
 config BL616CL_GPIO
 	bool "GPIO Controller (ioexpander)"
 	default n

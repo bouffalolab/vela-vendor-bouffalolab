@@ -42,6 +42,10 @@
 #  include "bl616cl_gpio.h"
 #endif
 
+#ifdef CONFIG_BL616CL_TIMER
+#  include "bl616cl_tim.h"
+#endif
+
 #include "bl616cldg.h"
 
 /****************************************************************************
@@ -90,6 +94,16 @@ int bl616cldg_bringup(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize GPIO driver: %d\n",
+             ret);
+      return ret;
+    }
+#endif
+
+#ifdef CONFIG_BL616CL_TIMER0
+  ret = bl616cl_timer_initialize("/dev/timer0", 0);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize timer driver: %d\n",
              ret);
       return ret;
     }
