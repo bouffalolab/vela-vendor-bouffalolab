@@ -41,6 +41,10 @@ if(CONFIG_BL616CL_WDT)
   list(APPEND SRCS bl616cl_wdt.c)
 endif()
 
+if(CONFIG_BL616CL_GPIO)
+  list(APPEND SRCS bl616cl_gpio.c)
+endif()
+
 target_sources(arch PRIVATE ${SRCS})
 
 target_include_directories(arch PRIVATE ${NUTTX_CHIP_ABS_DIR}/include)

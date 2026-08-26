@@ -21,6 +21,10 @@
 set(SRCS bl616cldg_appinit.c bl616cldg_boot.c bl616cldg_bringup.c
          bl616cldg_fw_header.c)
 
+if(CONFIG_BL616CL_GPIO)
+  list(APPEND SRCS bl616cldg_gpio.c)
+endif()
+
 nuttx_add_romfs(
   NAME
   etc

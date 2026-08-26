@@ -27,4 +27,8 @@
 
 int bl616cldg_bringup(void);
 
+#ifdef CONFIG_BL616CL_GPIO
+int bl616cldg_gpio_initialize(void);
+#endif
+
 #endif /* __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_BL616CLDG_BL616CLDG_H */

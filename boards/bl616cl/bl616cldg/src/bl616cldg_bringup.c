@@ -28,12 +28,18 @@
 
 #include <sys/types.h>
 
+#include <nuttx/ioexpander/gpio.h>
+
 #include "bl616cl_bod.h"
 #include "bl616cl_bus.h"
 #include "bl616cl_sec_mutex.h"
 
 #ifdef CONFIG_BL616CL_WDT
 #  include "bl616cl_wdt.h"
+#endif
+
+#ifdef CONFIG_BL616CL_GPIO
+#  include "bl616cl_gpio.h"
 #endif
 
 #include "bl616cldg.h"
@@ -74,6 +80,16 @@ int bl616cldg_bringup(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize watchdog driver: %d\n",
+             ret);
+      return ret;
+    }
+#endif
+
+#ifdef CONFIG_BL616CL_GPIO
+  ret = bl616cldg_gpio_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize GPIO driver: %d\n",
              ret);
       return ret;
     }

@@ -65,6 +65,30 @@ config BL616CL_WDT
 		The timeout unit is milliseconds and the maximum value
 		is 65535 ms.
 
+config BL616CL_GPIO
+	bool "GPIO Controller (ioexpander)"
+	default n
+	select IOEXPANDER
+	select DEV_GPIO
+	select GPIO_LOWER_HALF
+	select IOEXPANDER_INT_ENABLE
+	---help---
+		Enable the BL616CL GPIO controller driver based on the
+		ioexpander framework. Board code registers individual
+		pins as /dev/gpioN devices via gpio_lower_half().
+
+if BL616CL_GPIO
+
+if IOEXPANDER_INT_ENABLE
+
+config BL616CL_GPIO_INT_NCALLBACKS
+	int "Number of GPIO interrupt callbacks"
+	default 4
+	range 1 255
+
+endif # IOEXPANDER_INT_ENABLE
+endif # BL616CL_GPIO
+
 endmenu
 
 endif
