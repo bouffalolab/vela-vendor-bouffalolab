@@ -45,6 +45,10 @@ if(CONFIG_BL616CL_GPIO)
   list(APPEND SRCS bl616cl_gpio.c)
 endif()
 
+if(CONFIG_BL616CL_ONESHOT)
+  list(APPEND SRCS bl616cl_oneshot.c)
+endif()
+
 if(CONFIG_BL616CL_TIMER)
   list(APPEND SRCS bl616cl_tim.c)
 endif()

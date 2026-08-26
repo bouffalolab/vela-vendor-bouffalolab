@@ -42,6 +42,10 @@
 #  include "bl616cl_gpio.h"
 #endif
 
+#ifdef CONFIG_BL616CL_ONESHOT
+#  include "bl616cl_oneshot.h"
+#endif
+
 #ifdef CONFIG_BL616CL_TIMER
 #  include "bl616cl_tim.h"
 #endif
@@ -94,6 +98,16 @@ int bl616cldg_bringup(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize GPIO driver: %d\n",
+             ret);
+      return ret;
+    }
+#endif
+
+#ifdef CONFIG_BL616CL_ONESHOT
+  ret = bl616cl_oneshot_initialize("/dev/oneshot");
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize oneshot driver: %d\n",
              ret);
       return ret;
     }

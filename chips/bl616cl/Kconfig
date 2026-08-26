@@ -65,6 +65,13 @@ config BL616CL_WDT
 		The timeout unit is milliseconds and the maximum value
 		is 65535 ms.
 
+config BL616CL_ONESHOT
+	bool "One-shot timer"
+	default n
+	select ONESHOT
+	---help---
+		Enable the BL616CL TIMER1 one-shot lower-half driver.
+
 config BL616CL_TIMER
 	bool "Timer"
 	default n
