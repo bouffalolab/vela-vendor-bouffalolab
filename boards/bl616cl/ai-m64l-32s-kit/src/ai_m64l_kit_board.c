@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/src/ai_m64l_kit_appinit.c
+ * apps/vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/src/ai_m64l_kit_board.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -21,11 +21,12 @@
 /****************************************************************************
  * Included Files
  ****************************************************************************/
+
 #include <nuttx/config.h>
 
-#include <sys/types.h>
-#include <stdint.h>
+#include <syslog.h>
 
+#include "bl616cl_board_common.h"
 #include "ai_m64l_kit.h"
 
 /****************************************************************************
@@ -33,39 +34,26 @@
  ****************************************************************************/
 
 /****************************************************************************
- * Name: board_app_initialize
+ * Name: bl616cl_board_initialize
  *
  * Description:
- *   Perform application specific initialization.  This function is never
- *   called directly from application code, but only indirectly via the
- *   (non-standard) boardctl() interface using the command BOARDIOC_INIT.
- *
- * Input Parameters:
- *   arg - The boardctl() argument is passed to the board_app_initialize()
- *         implementation without modification.  The argument has no
- *         meaning to NuttX; the meaning of the argument is a contract
- *         between the board-specific initialization logic and the
- *         matching application logic.  The value could be such things as a
- *         mode enumeration value, a set of DIP switch settings, a
- *         pointer to configuration data read from a file or serial FLASH,
- *         or whatever you would like to do with it.  Every implementation
- *         should accept zero/NULL as a default configuration.
- *
- * Returned Value:
- *   Zero (OK) is returned on success; a negated errno value is returned on
- *   any failure to indicate the nature of the failure.
+ *   Initialize peripherals whose registration depends on this board's
+ *   wiring.
  *
  ****************************************************************************/
 
-int board_app_initialize(uintptr_t arg)
+int bl616cl_board_initialize(void)
 {
-#ifdef CONFIG_BOARD_LATE_INITIALIZE
-  /* Board initialization already performed by board_late_initialize() */
+#ifdef CONFIG_BL616CL_GPIO
+  int ret;
+
+  ret = ai_m64l_kit_gpio_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize GPIO driver: %d\n", ret);
+      return ret;
+    }
+#endif
 
   return OK;
-#else
-  /* Perform board-specific initialization */
-
-  return ai_m64l_kit_bringup();
-#endif
 }

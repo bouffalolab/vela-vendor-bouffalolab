@@ -18,15 +18,10 @@
 #
 # ##############################################################################
 
-set(SRCS ai_m64l_kit_appinit.c ai_m64l_kit_boot.c ai_m64l_kit_bringup.c
-         ai_m64l_kit_fw_header.c)
+set(SRCS ai_m64l_kit_board.c ai_m64l_kit_fw_header.c)
 
 if(CONFIG_BL616CL_GPIO)
   list(APPEND SRCS ai_m64l_kit_gpio.c)
-endif()
-
-if(CONFIG_BOARDCTL_RESET OR CONFIG_BOARDCTL_RESET_CAUSE)
-  list(APPEND SRCS ai_m64l_kit_reset.c)
 endif()
 
 nuttx_add_romfs(

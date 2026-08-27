@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/src/ai_m64l_kit_bringup.c
+ * apps/vendor/bouffalolab/boards/bl616cl/common/src/bl616cl_bringup.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -28,18 +28,16 @@
 
 #include <sys/types.h>
 
-#include <nuttx/ioexpander/gpio.h>
-
 #include "bl616cl_bod.h"
 #include "bl616cl_bus.h"
 #include "bl616cl_sec_mutex.h"
 
-#ifdef CONFIG_BL616CL_WDT
-#  include "bl616cl_wdt.h"
+#ifdef CONFIG_BOARDCTL_RESET_CAUSE
+#  include "bl616cl_systemreset.h"
 #endif
 
-#ifdef CONFIG_BL616CL_GPIO
-#  include "bl616cl_gpio.h"
+#ifdef CONFIG_BL616CL_WDT
+#  include "bl616cl_wdt.h"
 #endif
 
 #ifdef CONFIG_BL616CL_ONESHOT
@@ -50,24 +48,28 @@
 #  include "bl616cl_tim.h"
 #endif
 
-#include "ai_m64l_kit.h"
+#include "bl616cl_board_common.h"
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: ai_m64l_kit_bringup
+ * Name: bl616cl_bringup
  *
  * Description:
- *   Perform board-specific late initialization after nx_start() has entered
+ *   Perform common BL616CL board initialization after nx_start() has entered
  *   the NuttX initialization path.
  *
  ****************************************************************************/
 
-int ai_m64l_kit_bringup(void)
+int bl616cl_bringup(void)
 {
   int ret;
+
+#ifdef CONFIG_BOARDCTL_RESET_CAUSE
+  bl616cl_reset_reason_initialize();
+#endif
 
   ret = bl616cl_bod_initialize();
   if (ret < 0)
@@ -93,15 +95,11 @@ int ai_m64l_kit_bringup(void)
     }
 #endif
 
-#ifdef CONFIG_BL616CL_GPIO
-  ret = ai_m64l_kit_gpio_initialize();
+  ret = bl616cl_board_initialize();
   if (ret < 0)
     {
-      syslog(LOG_ERR, "ERROR: Failed to initialize GPIO driver: %d\n",
-             ret);
       return ret;
     }
-#endif
 
 #ifdef CONFIG_BL616CL_ONESHOT
   ret = bl616cl_oneshot_initialize("/dev/oneshot");

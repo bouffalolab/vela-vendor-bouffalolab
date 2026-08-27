@@ -25,8 +25,6 @@
  * Public Function Prototypes
  ****************************************************************************/
 
-int ai_m64l_kit_bringup(void);
-
 #ifdef CONFIG_BL616CL_GPIO
 int ai_m64l_kit_gpio_initialize(void);
 #endif
