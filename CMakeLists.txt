@@ -50,19 +50,12 @@ bl_include_directories(
 
 if(COMMAND nuttx_add_kernel_library AND "${CHIP}" STREQUAL "bl616cl")
   include(${CMAKE_CURRENT_LIST_DIR}/cmake/bl616cl_lhal.cmake)
+  include(${CMAKE_CURRENT_LIST_DIR}/cmake/bl616cl_std.cmake)
 
   target_compile_options(
     bl_lhal PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wno-strict-prototypes>)
-  target_sources(
-    bl_lhal
-    PRIVATE
-      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/port/bl616cl_clock.c
-      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_aon.c
-      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_clock.c
-      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_common.c
-      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_glb.c
-      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_hbn.c
-      ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/src/bl616cl_pm.c)
+  target_compile_options(
+    bl_std PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wno-strict-prototypes>)
 endif()
 
 nuttx_add_subdirectory()
