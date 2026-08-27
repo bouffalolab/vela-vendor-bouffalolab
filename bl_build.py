@@ -19,11 +19,12 @@ EXTRA_FLAGS = "-Wno-cpp -Wno-deprecated-declarations"
 BOARD_ROOT = "vendor/bouffalolab/boards"
 COMMANDS = ("build", "clean", "menuconfig", "flash", "completion", "__complete")
 COMMAND_OPTIONS = {
-    "build": ("--help", "-j", "--jobs", "--use-lib"),
-    "clean": ("--help",),
-    "menuconfig": ("--help",),
+    "build": ("--help", "-j", "--jobs", "--use-lib", "--list"),
+    "clean": ("--help", "--list", "--all"),
+    "menuconfig": ("--help", "--list"),
     "flash": (
         "--help",
+        "--list",
         "--addr",
         "--config",
         "--board",
@@ -372,6 +373,43 @@ def select_flash_config(root: Path) -> Path:
     return candidates[0]
 
 
+def flash_config_candidates(root: Path) -> list:
+    """Board targets for built flash configs found under cmake_out.\n\n    Each '<board>_<config>' output directory is reduced to '<board>/<config>'\n    when that target resolves to a real board, so the name can be used as a\n    flash board argument directly. Names that do not resolve (e.g. stale\n    build outputs) are kept as-is, still flashable via --config.\n    """
+    candidates = []
+    for ini in sorted((root / "cmake_out").glob("*/flash_prog_cfg.ini")):
+        if not ini.is_file():
+            continue
+        name = ini.parent.name
+        board, sep, config = name.rpartition("_")
+        if sep and config:
+            try:
+                resolve_board(root, f"{board}/{config}")
+                candidates.append(f"{board}/{config}")
+                continue
+            except ValueError:
+                pass
+        candidates.append(name)
+    return candidates
+
+
+def clean_all_build_outputs(root: Path) -> int:
+    """Remove every build output directory under cmake_out."""
+    out_root = root / "cmake_out"
+    if not out_root.is_dir():
+        info(f"nothing to clean: {out_root} does not exist")
+        return 0
+    removed = [
+        child.name for child in sorted(out_root.iterdir()) if child.is_dir()
+    ]
+    for child in removed:
+        shutil.rmtree(out_root / child)
+    if removed:
+        info(f"cleaned {len(removed)} output dir(s): {', '.join(removed)}")
+    else:
+        info(f"nothing to clean under {out_root}")
+    return 0
+
+
 def board_candidates(root: Path) -> list:
     """Short board targets (prefix omitted) for shell completion."""
     boards = root / BOARD_ROOT
@@ -380,6 +418,37 @@ def board_candidates(root: Path) -> list:
         for d in boards.glob("*/*/configs/*")
         if (d / "defconfig").is_file()
     )
+
+
+def list_configs(root: Path) -> list:
+    """All board configs as '<board>/<config>' (e.g. ai-m64l-32s-kit/nsh).
+
+    The chip layer is omitted unless the board name alone would be
+    ambiguous across chips, in which case the full path is kept.
+    """
+    boards = root / BOARD_ROOT
+    entries = sorted(
+        (d.parents[2].name, d.parents[1].name, d.name)
+        for d in boards.glob("*/*/configs/*")
+        if (d / "defconfig").is_file()
+    )
+    # A board name is ambiguous only when it exists under more than one
+    # chip, regardless of how many configs it has.
+    board_counts: Dict[str, int] = {}
+    for _, board in {entry[:2] for entry in entries}:
+        board_counts[board] = board_counts.get(board, 0) + 1
+    return [
+        f"{board}/{name}"
+        if board_counts[board] == 1
+        else f"{chip}/{board}/configs/{name}"
+        for chip, board, name in entries
+    ]
+    return [
+        f"{board}/{name}"
+        if board_counts[board] == 1
+        else f"{chip}/{board}/configs/{name}"
+        for chip, board, name in entries
+    ]
 
 
 def serial_ports() -> list:
@@ -479,6 +548,9 @@ def make_parser() -> argparse.ArgumentParser:
             "  bl_build.py build bl616cl/ai-m64l-32s-kit/configs/nsh -j8\n"
             "  bl_build.py menuconfig ai-m64l-32s-kit/nsh\n"
             "  bl_build.py flash --port /dev/ttyUSB0\n"
+            "  bl_build.py build --list      # list all available board configs\n"
+            "  bl_build.py flash --list      # list built firmware targets\n"
+            "  bl_build.py clean --all       # remove every build output\n"
             "  bl_build.py completion bash   # print a shell completion script\n"
             "\n"
             "board targets are matched under vendor/bouffalolab/boards/; the "
@@ -491,7 +563,9 @@ def make_parser() -> argparse.ArgumentParser:
 
     p_build = sub.add_parser("build", help="configure and build a board")
     p_build.add_argument(
-        "board", help="board target, e.g. bl616cl/ai-m64l-32s-kit/configs/nsh"
+        "board",
+        nargs="?",
+        help="board target, e.g. bl616cl/ai-m64l-32s-kit/configs/nsh",
     )
     p_build.add_argument(
         "-j",
@@ -504,17 +578,41 @@ def make_parser() -> argparse.ArgumentParser:
         default="",
         help="comma-separated components linked from prebuilt libs",
     )
+    p_build.add_argument(
+        "--list",
+        action="store_true",
+        help="list all available board configs and exit",
+    )
 
     p_clean = sub.add_parser("clean", help="remove the board's build output directory")
     p_clean.add_argument(
-        "board", help="board target, e.g. bl616cl/ai-m64l-32s-kit/configs/nsh"
+        "board",
+        nargs="?",
+        help="board target, e.g. bl616cl/ai-m64l-32s-kit/configs/nsh",
+    )
+    p_clean.add_argument(
+        "--list",
+        action="store_true",
+        help="list all available board configs and exit",
+    )
+    p_clean.add_argument(
+        "--all",
+        action="store_true",
+        help="remove every build output directory under cmake_out",
     )
 
     p_menuconfig = sub.add_parser(
         "menuconfig", help="configure the board and open the Kconfig menu"
     )
     p_menuconfig.add_argument(
-        "board", help="board target, e.g. bl616cl/ai-m64l-32s-kit/configs/nsh"
+        "board",
+        nargs="?",
+        help="board target, e.g. bl616cl/ai-m64l-32s-kit/configs/nsh",
+    )
+    p_menuconfig.add_argument(
+        "--list",
+        action="store_true",
+        help="list all available board configs and exit",
     )
 
     p_flash = sub.add_parser("flash", help="flash firmware over UART (never builds)")
@@ -542,9 +640,18 @@ def make_parser() -> argparse.ArgumentParser:
         default=None,
         help="flash address for --image (default: 0x0)",
     )
-    p_flash.add_argument("--port", required=True, help="UART port")
+    p_flash.add_argument(
+        "--port",
+        default=None,
+        help="UART port (required unless --list)",
+    )
     p_flash.add_argument(
         "--baudrate", type=int, default=2_000_000, help="UART baudrate"
+    )
+    p_flash.add_argument(
+        "--list",
+        action="store_true",
+        help="list built firmware targets under cmake_out and exit",
     )
 
     p_completion = sub.add_parser(
@@ -573,12 +680,54 @@ def info(message: str) -> None:
     print(f"bl_build: {message}", file=sys.stderr)
 
 
-def resolve_or_none(root: Path, target: str) -> Optional[Path]:
+def styled(code: int, text: str) -> str:
+    """Apply an ANSI SGR code to text when stderr is a terminal."""
+    if sys.stderr.isatty():
+        return f"\033[{code}m{text}\033[0m"
+    return text
+
+
+def hint_candidates(root: Path, command: str) -> tuple:
+    """(title, candidates) shown when a command invocation is invalid."""
+    if command in ("build", "clean", "menuconfig"):
+        return (
+            "Available boards (pass one as <board>/<config>):",
+            list_configs(root),
+        )
+    if command == "flash":
+        return (
+            "Built firmware targets (flash <board>/<config> --port <port>):",
+            flash_config_candidates(root),
+        )
+    return (
+        "Available commands:",
+        [c for c in COMMANDS if c != "__complete"],
+    )
+
+
+def print_hint_block(root: Path, command: str) -> None:
+    """Print a hint block listing usable candidates for the command."""
+    title, candidates = hint_candidates(root, command)
+    if not candidates:
+        return
+    print(file=sys.stderr)
+    print(f"{styled(36, 'hint:')} {title}", file=sys.stderr)
+    for candidate in candidates:
+        print(f"      {candidate}", file=sys.stderr)
+
+
+def print_usage_error(root: Path, command: str, message: str) -> None:
+    """Print an error line plus a hint block with usable candidates."""
+    print(f"{styled(31, 'error:')} {message}", file=sys.stderr)
+    print_hint_block(root, command)
+
+
+def resolve_or_none(root: Path, target: str, command: str) -> Optional[Path]:
     """Resolve a board target, printing a friendly error on failure."""
     try:
         return resolve_board(root, target)
     except ValueError as error:
-        print(f"bl_build: {error}", file=sys.stderr)
+        print_usage_error(root, command, str(error))
         return None
 
 
@@ -596,14 +745,42 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
 
     parser = make_parser()
-    args = parser.parse_args(words)
+    try:
+        args = parser.parse_args(words)
+    except SystemExit as exit_:
+        if exit_.code == 2:
+            # argparse already printed usage + error; append usable candidates.
+            print_hint_block(root, words[0] if words else "")
+        raise
 
     if args.command == "completion":
         sys.stdout.write(completion_script(args.shell))
         return 0
 
+    if args.command in ("build", "clean", "menuconfig"):
+        if args.list:
+            for config in list_configs(root):
+                print(config)
+            return 0
+        if args.command == "clean" and args.all:
+            return clean_all_build_outputs(root)
+        if args.board is None:
+            print_usage_error(
+                root,
+                args.command,
+                f"command '{args.command}' requires a <board> argument "
+                f"(see bl_build.py {args.command} --list)",
+            )
+            return 2
+
     if args.command == "flash":
+        if args.list:
+            for target in flash_config_candidates(root):
+                print(target)
+            return 0
         try:
+            if args.port is None:
+                raise ValueError("--port is required")
             if args.addr is not None and args.image is None:
                 raise ValueError("--addr requires --image")
             if args.image is not None:
@@ -635,10 +812,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 )
             return flash_config_image(root, config, args.port, args.baudrate)
         except (OSError, RuntimeError, ValueError) as error:
-            print(f"bl_build: {error}", file=sys.stderr)
+            print_usage_error(root, "flash", str(error))
             return 1
 
-    board = resolve_or_none(root, args.board)
+    board = resolve_or_none(root, args.board, args.command)
     if board is None:
         return 1
     out_dir = build_dir(root, board)
