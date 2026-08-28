@@ -142,7 +142,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 |---|---|---|---|---|
 | D01 | CPU load：`SCHED_CPULOAD_SYSCLK` | 已验证（ST004） | `SYSTEM_CPULOAD` 只提供可裁剪测试负载；tick 同步采样只能作基础观测 | USB2 实测 idle、单个 50% 和两个 50% 聚合满载；procfs、`ps`、`top` 均随负载变化；关闭态裁剪成立 |
 | D02 | IRQ monitor：`SCHED_IRQMONITOR` | 已验证（ST005） | 依赖 procfs；当前 alarm driver 已提供 `up_perf_*`；每 IRQ 两次时间读取开销已在实板观察 | USB2 实测 `irqinfo`/`/proc/irqs` 的 count/rate/max time、连续窗口重计数、GPIO/timer/oneshot IRQ 变化和外设回归；关闭态裁剪成立 |
-| D03 | critical monitor：`SCHED_CRITMONITOR`、`SYSTEM_CRITMONITOR` | 可直接开启，P1 诊断 | 首轮阈值关闭，只观测；与 trace 分开验证 | `/proc/critmon`；受控长临界区；再设阈值验证告警 |
+| D03 | critical monitor：`SCHED_CRITMONITOR`、`SYSTEM_CRITMONITOR` | 已验证（ST006） | 正式配置只统计，不设告警阈值；阈值和 panic 使用临时配置独立验证 | USB2 实测全局/线程统计、读后新窗口、monitor 启停、告警与 panic 边界及外设回归；关闭态裁剪成立 |
 | D04 | Note RAM trace：instrumentation、`DRIVERS_NOTERAM`、`SYSTEM_TRACE` | 可直接开启，P1 诊断 | 按 switch/IRQ/heap 分批启用；不能记录 csection/spinlock 到 Note RAM | start/stop/dump；时间单调；已知事件顺序；ring overflow 语义 |
 | D05 | syslog coredump：`COREDUMP`、`BOARD_COREDUMP_SYSLOG` | 可直接开启，P1 诊断 | RISC-V 已有 TCB info；首轮不开 full/compression，可选 base64 | assert 后完整首尾；匹配 ELF 解码；恢复 PC/SP/触发线程栈 |
 | D06 | stack/cpu/resource monitor 工具 | 可直接开启，P1 | 分别依赖 coloration、cpuload、procfs；工具本身也消耗资源 | 启停、周期、输出和自身 CPU/stack 开销 |
@@ -228,6 +228,53 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 - 语义边界：`TIME` 是窗口内最大 ISR 时间，单位微秒，不是平均耗时；读取
   会快照并清零，边界 IRQ 可能落在任一窗口。procfs 小缓冲多次读取的输出
   完整性依赖调用方式，本板 NSH 512 字节读取已完整显示现役 IRQ。
+
+### D03 实测结果（2026-08-29）
+
+- 正式配置：`CONFIG_SCHED_CRITMONITOR=y`、
+  `CONFIG_SCHED_CRITMONITOR_MAXTIME_PREEMPTION=0` 和
+  `CONFIG_SYSTEM_CRITMONITOR=y`。生成配置中 thread、preemption、csection、
+  IRQ 和 WDOG 阈值均为 0，只统计不告警；work queue 和 busy-wait 为 -1，
+  不进入对应统计路径。monitor 只编入命令，不在启动脚本中自启。
+- 通路修复：UP 配置在 csection monitor 开启时也用 `g_schedlock` 维护嵌套
+  深度；`break_critical_section()` 只结算真实持锁区间，
+  `restore_critical_section(0)` 不启动伪计时。结算前清除活动 caller，任务退出
+  时在 TCB 仍为 current task 的阶段完成结算，避免阈值日志重入和 syslog
+  semaphore 断言。
+- 构建与裁剪：关闭态 clean build `1204/1204`、开启态 clean build
+  `1207/1207` 均成功。关闭态不生成 `sched_critmonitor.c.o`、critmon app
+  archive，也不含 `nxsched_critmon*`、`g_crit_max` 和三个 critmon 命令符号。
+- 制品：开启态 `final_nuttx` 为 688,528 字节，`text/data/bss` 为
+  `300,742/14,292/11,128`，`nuttx.bin` 为 321,136 字节。相对关闭态分别
+  增加 5,520、5,656、128、176 和 5,776 字节；后台 monitor 启动后另占
+  一个 2,048 字节任务栈。
+- 烧录与启动：最终 `nuttx.bin` SHA256 为
+  `24c7ca1ef01b57fc21a1b3f33923d27e5df79b072342bbdebc1e1e0b55ded8d4`；
+  `/dev/ttyUSB2` 分区烧录的 host/device SHA 校验一致，2 Mbps 复位匹配
+  `NuttShell (NSH)` 和 `nsh>`。
+- 基础统计：启动窗口 `/proc/critmon` 为 preemption 3.127576 秒、csection
+  117 us；`sleep 2` 后的新窗口降为 47 us 和 96 us。`/proc/3/critmon`
+  显示 `nsh_main` 的 preemption/csection 最大值为 103/117 us，不再把普通
+  调度间隔误记为秒级 critical section。
+- 命令与周期任务：`critmon` 能输出 CPU 和各任务的 preemption、csection、
+  run max/total；`critmon_start` 创建 `Csection_Monitor`，按 2 秒周期输出；
+  `critmon_stop` 完成在途周期后停止，后续不再产生周期输出。
+- 告警负测：临时设置 csection 阈值 150,000 tick、IRQ 阈值 0、panic 关闭。
+  `critmon` 和 GPIO/timer/oneshot/WDT 任务退出分别观测到 193,000、161,000、
+  197,000、165,000 和 172,000 tick 告警；全部任务正常返回，未再触发
+  `sem_post.c:63` 断言。临时阈值未进入正式 defconfig。
+- panic 负测：在同一临时 csection 阈值上单独启用
+  `SCHED_CRITMONITOR_MAXTIME_PANIC`，`critmon` 退出时以 187,000 tick 命中，
+  在 `sched_critmonitor.c:300` 断言；回溯包含
+  `nxsched_critmon_csection -> nxtask_exit -> up_exit`。当前 assert 策略终止
+  触发任务而不复位整机，随后 `echo alive` 正常返回。
+- 外设回归：GPIO edge 64 轮恢复通过；timer 5 轮 100 ms 最大误差 479 us
+  （0.479%，门限 0.50%），异常生命周期通过；100 ms oneshot 完成；WDT
+  非复位生命周期通过。最终 `/proc/critmon` 的 preemption/csection 最大值为
+  92/189 us，全程无意外 assert、panic 或复位。
+- 语义边界：procfs 读取会返回并清零最大值，线程累计运行时间继续保留；启动
+  窗口的秒级 preemption 值包含 bringup 阶段，不能当作稳态延迟。阈值单位是
+  `perf_gettime()` tick，本板 MTIME 为 1 MHz，因此一个 tick 为 1 us。
 
 ## 启动、调度与低功耗
 
