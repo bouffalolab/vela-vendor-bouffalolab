@@ -1,11 +1,12 @@
 /****************************************************************************
  * apps/vendor/bouffalolab/apps/mcu_peripheral_tests/timer/timer_case_main.c
  *
- * MCU Peripheral Timer / PWM Test Cases (TIMER-001 ~ TIMER-004)
+ * MCU Peripheral Timer / PWM Test Cases (TIMER-001 ~ TIMER-005)
  *   TIMER-001  basic counting / overflow period accuracy (/dev/timer0)
  *   TIMER-002  clock prescaler effect        (/dev/timer0 + custom ioctl)
  *   TIMER-003  PWM frequency / duty precision       (/dev/pwm0)
  *   TIMER-004  PWM duty ramp / breathing LED        (/dev/pwm0)
+ *   TIMER-005  timer lifecycle and rejected requests (/dev/timer0)
  *
  * 001/002 use /dev/timer0 (002 adds a chip-layer SETCLOCKDIV ioctl); 003/004
  * use /dev/pwm0. 001/002 are judged in software (CLOCK_MONOTONIC) and can be
@@ -50,6 +51,7 @@
 #define CASE_002                 "002"
 #define CASE_003                 "003"
 #define CASE_004                 "004"
+#define CASE_005                 "005"
 #define CASE_ALL                 "all"
 
 #define TIMER_SIGNO              14
@@ -76,6 +78,7 @@
  */
 
 #define CASE002_SCOPE_FIRES      6
+#define CASE005_TIMEOUT_US       50000
 
 /* The custom timer ioctl BL616CL_TCIOC_SETCLOCKDIV (used by TIMER-002) is
  * defined once in <arch/chip/bl616cl_tim_ioctl.h>, included above, and
@@ -122,7 +125,7 @@ static void print_usage(const char *progname)
 {
   printf("Usage: %s [options]\n", progname);
   printf("Common:\n");
-  printf("  -c <id>   Case: 001,002,003,004,all (default: all)\n");
+  printf("  -c <id>   Case: 001,002,003,004,005,all (default: all)\n");
   printf("  -d <dev>  Timer device (default: %s)\n", DEFAULT_TIMER_DEVPATH);
   printf("  -p <dev>  PWM device  (default: %s)\n", DEFAULT_PWM_DEVPATH);
   printf("  -g <dev>  [001/002] toggle GPIO each expiry "
@@ -150,6 +153,7 @@ static void print_usage(const char *progname)
   printf("  -s <pct>  duty step percent (default: %d)\n",
          DEF_BREATH_STEP_PCT);
   printf("  -i <ms>   step interval ms (default: %d)\n", DEF_BREATH_STEP_MS);
+  printf("[005] lifecycle/edge requests: no additional options\n");
 }
 
 static double mono_now(void)
@@ -796,6 +800,167 @@ static int run_case_004(const struct app_config_s *cfg)
 }
 
 /****************************************************************************
+ * TIMER-005 : lifecycle and rejected requests
+ ****************************************************************************/
+
+static int expect_ioctl_errno(int fd, int cmd, unsigned long arg,
+                              int expected_errno, const char *operation)
+{
+  int ret;
+
+  errno = 0;
+  ret = ioctl(fd, cmd, arg);
+  if (ret >= 0 || errno != expected_errno)
+    {
+      printf("  FAIL: %s ret=%d errno=%d, expected errno=%d\n",
+             operation, ret, errno, expected_errno);
+      return -EIO;
+    }
+
+  printf("  rejected: %s errno=%d\n", operation, expected_errno);
+  return 0;
+}
+
+static int run_case_005(const struct app_config_s *cfg)
+{
+  struct app_config_s edge_cfg = *cfg;
+  struct timer_status_s before;
+  struct timer_status_s after;
+  sigset_t set;
+  int fd;
+  int ret;
+
+  printf("[TIMER-005] Lifecycle and rejected requests\n");
+
+  fd = timer_open(cfg->timer_devpath);
+  if (fd < 0)
+    {
+      return fd;
+    }
+
+  ret = ioctl(fd, TCIOC_GETSTATUS, (unsigned long)(uintptr_t)&before);
+  if (ret < 0)
+    {
+      printf("  FAIL: initial TCIOC_GETSTATUS errno=%d\n", errno);
+      goto fail;
+    }
+
+  ret = expect_ioctl_errno(fd, TCIOC_SETTIMEOUT, 1, EINVAL,
+                           "timeout below hardware minimum");
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
+  ret = ioctl(fd, TCIOC_GETSTATUS, (unsigned long)(uintptr_t)&after);
+  if (ret < 0 || after.timeout != before.timeout)
+    {
+      printf("  FAIL: rejected timeout changed state (%lu -> %lu)\n",
+             (unsigned long)before.timeout, (unsigned long)after.timeout);
+      ret = -EIO;
+      goto fail;
+    }
+
+  ret = expect_ioctl_errno(fd, BL616CL_TCIOC_SETCLOCKDIV, 256, EINVAL,
+                           "clock divider above 8-bit range");
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
+  edge_cfg.timeout_us = CASE005_TIMEOUT_US;
+  sigemptyset(&set);
+  sigaddset(&set, TIMER_SIGNO);
+  sigprocmask(SIG_BLOCK, &set, NULL);
+
+  ret = timer_arm_periodic(fd, &edge_cfg);
+  if (ret < 0 || ioctl(fd, TCIOC_START, 0) < 0)
+    {
+      printf("  FAIL: could not start edge timer errno=%d\n", errno);
+      ret = -errno;
+      goto fail;
+    }
+
+  ret = expect_ioctl_errno(fd, TCIOC_START, 0, EBUSY,
+                           "start while already active");
+  if (ret < 0)
+    {
+      goto stop_fail;
+    }
+
+  ret = expect_ioctl_errno(fd, BL616CL_TCIOC_SETCLOCKDIV, 79, EBUSY,
+                           "change divider while active");
+  if (ret < 0)
+    {
+      goto stop_fail;
+    }
+
+  ret = ioctl(fd, TCIOC_SETTIMEOUT, CASE005_TIMEOUT_US / 2);
+  if (ret < 0)
+    {
+      printf("  FAIL: live timeout update errno=%d\n", errno);
+      ret = -errno;
+      goto stop_fail;
+    }
+
+  edge_cfg.timeout_us = CASE005_TIMEOUT_US / 2;
+  ret = timer_wait_fire(&edge_cfg, &set);
+  if (ret < 0)
+    {
+      printf("  FAIL: no signal after live timeout update errno=%d\n", -ret);
+      goto stop_fail;
+    }
+
+  ret = ioctl(fd, TCIOC_GETSTATUS, (unsigned long)(uintptr_t)&after);
+  if (ret < 0 || (after.flags & TCFLAGS_ACTIVE) == 0 ||
+      after.timeout != edge_cfg.timeout_us)
+    {
+      printf("  FAIL: active status after live update flags=0x%lx "
+             "timeout=%lu\n", (unsigned long)after.flags,
+             (unsigned long)after.timeout);
+      ret = -EIO;
+      goto stop_fail;
+    }
+
+  ret = ioctl(fd, TCIOC_STOP, 0);
+  if (ret < 0)
+    {
+      printf("  FAIL: first stop errno=%d\n", errno);
+      ret = -errno;
+      goto fail;
+    }
+
+  ret = expect_ioctl_errno(fd, TCIOC_STOP, 0, ENODEV,
+                           "stop while already inactive");
+  if (ret < 0)
+    {
+      goto fail;
+    }
+
+  ret = ioctl(fd, TCIOC_GETSTATUS, (unsigned long)(uintptr_t)&after);
+  if (ret < 0 || (after.flags & TCFLAGS_ACTIVE) != 0)
+    {
+      printf("  FAIL: timer still reports active after stop\n");
+      ret = -EIO;
+      goto fail;
+    }
+
+  (void)ioctl(fd, TCIOC_SETTIMEOUT, cfg->timeout_us);
+  (void)ioctl(fd, BL616CL_TCIOC_SETCLOCKDIV, DEF_002_DIV_A);
+  close(fd);
+  printf("  [TIMER-005] PASS rejected requests preserved state; "
+         "live update fired; lifecycle recovered\n\n");
+  return 0;
+
+stop_fail:
+  (void)ioctl(fd, TCIOC_STOP, 0);
+fail:
+  (void)ioctl(fd, BL616CL_TCIOC_SETCLOCKDIV, DEF_002_DIV_A);
+  close(fd);
+  return ret < 0 ? ret : -EIO;
+}
+
+/****************************************************************************
  * main
  ****************************************************************************/
 
@@ -877,6 +1042,17 @@ int main(int argc, char *argv[])
       return ERROR;
     }
 
+  if (strcmp(cfg.case_id, CASE_ALL) != 0 &&
+      strcmp(cfg.case_id, CASE_001) != 0 &&
+      strcmp(cfg.case_id, CASE_002) != 0 &&
+      strcmp(cfg.case_id, CASE_003) != 0 &&
+      strcmp(cfg.case_id, CASE_004) != 0 &&
+      strcmp(cfg.case_id, CASE_005) != 0)
+    {
+      printf("Unsupported case id: %s\n", cfg.case_id);
+      return ERROR;
+    }
+
   printf("MCU Peripheral Timer Tests\n");
   printf("Case: %s Timer: %s PWM: %s\n",
          cfg.case_id, cfg.timer_devpath, cfg.pwm_devpath);
@@ -929,6 +1105,25 @@ int main(int argc, char *argv[])
           passed++;
         }
       else if (strcmp(cfg.case_id, CASE_002) == 0)
+        {
+          printf("Timer Summary: executed=%d passed=%d -> FAIL\n",
+                 executed, passed);
+          return ERROR;
+        }
+    }
+
+  /* TIMER-005 (lifecycle and rejected requests) */
+
+  if (strcmp(cfg.case_id, CASE_ALL) == 0 ||
+      strcmp(cfg.case_id, CASE_005) == 0)
+    {
+      executed++;
+      ret = run_case_005(&cfg);
+      if (ret >= 0)
+        {
+          passed++;
+        }
+      else if (strcmp(cfg.case_id, CASE_005) == 0)
         {
           printf("Timer Summary: executed=%d passed=%d -> FAIL\n",
                  executed, passed);

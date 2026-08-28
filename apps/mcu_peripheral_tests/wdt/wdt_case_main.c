@@ -34,6 +34,7 @@
 
 #define CASE_001               "001"
 #define CASE_002               "002"
+#define CASE_003               "003"
 #define CASE_ALL               "all"
 
 #define DEFAULT_TIMEOUT_MS     3000
@@ -71,6 +72,7 @@ static uint64_t now_ms(void);
 static int open_wdt_device(const char *devpath);
 static int run_case_001(const struct app_config_s *cfg);
 static int run_case_002(const struct app_config_s *cfg);
+static int run_case_003(const struct app_config_s *cfg);
 static int run_selected_cases(const struct app_config_s *cfg);
 
 /****************************************************************************
@@ -81,11 +83,12 @@ static void print_usage(const char *progname)
 {
   printf("Usage: %s [options]\n", progname);
   printf("Options:\n");
-  printf("  -c <id>    Case id: 001, 002, all (default: all)\n");
+  printf("  -c <id>    Case id: 001, 002, 003, all (default: all)\n");
   printf("             001: timeout reset "
          "(two-stage, reboots the device)\n");
   printf("             002: periodic keepalive, no reset\n");
-  printf("             all: run 002 first, then 001 (device will reset)\n");
+  printf("             003: lifecycle and rejected requests, no reset\n");
+  printf("             all: run 002/003 first, then 001 (device will reset)\n");
   printf("  -d <dev>   Watchdog device path (default: %s)\n",
          DEFAULT_WDT_DEVPATH);
   printf("  -t <ms>    Watchdog timeout in ms (default: %d)\n",
@@ -369,6 +372,134 @@ static int run_case_002(const struct app_config_s *cfg)
   return 0;
 }
 
+/****************************************************************************
+ * Name: run_case_003
+ *
+ * Description:
+ *   Exercise lifecycle operations in deliberately surprising orders and
+ *   verify rejected timeout changes do not corrupt the configured state.
+ *   This case always stops the watchdog before returning.
+ *
+ ****************************************************************************/
+
+static int run_case_003(const struct app_config_s *cfg)
+{
+  struct watchdog_status_s status;
+  uint32_t alternate_timeout;
+  int fd;
+  int ret;
+
+  printf("[WDT-003] Lifecycle and rejected requests, no reset\n");
+
+  fd = open_wdt_device(cfg->devpath);
+  if (fd < 0)
+    {
+      return fd;
+    }
+
+  errno = 0;
+  ret = ioctl(fd, WDIOC_SETTIMEOUT, 0);
+  if (ret >= 0 || errno != ERANGE)
+    {
+      printf("  FAIL: zero timeout ret=%d errno=%d, expected ERANGE\n",
+             ret, errno);
+      ret = -EIO;
+      goto fail;
+    }
+
+  errno = 0;
+  ret = ioctl(fd, WDIOC_SETTIMEOUT, 65536);
+  if (ret >= 0 || errno != ERANGE)
+    {
+      printf("  FAIL: oversized timeout ret=%d errno=%d, expected ERANGE\n",
+             ret, errno);
+      ret = -EIO;
+      goto fail;
+    }
+
+  ret = ioctl(fd, WDIOC_SETTIMEOUT, (unsigned long)cfg->timeout);
+  if (ret < 0 || ioctl(fd, WDIOC_START, 0) < 0)
+    {
+      printf("  FAIL: configure/start errno=%d\n", errno);
+      ret = -errno;
+      goto fail;
+    }
+
+  errno = 0;
+  ret = ioctl(fd, WDIOC_START, 0);
+  if (ret >= 0 || errno != EBUSY)
+    {
+      printf("  FAIL: duplicate start ret=%d errno=%d, expected EBUSY\n",
+             ret, errno);
+      ret = -EIO;
+      goto stop_fail;
+    }
+
+  alternate_timeout = cfg->timeout == 65535 ? cfg->timeout - 1 :
+                                              cfg->timeout + 1;
+  errno = 0;
+  ret = ioctl(fd, WDIOC_SETTIMEOUT, alternate_timeout);
+  if (ret >= 0 || errno != EBUSY)
+    {
+      printf("  FAIL: live timeout change ret=%d errno=%d, expected EBUSY\n",
+             ret, errno);
+      ret = -EIO;
+      goto stop_fail;
+    }
+
+  ret = ioctl(fd, WDIOC_GETSTATUS, (unsigned long)(uintptr_t)&status);
+  if (ret < 0 || (status.flags & WDFLAGS_ACTIVE) == 0 ||
+      status.timeout != cfg->timeout)
+    {
+      printf("  FAIL: rejected request changed active state flags=0x%lx "
+             "timeout=%lu\n", (unsigned long)status.flags,
+             (unsigned long)status.timeout);
+      ret = -EIO;
+      goto stop_fail;
+    }
+
+  ret = ioctl(fd, WDIOC_STOP, 0);
+  if (ret < 0)
+    {
+      printf("  FAIL: stop errno=%d\n", errno);
+      ret = -errno;
+      goto fail;
+    }
+
+  /* Repeated STOP and KEEPALIVE while inactive must be harmless and must not
+   * accidentally arm the watchdog.
+   */
+
+  if (ioctl(fd, WDIOC_STOP, 0) < 0 || ioctl(fd, WDIOC_KEEPALIVE, 0) < 0)
+    {
+      printf("  FAIL: inactive STOP/KEEPALIVE errno=%d\n", errno);
+      ret = -errno;
+      goto fail;
+    }
+
+  ret = ioctl(fd, WDIOC_GETSTATUS, (unsigned long)(uintptr_t)&status);
+  if (ret < 0 || (status.flags & WDFLAGS_ACTIVE) != 0 ||
+      status.timeout != cfg->timeout)
+    {
+      printf("  FAIL: inactive lifecycle changed state flags=0x%lx "
+             "timeout=%lu\n", (unsigned long)status.flags,
+             (unsigned long)status.timeout);
+      ret = -EIO;
+      goto fail;
+    }
+
+  close(fd);
+  printf("  PASS: invalid/live changes rejected; duplicate lifecycle "
+         "preserved state\n\n");
+  return 0;
+
+stop_fail:
+  (void)ioctl(fd, WDIOC_STOP, 0);
+fail:
+  close(fd);
+  return ret < 0 ? ret : -EIO;
+}
+
 static int run_selected_cases(const struct app_config_s *cfg)
 {
   int ret;
@@ -383,11 +514,22 @@ static int run_selected_cases(const struct app_config_s *cfg)
       return run_case_002(cfg);
     }
 
+  if (strcmp(cfg->case_id, CASE_003) == 0)
+    {
+      return run_case_003(cfg);
+    }
+
   /* "all": run the non-destructive feed case first, then the reset case
    * (which reboots the device and does not return).
    */
 
   ret = run_case_002(cfg);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = run_case_003(cfg);
   if (ret < 0)
     {
       return ret;
@@ -448,7 +590,8 @@ int main(int argc, char *argv[])
 
   if (strcmp(cfg.case_id, CASE_ALL) != 0 &&
       strcmp(cfg.case_id, CASE_001) != 0 &&
-      strcmp(cfg.case_id, CASE_002) != 0)
+      strcmp(cfg.case_id, CASE_002) != 0 &&
+      strcmp(cfg.case_id, CASE_003) != 0)
     {
       printf("Unsupported case id: %s\n", cfg.case_id);
       return ERROR;

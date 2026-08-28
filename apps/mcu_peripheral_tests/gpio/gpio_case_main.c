@@ -47,6 +47,7 @@
 
 #define CASE_BOARD             "board"
 #define CASE_PAIR              "pair"
+#define CASE_EDGE              "edge"
 #define CASE_001               "001"
 #define CASE_002               "002"
 #define CASE_003               "003"
@@ -143,6 +144,7 @@ static int run_irq_pair_case(const struct app_config_s *cfg,
 static int run_case_004_pair(const struct app_config_s *cfg);
 static int run_case_005_pair(const struct app_config_s *cfg);
 static int run_pair_case(const struct app_config_s *cfg);
+static int run_edge_case(const struct app_config_s *cfg);
 static int run_case_007_measure(const struct app_config_s *cfg);
 static int run_case_008_measure(const struct app_config_s *cfg);
 static int record_one_gpio(const char *path);
@@ -171,7 +173,7 @@ static void print_usage(const char *progname)
 {
   printf("Usage: %s [options]\n", progname);
   printf("Options:\n");
-  printf("  -c <id>        board, pair, 001, 002, 003, 004, 005, "
+  printf("  -c <id>        board, pair, edge, 001, 002, 003, 004, 005, "
          "007, 008, 010, all\n");
   printf("                 default: all\n");
   printf("  --key0 <dev>   KEY0 GPIO path (default: %s)\n",
@@ -219,6 +221,7 @@ static bool case_is_supported(const char *case_id)
 {
   return strcmp(case_id, CASE_BOARD) == 0 ||
          strcmp(case_id, CASE_PAIR) == 0 ||
+         strcmp(case_id, CASE_EDGE) == 0 ||
          strcmp(case_id, CASE_001) == 0 ||
          strcmp(case_id, CASE_002) == 0 ||
          strcmp(case_id, CASE_003) == 0 ||
@@ -2014,6 +2017,138 @@ static int run_pair_case(const struct app_config_s *cfg)
 }
 
 /****************************************************************************
+ * Name: run_edge_case
+ *
+ * Description:
+ *   Exercise rejected GPIO operations and then repeatedly switch direction
+ *   to prove that the device remains usable after each rejection.
+ *
+ * Returned Value:
+ *   Zero if all negative-path errors and recovery checks match expectations;
+ *   a negated errno value otherwise.
+ *
+ ****************************************************************************/
+
+static int run_edge_case(const struct app_config_s *cfg)
+{
+  struct gpio_handle_s gpio;
+  enum gpio_pintype_e type;
+  enum gpio_pintype_e after_type;
+  bool expected;
+  bool actual = false;
+  uint32_t i;
+  int ret;
+
+  printf("[GPIO-edge] START gpio=%s recovery_cycles=%lu\n",
+         cfg->out_path, (unsigned long)cfg->count);
+
+  ret = gpio_open_handle(&gpio, cfg->out_path, false);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  errno = 0;
+  ret = ioctl(gpio.fd, 0x7fffffff, 0);
+  if (ret >= 0 || errno != ENOTTY)
+    {
+      printf("[GPIO-edge] FAIL unknown ioctl ret=%d errno=%d "
+             "expected=ENOTTY\n",
+             ret, errno);
+      ret = -EIO;
+      goto out;
+    }
+
+  ret = gpio_get_type(&gpio, &type);
+  if (ret < 0)
+    {
+      goto out;
+    }
+
+  errno = 0;
+  ret = ioctl(gpio.fd, GPIOC_SETPINTYPE,
+              (unsigned long)GPIO_NPINTYPES);
+  if (ret >= 0 || errno != EINVAL)
+    {
+      printf("[GPIO-edge] FAIL invalid pintype ret=%d errno=%d "
+             "expected=EINVAL\n",
+             ret, errno);
+      ret = -EIO;
+      goto out;
+    }
+
+  ret = gpio_get_type(&gpio, &after_type);
+  if (ret < 0 || after_type != type)
+    {
+      printf("[GPIO-edge] FAIL invalid pintype changed state "
+             "before=%s after=%s\n",
+             pintype_name(type),
+             ret < 0 ? "READ_ERROR" : pintype_name(after_type));
+      ret = ret < 0 ? ret : -EIO;
+      goto out;
+    }
+
+  ret = gpio_set_type(&gpio, GPIO_INPUT_PIN_PULLDOWN);
+  if (ret < 0)
+    {
+      goto out;
+    }
+
+  errno = 0;
+  ret = ioctl(gpio.fd, GPIOC_WRITE, 1);
+  if (ret >= 0 || errno != EACCES)
+    {
+      printf("[GPIO-edge] FAIL write while input ret=%d errno=%d "
+             "expected=EACCES\n",
+             ret, errno);
+      ret = -EIO;
+      goto out;
+    }
+
+  for (i = 0; i < cfg->count; i++)
+    {
+      ret = gpio_set_type(&gpio, GPIO_OUTPUT_PIN);
+      if (ret < 0)
+        {
+          goto out;
+        }
+
+      expected = (i & 1) != 0;
+      ret = gpio_write_value(&gpio, expected);
+      if (ret < 0)
+        {
+          goto out;
+        }
+
+      ret = gpio_read_value(&gpio, &actual);
+      if (ret < 0 || actual != expected)
+        {
+          printf("[GPIO-edge] FAIL recovery cycle=%lu expected=%u "
+                 "actual=%u\n",
+                 (unsigned long)i, expected ? 1 : 0,
+                 actual ? 1 : 0);
+          ret = ret < 0 ? ret : -EIO;
+          goto out;
+        }
+
+      ret = gpio_set_type(&gpio, GPIO_INPUT_PIN_PULLDOWN);
+      if (ret < 0)
+        {
+          goto out;
+        }
+    }
+
+  printf("[GPIO-edge] PASS rejected invalid operations and recovered "
+         "for %lu cycles\n",
+         (unsigned long)cfg->count);
+  ret = 0;
+
+out:
+  gpio_close_handle(&gpio, cfg->restore);
+  return ret;
+}
+
+/****************************************************************************
  * Name: run_case_007_measure
  *
  * Description:
@@ -2268,6 +2403,11 @@ static int run_selected_case(const struct app_config_s *cfg)
   if (strcmp(cfg->case_id, CASE_PAIR) == 0)
     {
       return run_pair_case(cfg);
+    }
+
+  if (strcmp(cfg->case_id, CASE_EDGE) == 0)
+    {
+      return run_edge_case(cfg);
     }
 
   if (strcmp(cfg->case_id, CASE_001) == 0)

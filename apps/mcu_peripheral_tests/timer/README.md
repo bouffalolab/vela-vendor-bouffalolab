@@ -1,180 +1,144 @@
-# MCU 定时器 / PWM 外设测试
+# MCU Timer/PWM 外设测试
 
-BL616/BL618 通用定时器（TIMER）与 PWM 外设功能测试，作为 `mcu_peripheral_tests`
-外设测试集的一个子模块，编译为 NSH builtin 命令 **`mcu_timer_test`**。
+`timer_case_main.c` 编译为独立的 `libapps_mcu_timer_test.a`，注册 NSH 命令
+`mcu_timer_test`。TIMER-001/002/005 操作 `/dev/timer0`；TIMER-003/004 操作 `/dev/pwm0`。
 
-## 背景
+## 运行前检查
 
-测试矩阵要求覆盖以下 TIMER / PWM 用例：
+1. 固件启动后确认出现 `NuttShell (NSH)` 和 `nsh>`。
+2. 执行 `ls /dev`，对应 case 必须存在 `timer0` 或 `pwm0`。
+3. 001/002 加 `-g /dev/gpio12` 时，将示波器接到 GPIO12；方波周期为 timer 周期的 2 倍。
+4. 003/004 将仪器接到 PWM 输出脚；软件 DONE 不能替代波形精度证据。
 
-| 用例 ID | 外设 | 功能点 | 前置条件 | 步骤 | 预期结果 | 测量/工具 | 判定标准 |
-|---------|------|--------|----------|------|----------|-----------|----------|
-| **TIMER-001** | TIMER | 基本计数 / 溢出周期准确性 | timer0 已注册 | 设周期周期触发，连续测 N 个间隔 | 周期与设定值一致 | 软件 `CLOCK_MONOTONIC` / 示波器 | 误差 ≤ 容差（默认 ±0.5%） |
-| **TIMER-002** | TIMER | 预分频器设置生效 | 同上 | 固定比较值，换两个分频值各测周期 | 周期比 = (b+1)/(a+1) | 软件（周期比例）/ 示波器 | 比值落在 ±5% 内、写入即生效 |
-| **TIMER-003** | PWM | PWM 频率 / 占空比精度 | PWM 输出到 GPIO28 | 设不同频率/占空比并测量 | 实测与设定一致 | 示波器 / 逻辑分析仪 | 频率 ±1%、占空比 ±2% |
-| **TIMER-004** | PWM | 占空比渐变 / 呼吸灯 | 同上（可接 LED） | 固定频率，占空比 0→100→0 渐变 | 频率恒定、占空比线性无跳变 | 示波器 / LED | 频率不变、占空比按设定切换 |
+## TIMER-001 基本计数与周期精度
 
-> TIMER 与 PWM 是**两个独立外设**：001/002 用通用 timer0，003/004 用独立 PWM 外设。
+背景：验证周期通知、自动重装和准确性，避免只证明计数器能启动。
 
-## 设计原理
+命令：`mcu_timer_test -c 001 -t 100000 -n 5 -e 0.5 -v`
 
-### 设备与驱动
+流程：
 
-BL616 的 timer/PWM 在软件上分三层，能力从下到上递减：
+1. 打开 timer0，以 SETTIMEOUT 设置 100000us，注册周期 SIGEV_SIGNAL 并阻塞该信号。
+2. START 后 GETSTATUS；flags 应含 ACTIVE，timeout 应为 100000us。
+3. 丢弃第一次到期信号作为 warm-up，排除启动延迟。
+4. 连续等待 5 次信号，计算相邻 `CLOCK_MONOTONIC` 间隔和绝对误差。
+5. 无 `-g` 时任一误差超过 500us 立即失败；有 `-g` 时软件时钟仅作参考。
+6. STOP 并关闭 fd；必须打印 summary 并返回 `nsh>`。
 
-```
-第3层 NuttX 框架  /dev/timer0 (TCIOC_*) /dev/pwm0 (PWMIOC_*)  ← 最易用，但无预分频/捕获 ioctl
-第2层 LHAL 库     bflb_timer_* / bflb_pwm_v2_*                ← 能改预分频；无 capture 函数
-第1层 硬件寄存器  timer_reg.h, base=0x2000a500               ← 能力最全，捕获只在此层
-```
+完成判据：无丢失信号，最大误差不超过 0.5%，出现 `TIMER-001 PASS accuracy within tolerance`。
 
-- 设备节点：`/dev/timer0`（TIMER）、`/dev/pwm0`（PWM CHAN0 = GPIO28）。
-- 上层框架：`nuttx/drivers/timers/timer.c` / `pwm.c`。
-- BL616 lower-half：`vendor/bouffalolab/chip/bl616/bl616_tim_lowerhalf.c`、`bl616_pwm.c`。
-- timer0 复用：本 defconfig 下 `CONFIG_BL616_ONESHOT=y`，timer1 注册为 `/dev/oneshot`，测试固定用 timer0。
+固件运行关键证据：
 
-### TIMER-001：溢出周期准确性
-
-PROLOAD 模式下到期回调返回 true 自动重装 → 周期触发。设周期 T，连续量 N 个相邻间隔与设定值
-比对；先收一次“热身”信号设基准，避免 `start→arm` 延迟污染首个间隔，调度抖动在“相邻周期差”
-里相互抵消。参考时钟 `CLOCK_MONOTONIC`（派生自 40MHz 晶振的 mtimer，与 timer0 独立）。
-
-### TIMER-002：预分频
-
-原理：计数时钟 = 40MHz/(div+1)，固定比较值 N 时溢出周期 `T = N×(div+1)/40MHz`，故 `T_b/T_a = (div_b+1)/(div_a+1)`，与比较值
-无关。测完恢复 div=39 以保持 `/dev/timer0` 的 μs 口径。
-
-### TIMER-003 / 004：PWM 精度与呼吸灯
-
-`/dev/pwm0` `PWMIOC_SETCHARACTERISTICS` + `PWMIOC_START`。频率 = 80MHz/(clk_div×period)，
-`duty` 为 b16 定点（50% = 0x8000）。004 依赖 `bl616_pwm.c` 的 fast-path：频率不变时只更新
-占空比阈值、不重 init → 渐变平滑无抖动。
-
-### 示波器测量：GPIO 翻转旁证（001/002）
-
-001/002 本是纯软件判定，无物理信号可探。为便于用示波器验证，app 增加 `-g <dev>` 选项：每次
-定时到期翻转一次板载输出 GPIO，产生**整周期 = 2×定时周期**的方波，示波器测方波周期 ÷2 即定时
-周期。用标准 NuttX GPIO 字符设备 `ioctl(fd, GPIOC_WRITE, 0/1)`，app 不耦合 board/chip GPIO 代码。
-
-> 引脚说明：本固件按 **BL616 编译**（`CONFIG_ARCH_CHIP_BL616`），可用引脚集为
-> PIN0-3/10-17/20-22/27-30。翻转脚选 **GPIO11**（`BOARD_GPIO_OUT1` → `/dev/gpio1`，
-> 见 `boards/bl616evb/src/bl616_gpio.c`）。
-
-## 文件说明
-
-| 文件 | 说明 |
-|------|------|
-| `timer_case_main.c` | 测试主程序，实现 TIMER-001~004 + `-g` 示波器翻转，编译为 `mcu_timer_test` |
-| `Kconfig` / `Make.defs` / `Makefile` | 子模块构建文件 |
-
-依赖的 chip / board 改动（非本目录）：
-`chip/bl616/include/bl616_tim_ioctl.h`（002 自定义 ioctl 单一数据源）、
-`chip/bl616/bl616_tim_lowerhalf.c`（ioctl 转发 + 范围校验）、
-`chip/bl616/bl616_tim.c` + `bl616_tim.h`（`setclockdiv` ops）、
-`boards/bl616evb/src/bl616_gpio.c`（翻转测试脚 GPIO11）。
-
-## 构建配置
-
-- 顶层 `mcu_peripheral_tests/Kconfig` 显式 `source` 本目录 `Kconfig`。
-- 在目标 defconfig 启用：`CONFIG_BL_MCU_PERIPHERAL_TESTS_TIMER=y`。
-- 依赖（`timer` defconfig 已具备）：
-  - TIMER：`CONFIG_BL616_TIMER=y` + `CONFIG_BL616_TIMER0=y`
-  - PWM：`CONFIG_PWM=y` + `CONFIG_BL616_PWM=y` + `CONFIG_BL616_PWM_CHANNEL_0=y`
-  - GPIO 翻转：`CONFIG_DEV_GPIO=y`
-  - 控制台/NSH：`CONFIG_BL616_UART=y`、`CONFIG_NSH_MAXARGUMENTS=12`
-
-```bash
-# 在 SDK 根目录编译（改过 defconfig 需先 rm -f nuttx/.config 强制重配）
-./build.sh vendor/bouffalolab/boards/bl616evb/configs/timer -j12
-# 出现 "All programming completed successfully" = 编译+烧录成功
-# 末尾 truncate/OTA 报错是 timer defconfig 既有打包脚本 bug，不影响 nuttx.bin，忽略
+```text
+[TIMER-001] overflow period accuracy timeout=100000us rounds=5 tol=0.50%
+  status: flags=0x3 timeout=100000us timeleft=99938us
+  RESULT max_err=188.0us (0.188%) tol=500.0us (0.50%)
+  [TIMER-001] PASS accuracy within tolerance
+Timer Summary: executed=1 passed=1 failed=0 -> PASS
+nsh>
 ```
 
-## 测试步骤
+## TIMER-002 预分频
 
-```bash
-picocom -b 2000000 /dev/ttyACM0     # 复位板子 → nsh>
-nsh> ls /dev                         # 应见 timer0 / pwm0 / gpio1
+背景：验证 `BL616CL_TCIOC_SETCLOCKDIV` 实际改变频率，并在测试后恢复默认微秒口径。
 
-nsh> mcu_timer_test -c 001 -t 100000 -n 10 -e 0.5            # 基本计数（纯软件）
-nsh> mcu_timer_test -c 001 -t 500000 -n 200 -g /dev/gpio1    # 001 示波器旁证（探 GPIO11）
-nsh> mcu_timer_test -c 002 -v                                # 预分频（默认 39/79）
-nsh> mcu_timer_test -c 002 -t 1000000 -a 19 -b 39 -g /dev/gpio1  # 002 自定义分频 + 示波器
-nsh> mcu_timer_test -c 003 -f 2000 -D 40 -w 5                # PWM 单点 2kHz/40%（探 GPIO28）
-nsh> mcu_timer_test -c 004 -f 1000 -s 25 -i 1000 -n 5        # 呼吸灯 1kHz、25% 台阶
-nsh> mcu_timer_test -c all                                   # 顺序跑全部
-nsh> mcu_timer_test -h                                       # 参数帮助
+命令：`mcu_timer_test -c 002 -t 500000 -a 39 -b 79 -v`
+
+流程：
+
+1. 打开 timer0 并 STOP，设置 div=39、固定 compare=500000，注册通知并 START。
+2. 丢弃 warm-up，以连续两个到期信号测得 `period_a`，然后 STOP。
+3. 设置 div=79，完全重复相同步骤得到 `period_b`；唯一变量必须是 divider。
+4. 计算比值；理论值 `(79+1)/(39+1)=2.000`，允许 ±5%。
+5. STOP 并恢复 div=39，否则后续 timer0 不再保持 1us 口径。
+6. 可选 `-g` 时分别观察两个稳定方波区间。
+
+完成判据：两组信号均收到，比值在 1.900~2.100，出现 `TIMER-002 PASS prescaler takes effect`。
+
+固件运行关键证据：
+
+```text
+[TIMER-002] clock prescaler effect (div 39 vs 79)
+  div=39 period=0.1999s
+  div=79 period=0.4000s
+  ratio period_b/period_a=2.001 (expected 2.000, tol +/-5%)
+  [TIMER-002] PASS prescaler takes effect
+Timer Summary: executed=1 passed=1 -> PASS
+nsh>
 ```
 
-参数：`-c` 用例 | `-d/-p/-g` 设备 | `-t` 周期/比较值 | `-n` 轮数/呼吸周期 | `-e` 容差% |
-`-a/-b` 分频值(002) | `-f` PWM 频率 | `-D` 占空比%(003单点) | `-w` 保持秒(003) |
-`-s` 占空比步进%(004) | `-i` 步间隔ms(004) | `-v` 详细 | `-h` 帮助。所有自定义参数有默认值。
+## TIMER-003 PWM 频率与占空比
 
-## 测试结果
+背景：验证 PWM 配置路径及 b16 duty 转换；串口只能证明 ioctl 成功。
 
-实板 **BL618G1 外设板**（主控 BL618M-65-Q2I，固件按 BL616 编译；`/dev/ttyACM0` @ 2000000
-baud），RIGOL 示波器实测（探头：001/002 接 GPIO11，003/004 接 GPIO28，DC 耦合）。
+命令：`mcu_timer_test -c 003 -f 2000 -D 40 -w 5`
 
-- **编译/烧录**：成功，`mcu_timer_test` 注册进固件，无相关编译/链接错误。
-- **总体结论**：**TIMER-001~004 全部 PASS**。
+流程：
 
-### TIMER-001 基本计数 = PASS
+1. 打开 pwm0；指定 `-f` 时测一个点，否则测 1kHz/50%、10kHz/25%、100Hz/75%。
+2. 百分比转换为 b16 duty，调用 SETCHARACTERISTICS 和 START。
+3. 保持 5 秒，记录频率、周期、高电平时间和占空比；每点结束后 STOP。
+4. 频率误差按 ±1%、占空比误差按 ±2 个百分点判定。
 
-| 测量 | 命令 | 实测 | 判据 | 判定 |
-|------|------|------|------|------|
-| 软件 | `-c 001 -t 100000 -n 10 -e 0.5` | `max_err=0.0us (0.000%)` | ≤0.5% | ✅ PASS |
-| 示波器 | `-c 001 -t 500000 -n 200 -g /dev/gpio1` | 周期 1.000s、频率 1.00Hz、占空比 50.00% | 周期=2×0.5s=1s | ✅ PASS |
+完成判据：全部 ioctl 成功，仪器数据满足阈值，输出 `TIMER-003 DONE`。
 
-软件路径误差 0.0%；示波器方波周期 1.000s 正好为定时周期（0.5s）的 2 倍，占空比 50%，两条路径
-互为印证。
+仪器关键数据：历史 BL618G1 外设板测得 2kHz/40%=2.00kHz、500.0us、40.0%；
+5kHz/50%=5.00kHz、200.0us、50.0%，PASS。当前 Ai-M64L-32S-Kit 固件尚未重跑该仪器流程，
+因此这些数据只证明同一测试程序的历史 PWM 测量，不作为当前板复验结论。
 
-### TIMER-002 预分频 = PASS
+## TIMER-004 PWM 占空比渐变
 
-| 测量 | 命令 | 实测 | 判据 | 判定 |
-|------|------|------|------|------|
-| 软件(默认39/79) | `-c 002 -v` | div39=0.5100s、div79=1.0000s、ratio=1.961（expected 2.000） | ±5% | ✅ PASS |
-| 自定义分频 | `-c 002 -t 1000000 -a 19 -b 39` | 期望比值 (39+1)/(19+1)=2.0 | ±5% | ✅ PASS |
-| 示波器 | `-c 002 -t 1000000 -a 19 -b 39 -g /dev/gpio1` | 光标测 div=19 段方波 1.000s/1.00Hz，div=39 段周期翻倍≈2s | 后段/前段≈2.0 | ✅ PASS |
+背景：验证频率不变时重复更新 duty 的 fast-path，无频率漂移或明显毛刺。
 
-串口逐层印证了去重后的 ioctl 链路：`cmd 5648 (=_TCIOC(0x10)) → Forwarding → bl616_tim_set_clock_div`，
-两侧解析同一常量，证明单一数据源无失配。
+命令：`mcu_timer_test -c 004 -f 1000 -s 25 -i 1000 -n 5 -v`
 
-> 说明：软件默认档 div39 周期实测 **0.5100s**（理论 0.5s），偏大 10ms = 恰好 1 个系统 tick
-> （`CONFIG_USEC_PER_TICK=10000`），是软件 `CLOCK_MONOTONIC` 的 10ms 量化所致、非定时器误差；
-> 比值 1.961 仍在 ±5% 内。示波器旁证（硬件直接测翻转沿）比值精确为 2.0，可见预分频硬件准确。
+流程：
 
-### TIMER-003 PWM 频率/占空比精度 = PASS
+1. 打开 pwm0，固定 1000Hz、初始 duty=0，SETCHARACTERISTICS 后 START。
+2. 每周期按 0→25→50→75→100%，再按 100→75→50→25→0% 更新。
+3. 每档保持 1000ms，记录频率、占空比和切换毛刺，重复 5 个周期。
+4. 最后 STOP；100% 档应为稳定高电平而不是可测频率的方波。
 
-| 单点自定义 | 设定 | 实测频率 | 实测占空比 | 判定 |
-|------------|------|---------|-----------|------|
-| `-f 2000 -D 40 -w 5` | 2 kHz / 40% | 2.00 kHz（周期 500.0µs） | 40.0% | ✅ PASS |
-| `-f 5000 -D 50 -w 5` | 5 kHz / 50% | 5.00 kHz（周期 200.0µs） | 50.0% | ✅ PASS |
+完成判据：频率保持 1.00kHz，各档占空比符合设定，输出 `TIMER-004 DONE`。
 
-默认三组（`-c 003 -v`：1k/50%、10k/25%、100/75%）串口依次输出 DONE；自定义单点两组实测频率与
-占空比与设定**完全一致**（误差 ~0%），远优于 ±1%/±2% 判据。
+仪器关键数据：历史 BL618G1 外设板测得 25%=25.20%、50%=50.00%、75%=75.20%，频率均为 1.00kHz；
+100% 为稳定 3.3V，PASS。当前 Ai-M64L-32S-Kit 尚未重跑 PWM 仪器流程，不作为当前板复验结论。
 
-### TIMER-004 占空比渐变 / 呼吸灯 = PASS
+## TIMER-005 生命周期与异常请求
 
-> 接线说明：板载可见 LED1 接在 GPIO18（BL618 专属脚，BL616 固件不可直接驱动），故用杜邦线把
-> **PWM 输出 GPIO28 连到 GPIO18（LED1）**，由 PWM 直接驱动该 LED，既能示波器测又能肉眼看呼吸。
+背景：覆盖非法参数、重复 START/STOP、运行中改配置和错误后的恢复能力。
 
-命令 `-c 004 -f 1000 -s 25 -i 1000 -n 5`，逐档示波器自动测量：
+命令：`mcu_timer_test -c 005`
 
-| 设定占空比 | 实测频率 | 实测占空比 | 判定 |
-|-----------|---------|-----------|------|
-| 25% | 1.00 kHz | 25.20% | ✅ |
-| 50% | 1.00 kHz | 50.00% | ✅ |
-| 75% | 1.00 kHz | 75.20% | ✅ |
-| 100% | —（恒高 DC） | 100%（实测无翻转沿，稳定 3.3V 高） | ✅ |
+流程：
 
-**频率全程恒为 1.00 kHz**（改占空比不影响频率），占空比按 25/50/75/100 准确切换、误差 ≤0.2pp，
-切换无毛刺 → 呼吸灯渐变机制（fast-path 只改阈值不重 init）验证正确。
+1. 打开 timer0 并保存初始 GETSTATUS。
+2. SETTIMEOUT=1 必须返回 EINVAL；再次 GETSTATUS，timeout 必须未改变。
+3. SETCLOCKDIV=256 必须返回 EINVAL。
+4. 配置 50000us 并 START；重复 START 必须返回 EBUSY。
+5. 运行中 SETCLOCKDIV=79 必须返回 EBUSY。
+6. 运行中 SETTIMEOUT=25000 必须成功；等待到期信号，证明 live update 后中断仍工作。
+7. GETSTATUS 必须为 ACTIVE 且 timeout=25000。
+8. 首次 STOP 成功；第二次 STOP 返回 ENODEV；最终 GETSTATUS 不含 ACTIVE。
+9. 恢复调用者 timeout 和 div=39，关闭 fd。
 
-### 结果汇总
+完成判据：所有 errno、状态保持、live 信号和清理步骤全部成立。
 
-| 用例 | 名称 | 测量方式 | 判定 |
-|------|------|----------|------|
-| TIMER-001 | 基本计数 | 软件 + 示波器 | ✅ PASS |
-| TIMER-002 | 预分频 | 软件 + 示波器 | ✅ PASS |
-| TIMER-003 | PWM 频率/占空比精度 | 示波器 | ✅ PASS |
-| TIMER-004 | 占空比渐变/呼吸灯 | 示波器 | ✅ PASS |
+固件运行关键证据：
+
+```text
+[TIMER-005] Lifecycle and rejected requests
+  rejected: timeout below hardware minimum errno=22
+  rejected: clock divider above 8-bit range errno=22
+  rejected: start while already active errno=16
+  rejected: change divider while active errno=16
+  rejected: stop while already inactive errno=19
+  [TIMER-005] PASS rejected requests preserved state; live update fired; lifecycle recovered
+Timer Summary: executed=1 passed=1 failed=0 -> PASS
+nsh>
+```
+
+## all 模式
+
+`mcu_timer_test -c all` 依次执行 001、002、005、003、004。003/004 仍需外部仪器判定，
+所以软件 summary 全 PASS 不能独立证明 PWM 精度满足阈值。
