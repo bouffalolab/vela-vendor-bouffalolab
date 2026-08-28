@@ -5,7 +5,7 @@
 
 最后核对：2026-08-29
 
-- `vendor/bouffalolab`: `7d00d14a1b8cdb9525ee9a795a91e6134c9fe1e7`
+- `vendor/bouffalolab`: `ef8baee`（本项实施前基线）
 - `nuttx`: `2c63cf17085b6b7e60b841fd79de6487d950aeed`
 - 板卡：Ai-M64L-32S-Kit
 - 配置：`bl616cl/ai-m64l-32s-kit/configs/nsh`
@@ -46,7 +46,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 |---|---|---|---|---|
 | A01 | frame pointer：`FRAME_POINTER` | 已验证（ST002） | 通用编译选项；配合现有 `SCHED_BACKTRACE` | USB2 实测当前线程 4 层、阻塞线程 12 层符号回溯；ELF/镜像增量已记录 |
 | A02 | 栈高水位：`STACK_COLORATION`、`STACKCHECK_MARGIN`、`SYSTEM_STACKMONITOR` | 已验证（ST003） | RISC-V 通用实现；BL616CL 在开中断前补齐 IRQ 栈染色 | USB2 实测 `ps` 高水位、monitor 启停及 GPIO/timer/oneshot/WDT 回归；关闭态裁剪成立 |
-| A03 | 编译器 stack canary：`STACK_CANARIES` | 可直接开启，P1 诊断 | 工具链加入 `-fstack-protector-all`；独立诊断配置 | 正常回归；受控栈溢出必须进入 `__stack_chk_fail`/panic |
+| A03 | 编译器 stack canary：`STACK_CANARIES` | 已验证（ST009） | 工具链全局加入 `-fstack-protector-all`；负测 app 默认关闭 | USB2 实测精确一字节覆盖进入 `__stack_chk_fail`/panic，普通任务终止后 NSH 存活，冷启动及外设回归通过；关闭态对照和测试 app 裁剪成立 |
 | A04 | 静态栈报告：`STACK_USAGE`、`STACK_USAGE_WARNING` | 可直接开启，P2 工具 | 仅构建期，不作为运行保护 | 生成 `.su`；阈值负测能使构建告警 |
 | A05 | lazy FPU：`ARCH_LAZYFPU` | 可直接开启，P1 优化 | 当前已具备 FPU 和 RISC-V lazy 实现 | 双浮点任务高频切换加 IRQ；数值隔离正确；比较上下文开销 |
 | A06 | CLIC threshold 上下文：`ARCH_RV_HAVE_CLIC` | 需要适配，P2 | 当前自定义 CLIC 仍用全局 `mstatus` 屏蔽；开启会改变 trap frame 和 `up_irq_save()` 语义 | 嵌套/优先级/上下文切换专项；不能只做编译验证 |
@@ -118,6 +118,40 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 - 风险：当前 nsh 栈只余 80 字节高水位空间。16 字节 margin 验证通过不代表
   该栈余量充足，后续增加 NSH 命令深度时需重新测量或提高 init task 栈。
 - 提交：本项实现提交见 `VELABL616-139` 回写；能力矩阵随该提交更新。
+
+### A03 实测结果（2026-08-29）
+
+- 正式配置只启用 `CONFIG_STACK_CANARIES=y`；受控负测命令
+  `CONFIG_BL_OS_FEATURE_TESTS_STACK_CANARY` 默认关闭，不进入产品固件。
+- 通路：RISC-V CMake 对 1,161/1,161 条 C 编译命令加入
+  `-fstack-protector-all`；通用 libc 提供弱 guard/fail，BL616CL 不需要私有
+  arch hook。guard 位于 flash，可供 section load 前的早期 C 函数读取。
+- 反汇编门禁：32 B buffer 位于 `s0-52..s0-21`，canary 位于 `s0-20`；safe
+  offset 31 合法写最后一字节，corrupt offset 32 只覆盖 canary 首字节，函数
+  epilogue 比较失败后调用 `__stack_chk_fail`。
+- 构建与裁剪：关闭态、测试开启态和最终产品开启态 clean build 均通过。最终
+  产品 build 为 `1207/1207`，含 `__stack_chk_guard`/`__stack_chk_fail`，不含
+  `stack_canary_test_main` 和测试 archive。
+- 制品：关闭态 `final_nuttx` 为 692,816 B，`text/data/bss` 为
+  `302,174/14,292/11,128`，`nuttx.bin` 为 322,576 B；开启态分别为
+  738,048 B、`349,550/14,292/11,128` 和 369,568 B。增量为 ELF 45,232 B、
+  text 47,376 B、bin 46,992 B，data/bss 不变。
+- USB2 负测：safe 写 offset 31 后正常返回；corrupt 写 offset 32 后在
+  `lib_stackchk.c:57` 触发 panic，回溯含 `run_canary_test` 和
+  `stack_canary_test_main`，未打印 corrupt returned。
+- 恢复语义：当前 flat builtin 普通任务由 `abort()` 终止，NSH 随后执行
+  `echo alive` 成功；内核线程或 IRQ 中的失败会进入系统 panic，不能外推为同样
+  可恢复。受控模块复位后 2 Mbps 启动再次匹配 NSH。
+- 最终产品固件：`nuttx.bin` SHA256 为
+  `3d458b8455e3deb579c8d8deea6ba7c3b0b00a5c995deef40a5970c1ffdfc61c`；USB2
+  四段烧录校验一致，2 Mbps 启动匹配 NSH，`help` 不含测试命令。
+- 冷启动回归：GPIO edge 3 个恢复周期通过；TIMER-001 10 ms 最大误差 284 us
+  （2.840%），TIMER-002 divider 比例 2.001，TIMER-005 生命周期通过；100 ms
+  oneshot 完成；WDT-002 在 3,006 ms 内喂狗 6 次且无复位，WDT-003 生命周期
+  通过，最终 `echo final_alive` 正常返回。
+- 能力边界：通用 guard 是固定自地址值，可检测非定向覆盖，不是高熵抗攻击
+  canary。完整配置、命令、反汇编门禁、流程和判定标准见
+  [BL616CL 编译器栈保护与受控负测](bl616cl-stack-canary.md)。
 
 ## MM 与内存保护
 
