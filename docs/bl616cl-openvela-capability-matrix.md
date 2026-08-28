@@ -41,7 +41,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 
 | ID | 能力与目标选项 | 状态 | 裁剪和依赖 | 验证要求 |
 |---|---|---|---|---|
-| A01 | frame pointer：`FRAME_POINTER` | 可直接开启，P0 | 通用编译选项；配合现有 `SCHED_BACKTRACE` | 多层调用和阻塞线程回溯；ELF 符号化一致；记录镜像增量 |
+| A01 | frame pointer：`FRAME_POINTER` | 已验证（ST002） | 通用编译选项；配合现有 `SCHED_BACKTRACE` | USB2 实测当前线程 4 层、阻塞线程 12 层符号回溯；ELF/镜像增量已记录 |
 | A02 | 栈高水位：`STACK_COLORATION`、`STACKCHECK_MARGIN`、`SYSTEM_STACKMONITOR` | 可直接开启，P0 | RISC-V 已有 `ARCH_HAVE_STACKCHECK` 和实现 | `ps`/procfs/stackmonitor 在深栈前后反映增量；正常启动回归 |
 | A03 | 编译器 stack canary：`STACK_CANARIES` | 可直接开启，P1 诊断 | 工具链加入 `-fstack-protector-all`；独立诊断配置 | 正常回归；受控栈溢出必须进入 `__stack_chk_fail`/panic |
 | A04 | 静态栈报告：`STACK_USAGE`、`STACK_USAGE_WARNING` | 可直接开启，P2 工具 | 仅构建期，不作为运行保护 | 生成 `.su`；阈值负测能使构建告警 |
@@ -55,6 +55,32 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 源码入口：`nuttx/Kconfig`、`nuttx/arch/Kconfig`、
 `nuttx/arch/risc-v/Kconfig`、`nuttx/arch/risc-v/src/common/`、
 `chips/bl616cl/bl616cl_cpu.c`、`chips/bl616cl/bl616cl_cache.c`。
+
+### A01 实测结果（2026-08-28）
+
+- 配置：`CONFIG_FRAME_POINTER=y`、`CONFIG_SCHED_BACKTRACE=y`、
+  `CONFIG_SYSTEM_DUMPSTACK=y`。
+- 构建：`python3 vendor/bouffalolab/bl_build.py build
+  bl616cl/ai-m64l-32s-kit/configs/nsh -j14`，构建目标 `1190/1190` 成功。
+- 编译证据：`compile_commands.json` 和 `build.ninja` 均含
+  `-fno-omit-frame-pointer`；关闭态基线含 `-fomit-frame-pointer`。
+- 制品：`final_nuttx` 为 666,948 字节，`text/data/bss` 为
+  `283,974/13,716/9,640`；`nuttx.bin` 为 303,792 字节，whole image
+  为 4,194,304 字节。
+- 与关闭态对照：`final_nuttx` 增加 13,456 字节，`text` 增加 16,336
+  字节，`nuttx.bin` 增加 16,240 字节。
+- 烧录：USB2（`/dev/ttyUSB2`，2 Mbps）分区烧录成功；boot、partition、
+  app 三段 SHA 校验通过，FlashCube 报告 `All programming completed successfully`。
+- 启动：`bl-module-reset` 使用 `standard-dtr-rts`，匹配 `NuttShell (NSH)`
+  和 `nsh>`，结果 `status=ok`。
+- 当前线程：执行 `dumpstack` 输出 `sched_dumpstack`、`dumpstack_main`、
+  `nxtask_startup`、`nxtask_start` 四个符号帧。
+- 阻塞线程：执行 `sleep 30 &`，`ps` 显示 PID 5 为 `Waiting/Signal`；
+  `dumpstack 5` 输出 `up_switch_context`、`nxsig_clockwait`、
+  `clock_nanosleep`、`sleep`、`cmd_sleep` 等 12 个符号帧。
+- 反汇编：`dumpstack_main` 序言保存 `s0` 并执行 `addi s0,sp,16`，
+  证明启用 frame pointer 链。
+- 提交：本项实现提交见 `VELABL616-138` 回写；能力矩阵随该提交更新。
 
 ## MM 与内存保护
 
