@@ -42,7 +42,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | ID | 能力与目标选项 | 状态 | 裁剪和依赖 | 验证要求 |
 |---|---|---|---|---|
 | A01 | frame pointer：`FRAME_POINTER` | 已验证（ST002） | 通用编译选项；配合现有 `SCHED_BACKTRACE` | USB2 实测当前线程 4 层、阻塞线程 12 层符号回溯；ELF/镜像增量已记录 |
-| A02 | 栈高水位：`STACK_COLORATION`、`STACKCHECK_MARGIN`、`SYSTEM_STACKMONITOR` | 可直接开启，P0 | RISC-V 已有 `ARCH_HAVE_STACKCHECK` 和实现 | `ps`/procfs/stackmonitor 在深栈前后反映增量；正常启动回归 |
+| A02 | 栈高水位：`STACK_COLORATION`、`STACKCHECK_MARGIN`、`SYSTEM_STACKMONITOR` | 已验证（ST003） | RISC-V 通用实现；BL616CL 在开中断前补齐 IRQ 栈染色 | USB2 实测 `ps` 高水位、monitor 启停及 GPIO/timer/oneshot/WDT 回归；关闭态裁剪成立 |
 | A03 | 编译器 stack canary：`STACK_CANARIES` | 可直接开启，P1 诊断 | 工具链加入 `-fstack-protector-all`；独立诊断配置 | 正常回归；受控栈溢出必须进入 `__stack_chk_fail`/panic |
 | A04 | 静态栈报告：`STACK_USAGE`、`STACK_USAGE_WARNING` | 可直接开启，P2 工具 | 仅构建期，不作为运行保护 | 生成 `.su`；阈值负测能使构建告警 |
 | A05 | lazy FPU：`ARCH_LAZYFPU` | 可直接开启，P1 优化 | 当前已具备 FPU 和 RISC-V lazy 实现 | 双浮点任务高频切换加 IRQ；数值隔离正确；比较上下文开销 |
@@ -81,6 +81,40 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 - 反汇编：`dumpstack_main` 序言保存 `s0` 并执行 `addi s0,sp,16`，
   证明启用 frame pointer 链。
 - 提交：本项实现提交见 `VELABL616-138` 回写；能力矩阵随该提交更新。
+
+### A02 实测结果（2026-08-28）
+
+- 配置：`CONFIG_STACK_COLORATION=y`、`CONFIG_STACKCHECK_MARGIN=16`、
+  `CONFIG_SYSTEM_STACKMONITOR=y`；monitor 默认周期 2 秒、任务栈 2,048 字节，
+  只编入命令，不在启动脚本中自启。
+- 适配：BL616CL `up_irqinitialize()` 在 `up_irq_enable()` 前调用
+  `riscv_color_intstack()`。该接口在关闭 `STACK_COLORATION` 或未配置有效 IRQ
+  栈时展开为空，因此不新增 BL 私有开关。
+- 构建：开启态 clean build `1199/1199` 成功；最终 ELF 含
+  `riscv_color_intstack`、`up_check_tcbstack`、`up_check_intstack`、
+  `nxsched_checkstackoverflow`、`stackmonitor_start_main` 和
+  `stackmonitor_stop_main`。
+- 制品：`final_nuttx` 为 676,976 字节，`text/data/bss` 为
+  `290,014/13,908/9,736`，`nuttx.bin` 为 310,032 字节，whole image 为
+  4,194,304 字节。
+- 关闭态：clean build `1195/1195` 成功；上述 A02 配置、符号和 monitor 命令
+  均不在最终制品中。相对关闭态，开启态 `final_nuttx` 增加 10,028 字节，
+  `text` 增加 6,040 字节，`data+bss` 增加 288 字节，`nuttx.bin` 增加
+  6,240 字节；monitor 启动后另占一个 2,048 字节任务栈。
+- 烧录与启动：`/dev/ttyUSB2`、2 Mbps 分区烧录完成四段 SHA 校验；受控复位
+  匹配 `NuttShell (NSH)` 和 `nsh>`，未发生 early assert。
+- 栈高水位：启动后 `ps` 显示 idle `536/2016`、hpwork `376/1968`、
+  nsh `1732/1976`；执行后台 `sleep 30` 后，nsh 高水位达到 `1896/1976`
+  （95.9%，剩余 80 字节），后台 shell 初次采样为 `264/1984`。
+- 周期监控：`stackmonitor_start` 创建 PID 6，连续周期表显示 monitor 自身栈
+  从 `1128/1984` 增至 `1144/1984`；`stackmonitor_stop` 完成后等待 5 秒无
+  后续周期输出。停止期间允许已在执行的最后一个周期完成。
+- 中断与调度回归：GPIO push-pull 跟随、20 次 GPIO 上升沿 IRQ、5 轮
+  100 ms timer、100 ms oneshot 和 WDT 非复位生命周期测试全部通过；串口未出现
+  stack margin、assert 或 panic 报告。
+- 风险：当前 nsh 栈只余 80 字节高水位空间。16 字节 margin 验证通过不代表
+  该栈余量充足，后续增加 NSH 命令深度时需重新测量或提高 init task 栈。
+- 提交：本项实现提交见 `VELABL616-139` 回写；能力矩阵随该提交更新。
 
 ## MM 与内存保护
 

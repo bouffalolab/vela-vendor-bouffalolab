@@ -228,6 +228,7 @@ void up_irqinitialize(void)
   riscv_exception_attach();
 
 #ifndef CONFIG_SUPPRESS_INTERRUPTS
+  riscv_color_intstack();
   up_irq_enable();
 #endif
 }
