@@ -34,8 +34,11 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | 外设 | UART0、GPIO、timer0、TIMER1 oneshot、watchdog | `chips/bl616cl/`；`cmake/bl616cl_lhal.cmake` |
 | 诊断 | assertions、stack dump、dumpstack、procfs | `configs/nsh/defconfig` |
 
-当前 `defconfig` 的 `CONFIG_SCHED_CPULOAD=y` 已失效，生成配置落到
-`CONFIG_SCHED_CPULOAD_NONE=y`，不能宣称已有 CPU load 数据。
+当前 `nsh` 已选择 `CONFIG_SCHED_CPULOAD_SYSCLK=y`，并用独立的
+`CONFIG_SYSTEM_CPULOAD=y` 编入验证负载命令。后者只用于测试，不是 CPU load
+统计的产品依赖。启用前生成配置默认选择 `CONFIG_SCHED_CPULOAD_NONE=y`；
+`ostest` defconfig 中遗留的旧 `CONFIG_SCHED_CPULOAD=y` 不再对应当前 Kconfig
+符号。
 
 ## 架构与 CPU
 
@@ -137,7 +140,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 
 | ID | 能力与目标选项 | 状态 | 裁剪和依赖 | 验证要求 |
 |---|---|---|---|---|
-| D01 | CPU load：`SCHED_CPULOAD_SYSCLK` | 可直接开启，P0 | 替换失效的 `SCHED_CPULOAD`；tick 同步采样只能作基础观测 | idle/固定 duty/双负载窗口；procfs 数值随负载变化 |
+| D01 | CPU load：`SCHED_CPULOAD_SYSCLK` | 已验证（ST004） | `SYSTEM_CPULOAD` 只提供可裁剪测试负载；tick 同步采样只能作基础观测 | USB2 实测 idle、单个 50% 和两个 50% 聚合满载；procfs、`ps`、`top` 均随负载变化；关闭态裁剪成立 |
 | D02 | IRQ monitor：`SCHED_IRQMONITOR` | 可直接开启，P0 | 依赖 procfs；当前 alarm driver 已提供 `up_perf_*`；关注每 IRQ 两次时间读取开销 | `/proc/irqs` count/rate/max time；读后清零；1 kHz tick 开销和延迟 |
 | D03 | critical monitor：`SCHED_CRITMONITOR`、`SYSTEM_CRITMONITOR` | 可直接开启，P1 诊断 | 首轮阈值关闭，只观测；与 trace 分开验证 | `/proc/critmon`；受控长临界区；再设阈值验证告警 |
 | D04 | Note RAM trace：instrumentation、`DRIVERS_NOTERAM`、`SYSTEM_TRACE` | 可直接开启，P1 诊断 | 按 switch/IRQ/heap 分批启用；不能记录 csection/spinlock 到 Note RAM | start/stop/dump；时间单调；已知事件顺序；ring overflow 语义 |
@@ -151,6 +154,43 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 
 源码入口：`nuttx/sched/Kconfig`、`nuttx/sched/irq/`、
 `nuttx/drivers/note/`、`nuttx/sched/misc/coredump.c`、`apps/system/trace/`。
+
+### D01 实测结果（2026-08-28）
+
+- 配置：`CONFIG_SCHED_CPULOAD_SYSCLK=y`、采样频率 100 Hz、time constant
+  2 秒；`CONFIG_SYSTEM_CPULOAD=y` 只编入测试命令，不在启动脚本中自启。
+- 通路：系统时钟每 10 个 1 kHz tick 采样一次；scheduler 提供统计，procfs
+  提供 `/proc/cpuload` 和 `/proc/<pid>/loadavg`，NSH `ps`、`top` 显示 CPU
+  列。BL616CL 无需新增 arch hook。
+- 构建：关闭态 clean build `1199/1199`、开启态 clean build `1202/1202`
+  均成功。关闭态不含 CPU load 统计和测试负载符号；开启态含
+  `cpuload_init`、`nxsched_process_cpuload_ticks`、`clock_cpuload`、
+  `cpuload_main` 和 `cmd_top`。
+- 制品：开启态 `final_nuttx` 为 682,368 字节，`text/data/bss` 为
+  `293,630/14,036/9,752`，`nuttx.bin` 为 313,776 字节。相对关闭态
+  分别增加 5,392、3,616、128、16 和 3,744 字节。
+- 烧录与启动：`nuttx.bin` SHA256 为
+  `2d36216aff3446e56aac1ac6f44dda5425753e510b2b7f437303dc01b7b3f767`；
+  `/dev/ttyUSB2` 分区烧录校验一致，2 Mbps 复位后匹配 `NuttShell (NSH)`
+  和 `nsh>`。
+- idle：复位后等待 8 秒，`/proc/cpuload` 为 0.0%，`ps` 中 IDLE 为
+  100.0%，不存在 `cpuload` 任务。
+- 单负载：执行 `nice -d 19 cpuload -p 50 &` 并等待 8 秒，系统负载为
+  52.0%，该线程 `/proc/4/loadavg` 为 51.9%，`ps` 显示 IDLE 48.0%、
+  `cpuload` 51.5%。
+- 聚合满载：再启动一个相同的 50% 负载并等待 8 秒，系统负载为 100.0%，
+  两个线程分别为 51.1% 和 49.3%，IDLE 为 0.0%；`top` 同时显示两个
+  `cpuload` 线程约各占一半 CPU。
+- 清理限制：当前未启用 `CONFIG_SIG_DEFAULT`，`kill` 和 `kill -9` 不会按
+  默认动作终止测试任务；且 `cpuload` 编译优先级为 253，`nice` 不会改变
+  `ps` 中的实际优先级。因此不运行可能饿死 NSH 的单个 100% 负载，使用两个
+  50% 任务形成可观测的聚合满载，并通过受控模块复位完成清理。
+- 恢复与回归：复位并等待 8 秒后负载恢复 0.0%、IDLE 100.0%。随后 GPIO
+  edge 64 轮恢复、5 轮 100 ms timer（最大误差 280 us，0.280%）、timer
+  异常生命周期、100 ms oneshot 和 WDT 非复位生命周期全部通过；最终
+  `/proc/cpuload` 仍为 0.0%。
+- 适用边界：SYSCLK 与系统 tick 同源，结果可用于趋势和基础占用观测，不能
+  作为同步于 tick 的特殊线程或高精度性能计量依据。
 
 ## 启动、调度与低功耗
 
