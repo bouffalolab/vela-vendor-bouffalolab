@@ -208,7 +208,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | D02 | IRQ monitor：`SCHED_IRQMONITOR` | 已验证（ST005） | 依赖 procfs；当前 alarm driver 已提供 `up_perf_*`；每 IRQ 两次时间读取开销已在实板观察 | USB2 实测 `irqinfo`/`/proc/irqs` 的 count/rate/max time、连续窗口重计数、GPIO/timer/oneshot IRQ 变化和外设回归；关闭态裁剪成立 |
 | D03 | critical monitor：`SCHED_CRITMONITOR`、`SYSTEM_CRITMONITOR` | 已验证（ST006） | 正式配置只统计，不设告警阈值；阈值和 panic 使用临时配置独立验证 | USB2 实测全局/线程统计、读后新窗口、monitor 启停、告警与 panic 边界及外设回归；关闭态裁剪成立 |
 | D04 | Note RAM trace：instrumentation、`DRIVERS_NOTERAM`、`SYSTEM_TRACE` | 可直接开启，P1 诊断 | 按 switch/IRQ/heap 分批启用；不能记录 csection/spinlock 到 Note RAM | start/stop/dump；时间单调；已知事件顺序；ring overflow 语义 |
-| D05 | syslog coredump：`COREDUMP`、`BOARD_COREDUMP_SYSLOG` | 可直接开启，P1 诊断 | RISC-V 已有 TCB info；首轮不开 full/compression，可选 base64 | assert 后完整首尾；匹配 ELF 解码；恢复 PC/SP/触发线程栈 |
+| D05 | syslog coredump：`COREDUMP`、`BOARD_COREDUMP_SYSLOG` | 已验证（ST010） | 单触发线程、无 full/compression/base64；零长度 memory range 哨兵；关闭彩色 syslog；负测 app 默认关闭 | USB2 完整 HEX 转换为 ELF32 RISC-V CORE；准确负测 ELF 恢复 LWP 9、PC/SP 和触发栈；最终产品裁剪与外设回归成立 |
 | D06 | stack/cpu/resource monitor 工具 | 可直接开启，P1 | 分别依赖 coloration、cpuload、procfs；工具本身也消耗资源 | 启停、周期、输出和自身 CPU/stack 开销 |
 | D07 | EXTCLK CPU load | 需要资源重构，P2 | TIMER1 当前由 `/dev/oneshot` 独占；必须用 choice 确定 owner | 与 SYSCLK 对照；异步采样；不能同时注册同一 lower-half |
 | D08 | E907 hardware perf/perf-tools | 需要适配，P2 | 通用 `SCHED_PERF_EVENTS` 不等于硬件 PMU 已接入；依赖 A08 | cycle/event 正确性、溢出、用户工具和开销 |
@@ -339,6 +339,33 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 - 语义边界：procfs 读取会返回并清零最大值，线程累计运行时间继续保留；启动
   窗口的秒级 preemption 值包含 bringup 阶段，不能当作稳态延迟。阈值单位是
   `perf_gettime()` tick，本板 MTIME 为 1 MHz，因此一个 tick 为 1 us。
+
+### D05 实测结果（2026-08-29）
+
+- 正式配置启用 `COREDUMP`、`BOARD_COREDUMP_SYSLOG` 和零长度
+  `BOARD_MEMORY_RANGE` 哨兵，关闭 full/compression/base64 与彩色 syslog；
+  `BL_OS_FEATURE_TESTS_SYSLOG_COREDUMP` 默认关闭。
+- 通路：bringup 在 board late initialize 后初始化通用 coredump stream；受控
+  `d05_coredump` kernel thread 调用 `PANIC()`，进入系统 panic 并导出单个触发
+  线程。普通 builtin task assert 只终止任务，不生成 coredump。
+- 构建与裁剪：关闭态 clean build `1207/1207`、负测 `1211/1211`、最终产品
+  `1209/1209` 均成功。最终产品保留 coredump 符号，不含测试命令、main 或 archive。
+- 制品：最终产品 `final_nuttx` 为 743,524 B，`text/data/bss` 为
+  `354,006/14,484/11,608`，`nuttx.bin` 为 374,224 B。相对关闭态增加 ELF
+  5,476 B、text 4,456 B、data 192 B、bss 480 B 和 bin 4,656 B。
+- 运行：USB2 的 safe 和命令边界正常返回；fatal 输出唯一完整
+  `Start coredump:`/`Finish coredump. hex formatted`。首抓因一个 127 字符 HEX
+  行被拒绝；有效重抓全部为偶数长度 HEX。
+- 离线解码：24,731 B 原始数据转换为 6,348 B ELF32 little-endian RISC-V CORE，
+  3 个 program headers 的末端等于文件大小；准确负测 ELF 恢复 LWP 9、
+  `pc=__assert+82`、有效 SP/RA/FP 和
+  `__assert -> coredump_fatal_thread -> nxtask_start`。
+- 恢复与回归：同一串口 fd 复位后重新进入 2 Mbps NSH。最终产品 `help` 不含
+  测试命令；GPIO edge、TIMER-001/002/005、100 ms oneshot、WDT-002/003 和
+  最终存活检查全部通过。
+- 语义边界：core 无 build-id，必须冻结并校验准确 ELF/bin/config 身份；当前
+  `DEBUG_SYMBOLS=n` 只承诺函数符号栈。kernel-thread panic 保存 coredump 期间的
+  PC/SP；early bringup、full dump、真实 RAM region、压缩和 base64 未覆盖。
 
 ## 启动、调度与低功耗
 

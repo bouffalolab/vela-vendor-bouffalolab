@@ -1,0 +1,24 @@
+config BL_OS_FEATURE_TESTS_SYSLOG_COREDUMP
+	bool "Syslog coredump test"
+	default n
+	depends on BUILD_FLAT && BUILTIN
+	depends on COREDUMP && BOARD_COREDUMP_SYSLOG
+	depends on DEBUG_ASSERTIONS
+	---help---
+		Enable the controlled syslog coredump test.
+
+if BL_OS_FEATURE_TESTS_SYSLOG_COREDUMP
+
+config BL_OS_FEATURE_TESTS_SYSLOG_COREDUMP_PROGNAME
+	string "Program name"
+	default "syslog_coredump_test"
+
+config BL_OS_FEATURE_TESTS_SYSLOG_COREDUMP_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_OS_FEATURE_TESTS_SYSLOG_COREDUMP_STACKSIZE
+	int "Task stack size"
+	default 4096
+
+endif

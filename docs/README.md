@@ -6,3 +6,5 @@
   `MM_RECORD_PID`、`MM_RECORD_SEQNO`，并按 PID 和分配窗口定位未释放块。
 - [BL616CL 编译器栈保护与受控负测](bl616cl-stack-canary.md)：配置和验证
   `STACK_CANARIES`、编译器插桩、受控 canary 失败、恢复和外设回归。
+- [BL616CL Syslog Coredump 配置与离线解码](bl616cl-syslog-coredump.md)：配置和
+  验证单线程 coredump、受控 kernel panic、完整串口抓取、ELF core 和 GDB 回溯。
