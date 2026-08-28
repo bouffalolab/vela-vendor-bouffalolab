@@ -141,7 +141,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | ID | 能力与目标选项 | 状态 | 裁剪和依赖 | 验证要求 |
 |---|---|---|---|---|
 | D01 | CPU load：`SCHED_CPULOAD_SYSCLK` | 已验证（ST004） | `SYSTEM_CPULOAD` 只提供可裁剪测试负载；tick 同步采样只能作基础观测 | USB2 实测 idle、单个 50% 和两个 50% 聚合满载；procfs、`ps`、`top` 均随负载变化；关闭态裁剪成立 |
-| D02 | IRQ monitor：`SCHED_IRQMONITOR` | 可直接开启，P0 | 依赖 procfs；当前 alarm driver 已提供 `up_perf_*`；关注每 IRQ 两次时间读取开销 | `/proc/irqs` count/rate/max time；读后清零；1 kHz tick 开销和延迟 |
+| D02 | IRQ monitor：`SCHED_IRQMONITOR` | 已验证（ST005） | 依赖 procfs；当前 alarm driver 已提供 `up_perf_*`；每 IRQ 两次时间读取开销已在实板观察 | USB2 实测 `irqinfo`/`/proc/irqs` 的 count/rate/max time、连续窗口重计数、GPIO/timer/oneshot IRQ 变化和外设回归；关闭态裁剪成立 |
 | D03 | critical monitor：`SCHED_CRITMONITOR`、`SYSTEM_CRITMONITOR` | 可直接开启，P1 诊断 | 首轮阈值关闭，只观测；与 trace 分开验证 | `/proc/critmon`；受控长临界区；再设阈值验证告警 |
 | D04 | Note RAM trace：instrumentation、`DRIVERS_NOTERAM`、`SYSTEM_TRACE` | 可直接开启，P1 诊断 | 按 switch/IRQ/heap 分批启用；不能记录 csection/spinlock 到 Note RAM | start/stop/dump；时间单调；已知事件顺序；ring overflow 语义 |
 | D05 | syslog coredump：`COREDUMP`、`BOARD_COREDUMP_SYSLOG` | 可直接开启，P1 诊断 | RISC-V 已有 TCB info；首轮不开 full/compression，可选 base64 | assert 后完整首尾；匹配 ELF 解码；恢复 PC/SP/触发线程栈 |
@@ -191,6 +191,43 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
   `/proc/cpuload` 仍为 0.0%。
 - 适用边界：SYSCLK 与系统 tick 同源，结果可用于趋势和基础占用观测，不能
   作为同步于 tick 的特殊线程或高精度性能计量依据。
+
+### D02 实测结果（2026-08-28）
+
+- 配置：在 D01 基线上通过 Kconfig 选择 `CONFIG_SCHED_IRQMONITOR=y`，保持
+  `CONFIG_FS_PROCFS=y`、1 kHz tick 和 BL616CL MTIME `up_perf_*` 时间源；
+  未启用 EXTCLK、tickless、PMU、CLIC threshold 或嵌套 IRQ。
+- 通路：`riscv_doirq()` 进入通用 `irq_dispatch()`，每个 IRQ 前后读取
+  MTIME 并更新 count/max time；`irqinfo` 和 `/proc/irqs` 复用该快照。
+- 构建：D02 关闭态 clean build `1202/1202`，开启态 clean build
+  `1204/1204` 均成功。关闭态 `/proc/irqs` 不存在且 `irqinfo` 未注册；
+  开启态 ELF 含 `cmd_irqinfo`、`irq_foreach`、`g_irq_operations` 和
+  `irq_dispatch`，并生成 `sched/irq/irq_foreach.c.o`、`irq_procfs.c.o`。
+- 制品：开启态 `final_nuttx` 为 683,008 字节，`text/data/bss` 为
+  `295,086/14,164/10,952`，`nuttx.bin` 为 315,360 字节。相对 D02 关闭态
+  增加 ELF 640 字节、text 1,456 字节、data 128 字节、bss 1,200 字节、
+  bin 1,584 字节；`g_irq_operations` 符号大小为 40 字节。
+- 烧录与启动：`nuttx.bin` SHA256 为
+  `61709c3f9eb5eb9c878372bcef80513be07ec8b7143b5c63ca6a08ccc320b0ea`；
+  `/dev/ttyUSB2` 分区烧录的 host/device SHA 校验一致，2 Mbps 复位后匹配
+  `NuttShell (NSH)` 和 `nsh>`。
+- 基础统计：`irqinfo` 首次显示 MTIMER IRQ 23；随后 `/proc/irqs` 显示
+  IRQ 23 约 1000.000 Hz、TIMER0 IRQ 60 和其他已挂接 IRQ。等待 8 秒的
+  稳定窗口中 IRQ 23 为 44,606 次、rate 1000.000，`ps` IDLE 99.1%。
+- 清零窗口：读取一次后再次读取会从新的窗口计数；`sleep 2` 后首个窗口
+  IRQ 23 为 12,388 次、rate 1000.000，紧接读取的新窗口为 2 次、rate
+  1000.000。由于 MTIMER 和 UART 在读取期间仍产生中断，不能期待字面 0，
+  该结果证明的是快照重新计数而非静止硬件。
+- 外设事件：timer 5 轮 100 ms 测试后 IRQ 60 计数 56；100 ms oneshot
+  后新增 IRQ 69 计数 1。GPIO edge 64 轮恢复后 IRQ 76 计数 756；最终
+  `irqinfo`/`/proc/irqs` 均能看到对应事件，GPIO、timer、oneshot、WDT
+  回归全部通过。
+- 开销：monitor 开启态稳定窗口 IDLE 约 99.1%，外设回归期间 IDLE 98.8%；
+  统计含每 IRQ 两次 MTIME 读取及 count/max 更新，数值作为本固件窗口的
+  观察结果，不外推为固定百分比性能损失。
+- 语义边界：`TIME` 是窗口内最大 ISR 时间，单位微秒，不是平均耗时；读取
+  会快照并清零，边界 IRQ 可能落在任一窗口。procfs 小缓冲多次读取的输出
+  完整性依赖调用方式，本板 NSH 512 字节读取已完整显示现役 IRQ。
 
 ## 启动、调度与低功耗
 
