@@ -207,14 +207,16 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | D01 | CPU load：`SCHED_CPULOAD_SYSCLK` | 已验证（ST004） | `SYSTEM_CPULOAD` 只提供可裁剪测试负载；tick 同步采样只能作基础观测 | USB2 实测 idle、单个 50% 和两个 50% 聚合满载；procfs、`ps`、`top` 均随负载变化；关闭态裁剪成立 |
 | D02 | IRQ monitor：`SCHED_IRQMONITOR` | 已验证（ST005） | 依赖 procfs；当前 alarm driver 已提供 `up_perf_*`；每 IRQ 两次时间读取开销已在实板观察 | USB2 实测 `irqinfo`/`/proc/irqs` 的 count/rate/max time、连续窗口重计数、GPIO/timer/oneshot IRQ 变化和外设回归；关闭态裁剪成立 |
 | D03 | critical monitor：`SCHED_CRITMONITOR`、`SYSTEM_CRITMONITOR` | 已验证（ST006） | 正式配置只统计，不设告警阈值；阈值和 panic 使用临时配置独立验证 | USB2 实测全局/线程统计、读后新窗口、monitor 启停、告警与 panic 边界及外设回归；关闭态裁剪成立 |
-| D04 | Note RAM trace：instrumentation、`DRIVERS_NOTERAM`、`SYSTEM_TRACE` | 可直接开启，P1 诊断 | 按 switch/IRQ/heap 分批启用；不能记录 csection/spinlock 到 Note RAM | start/stop/dump；时间单调；已知事件顺序；ring overflow 语义 |
+| D04 | Note RAM trace：instrumentation、`DRIVERS_NOTERAM`、`SYSTEM_TRACE` | 已验证（ST011） | 正式只开 switch/IRQ，默认停止、8 KiB overwrite；测试 app 默认关闭；禁止 csection/spinlock 回写 Note RAM | USB2 实测 start/stop/dump、时间单调、事件顺序、过滤、严格 overflow、裁剪和外设回归 |
 | D05 | syslog coredump：`COREDUMP`、`BOARD_COREDUMP_SYSLOG` | 已验证（ST010） | 单触发线程、无 full/compression/base64；零长度 memory range 哨兵；关闭彩色 syslog；负测 app 默认关闭 | USB2 完整 HEX 转换为 ELF32 RISC-V CORE；准确负测 ELF 恢复 LWP 9、PC/SP 和触发栈；最终产品裁剪与外设回归成立 |
 | D06 | stack/cpu/resource monitor 工具 | 可直接开启，P1 | 分别依赖 coloration、cpuload、procfs；工具本身也消耗资源 | 启停、周期、输出和自身 CPU/stack 开销 |
 | D07 | EXTCLK CPU load | 需要资源重构，P2 | TIMER1 当前由 `/dev/oneshot` 独占；必须用 choice 确定 owner | 与 SYSCLK 对照；异步采样；不能同时注册同一 lower-half |
 | D08 | E907 hardware perf/perf-tools | 需要适配，P2 | 通用 `SCHED_PERF_EVENTS` 不等于硬件 PMU 已接入；依赖 A08 | cycle/event 正确性、溢出、用户工具和开销 |
 
 Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启用，
-因为 ring buffer 自身进入 critical section，会形成 instrumentation 递归。
+因为 ring buffer 自身进入 critical section，会形成 instrumentation 递归。D04 的
+完整配置、命令、流程和实测数据见
+[BL616CL Note RAM Trace 配置与验证](bl616cl-noteram-trace.md)。
 
 源码入口：`nuttx/sched/Kconfig`、`nuttx/sched/irq/`、
 `nuttx/drivers/note/`、`nuttx/sched/misc/coredump.c`、`apps/system/trace/`。
@@ -339,6 +341,32 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 - 语义边界：procfs 读取会返回并清零最大值，线程累计运行时间继续保留；启动
   窗口的秒级 preemption 值包含 bringup 阶段，不能当作稳态延迟。阈值单位是
   `perf_gettime()` tick，本板 MTIME 为 1 MHz，因此一个 tick 为 1 us。
+
+### D04 实测结果（2026-08-29）
+
+- 正式配置只启用 task switch 和 IRQ handler，filter default mode 为 `0x1`，
+  Note RAM buffer 为 8,192 B，overwrite 默认开启；trace 开机保持停止。
+- 通路：scheduler switch 和通用 IRQ dispatch 经 Note filter 写入 RAM backend；
+  时间源复用 `arch_alarm`、BL616CL oneshot 和 RISC-V MTIMER，无私有 trace hook。
+- 构建与裁剪：D04 关闭基线、验收 app 开启态和最终产品均 clean build 成功；
+  最终产品为 `1217/1217`，保留 Note/trace archive 和产品符号，不含测试对象、
+  archive、命令或 main。
+- 制品：最终 `final_nuttx` 为 758,412 B，`text/data/bss` 为
+  `364,894/14,848/20,076`，`nuttx.bin` 为 385,472 B。相对关闭基线增加
+  ELF 14,888 B、text 10,888 B、data 364 B、bss 8,468 B 和 bin 11,248 B。
+- 命令语义：非法 duration 不改变状态；普通 start 清空，`start -c` 追加，
+  `start 1` 自动停止；overwrite、switch、IRQ 总开关和 99 个 IRQ mask 均可恢复。
+- 事件证据：dump 观察到 task switch、software IRQ 11、MTIMER IRQ 23 和
+  TIMER/UART IRQ 60，entry/exit 顺序正确，时间戳单调；全屏蔽 IRQ 后只剩 switch。
+- overflow：no-overwrite 下 4,000 次 yield 后 mode=2、unread=8,164，clear 后
+  mode=0/unread=0，恢复 overwrite 后 mode=1；overwrite 保留停止前最近窗口。
+- 工具修复：`trace` 总览的 `NOTE_GETIRQFILTER` 改为传完整命名结构，USB2 对
+  0/99/0 个屏蔽 IRQ 的总览和独立命令显示一致。
+- 回归：最终产品 GPIO edge 64 轮、TIMER-001/002/005、100 ms oneshot、
+  WDT-002/003 和最终 NSH 存活全部通过；100 ms timer 最大误差 299 us
+  （0.299%），prescaler 比例 2.001。
+- 边界：buffer 易失且有限；1 kHz switch 可快速覆盖旧数据。2 Mbps 大量 ASCII
+  dump 出现过少数字符缺失，不能声明逐字节完整；其他事件域和 crash dump 未验证。
 
 ### D05 实测结果（2026-08-29）
 
