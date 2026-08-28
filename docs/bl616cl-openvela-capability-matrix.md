@@ -3,10 +3,10 @@
 本文是 BL616CL OpenVela 能力状态的唯一结论入口。实施记录、测试原始日志和
 临时探测不在本文复制；每个能力完成后回写“状态”和“验证”列。
 
-最后核对：2026-08-28
+最后核对：2026-08-29
 
-- `vendor/bouffalolab`: `7e42593764163555ca34902472b2095b248ee765`
-- `nuttx`: `e987a81c32cab008d1a8521669e5488d00271322`
+- `vendor/bouffalolab`: `7d00d14a1b8cdb9525ee9a795a91e6134c9fe1e7`
+- `nuttx`: `2c63cf17085b6b7e60b841fd79de6487d950aeed`
 - 板卡：Ai-M64L-32S-Kit
 - 配置：`bl616cl/ai-m64l-32s-kit/configs/nsh`
 
@@ -123,7 +123,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 
 | ID | 能力与目标选项 | 状态 | 裁剪和依赖 | 验证要求 |
 |---|---|---|---|---|
-| M01 | 分配归属：`MM_RECORD_PID`、`MM_RECORD_SEQNO` | 可直接开启，P0 | 默认 allocator 内建；有固定每块开销 | 多 PID 分配/释放后 memdump 归属和序号正确 |
+| M01 | 分配归属：`MM_RECORD_PID`、`MM_RECORD_SEQNO` | 已验证（ST007） | 默认 allocator 内建；RV32 每个已分配块增加 8 B，最小 chunk 从 16 B 增至 32 B | USB2 实测多线程归属、realloc 归属变化、sequence 窗口、释放清除和重复实例；关闭态裁剪成立 |
 | M02 | 分配回溯：`MM_RECORD_STACK`、`MM_RECORD_STACK_DEFAULT` | 可直接开启，P1 诊断 | 依赖 `LIBC_BACKTRACE_DEPTH>0`；先完成 A01 | 分配栈可符号化；释放后不残留；量化每块开销 |
 | M03 | OOM/破坏诊断：`DEBUG_MM`、`MM_DUMP_ON_FAILURE`、`MM_FILL_ALLOCATIONS`、`MM_NODE_GUARDSIZE` | 可直接开启，P1 诊断 | 高日志、内存和性能开销；不进默认产品配置 | OOM、越界、UAF 定向负测；正常 ostest |
 | M04 | KASAN generic heap：`MM_KASAN_GENERIC`、`MM_KASAN_INSTRUMENT_ALL` | 可直接尝试，P1 诊断 | GCC 参数探测通过；首轮关闭 `MM_KASAN_GLOBAL` | heap OOB/UAF 均报告；启动、heap shrink、镜像和性能量化 |
@@ -135,6 +135,36 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 源码入口：`nuttx/mm/Kconfig`、`nuttx/mm/kasan/`、
 `nuttx/arch/risc-v/src/cmake/Toolchain.cmake`、
 `chips/bl616cl/bl616cl_allocateheap.c`、`drivers/soc/bl616cl/std/src/bl616cl_psram.c`。
+
+### M01 实测结果（2026-08-29）
+
+- 正式配置：`CONFIG_MM_RECORD_PID=y`、`CONFIG_MM_RECORD_SEQNO=y`；测试命令
+  `CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD` 默认关闭，不进入产品固件。
+- 通路：BL616CL 仍只提供 heap 边界；通用 allocator 在 allocation node 中记录
+  TID 和 sequence，procfs 提供 `/proc/<tid>/heap` 与 `/proc/memdump`，无需
+  BL616CL 或 RISC-V 私有 hook。
+- 构建与裁剪：关闭态和开启态 clean build 均通过。关闭态不含
+  `g_mm_seqno`、PID heap procfs 操作和 M01 配置；正式开启态保留这些能力，
+  但不含 `mm_record_test` 命令符号。
+- 制品：关闭态 `final_nuttx` 为 688,528 B，`text/data/bss` 为
+  `300,734/14,292/11,128`，`nuttx.bin` 为 321,136 B；开启态分别为
+  692,816 B、`302,174/14,292/11,128` 和 322,576 B。增量为 ELF 4,288 B、
+  text 1,440 B、bin 1,440 B，data/bss 不变。
+- 堆开销：RV32 上 PID 与 sequence 合计使每个已分配块增加 8 B；allocator
+  对齐使最小 chunk 从 16 B 增至 32 B，小对象不能只按 8 B 估算实际增量。
+- USB2 运行：测试 controller/worker TID 为 4/5/6。controller 将 worker0
+  的 64 B 块 realloc 为 2,000 B 后，sequence 窗口 `[85,99]` 只在 PID 4
+  下出现一个 2,016 B 块，PID 5/6 为 0，证明 realloc 归属为执行线程。
+- 释放与复用：free 后 PID 4 同一窗口为 0，worker procfs 节点随线程退出消失；
+  后续两轮实例 controller TID 从 11 变为 15，均能创建和完整释放。
+- 栈前置：全量 memdump 在 2,048 B init 栈上触发栈断言，因此独立提高
+  `CONFIG_INIT_STACKSIZE` 和 `CONFIG_SYSTEM_NSH_STACKSIZE` 到 4,096 B。
+  实测 `nsh_main` 可用 4,032 B、已用 2,328 B，高水位 57.7%。
+- 回归：GPIO edge 3 个恢复周期、TIMER-001/002/005、WDT-002/003 均通过；
+  TIMER-001 10 ms 最大误差 233 us（2.330%），TIMER-002 divider 比例 2.000，
+  WDT-002 在 1,000 ms timeout 下每 500 ms 喂狗并持续 3,006 ms，无复位。
+- 完整配置、命令、流程和判定标准见
+  [BL616CL 堆分配归属与序号观测](bl616cl-mm-record.md)。
 
 ## 故障留证与可观测性
 

@@ -1,0 +1,27 @@
+config BL_OS_FEATURE_TESTS_MM_RECORD
+	bool "Heap allocation record test"
+	default n
+	depends on BUILD_FLAT && BUILTIN && !DISABLE_PTHREAD
+	depends on MM_RECORD_PID && MM_RECORD_SEQNO
+	---help---
+		Enable the deterministic heap allocation record test.
+
+if BL_OS_FEATURE_TESTS_MM_RECORD
+
+config BL_OS_FEATURE_TESTS_MM_RECORD_PROGNAME
+	string "Program name"
+	default "mm_record_test"
+
+config BL_OS_FEATURE_TESTS_MM_RECORD_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_OS_FEATURE_TESTS_MM_RECORD_STACKSIZE
+	int "Stack size"
+	default 2048
+
+config BL_OS_FEATURE_TESTS_MM_RECORD_WORKER_STACKSIZE
+	int "Worker thread stack size"
+	default PTHREAD_STACK_DEFAULT
+
+endif
