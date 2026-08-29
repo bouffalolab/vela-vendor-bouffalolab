@@ -10,6 +10,8 @@
 - [BL616CL TRNG 随机设备适配与验证](bl616cl-trng.md)：配置和验证
   `/dev/random`、可选硬件 `/dev/urandom`、任意长度读取、基本数据检查、裁剪和
   外设回归。
+- [BL616CL RISC-V Lazy FPU 配置与验证](bl616cl-lazy-fpu.md)：配置和验证
+  `ARCH_LAZYFPU`、双任务与异步 signal FPU 状态隔离、裁剪、开销和外设回归。
 - [BL616CL Syslog Coredump 配置与离线解码](bl616cl-syslog-coredump.md)：配置和
   验证单线程 coredump、受控 kernel panic、完整串口抓取、ELF core 和 GDB 回溯。
 - [BL616CL Note RAM Trace](bl616cl-noteram-trace.md)：配置和验证 task/IRQ trace、

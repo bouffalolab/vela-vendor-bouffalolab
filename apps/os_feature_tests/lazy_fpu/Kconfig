@@ -1,0 +1,39 @@
+config BL_OS_FEATURE_TESTS_LAZY_FPU
+	bool "RISC-V FPU context test"
+	default n
+	depends on ARCH_RISCV && ARCH_RV32 && ARCH_FPU
+	depends on !ARCH_DPFPU && !ARCH_QPFPU
+	depends on !DISABLE_PTHREAD && !DISABLE_SIGNALS
+	depends on !DISABLE_POSIX_TIMERS
+	depends on BUILD_FLAT && BUILTIN
+	---help---
+		Enable a two-thread FPU context isolation test. Each worker keeps
+		distinct values in the RISC-V callee-saved floating-point registers
+		across scheduler and timer interrupt activity.
+
+if BL_OS_FEATURE_TESTS_LAZY_FPU
+
+config BL_OS_FEATURE_TESTS_LAZY_FPU_PRIORITY
+	int "Task priority"
+	range 2 255
+	default 100
+
+config BL_OS_FEATURE_TESTS_LAZY_FPU_STACKSIZE
+	int "Main task stack size"
+	default 3072
+
+config BL_OS_FEATURE_TESTS_LAZY_FPU_WORKER_STACKSIZE
+	int "Worker stack size"
+	default 2048
+
+config BL_OS_FEATURE_TESTS_LAZY_FPU_ITERATIONS
+	int "Context switch iterations"
+	range 1 10000
+	default 200
+
+config BL_OS_FEATURE_TESTS_LAZY_FPU_SLEEP_US
+	int "Worker sleep interval in microseconds"
+	range 1 1000000
+	default 1000
+
+endif

@@ -48,7 +48,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | A02 | 栈高水位：`STACK_COLORATION`、`STACKCHECK_MARGIN`、`SYSTEM_STACKMONITOR` | 已验证（ST003） | RISC-V 通用实现；BL616CL 在开中断前补齐 IRQ 栈染色 | USB2 实测 `ps` 高水位、monitor 启停及 GPIO/timer/oneshot/WDT 回归；关闭态裁剪成立 |
 | A03 | 编译器 stack canary：`STACK_CANARIES` | 已验证（ST009） | 工具链全局加入 `-fstack-protector-all`；负测 app 默认关闭 | USB2 实测精确一字节覆盖进入 `__stack_chk_fail`/panic，普通任务终止后 NSH 存活，冷启动及外设回归通过；关闭态对照和测试 app 裁剪成立 |
 | A04 | 静态栈报告：`STACK_USAGE`、`STACK_USAGE_WARNING` | 可直接开启，P2 工具 | 仅构建期，不作为运行保护 | 生成 `.su`；阈值负测能使构建告警 |
-| A05 | lazy FPU：`ARCH_LAZYFPU` | 可直接开启，P1 优化 | 当前已具备 FPU 和 RISC-V lazy 实现 | 双浮点任务高频切换加 IRQ；数值隔离正确；比较上下文开销 |
+| A05 | lazy FPU：`ARCH_LAZYFPU` | 已验证（ST014） | RISC-V 通用实现；依赖 NuttX user context/signal 修复；测试 app 默认关闭 | USB2 实测双任务、异步 signal 全 FPR/FCSR、MTIMER、coredump、裁剪、开销和外设回归 |
 | A06 | CLIC threshold 上下文：`ARCH_RV_HAVE_CLIC` | 需要适配，P2 | 当前自定义 CLIC 仍用全局 `mstatus` 屏蔽；开启会改变 trap frame 和 `up_irq_save()` 语义 | 嵌套/优先级/上下文切换专项；不能只做编译验证 |
 | A07 | NuttX range cache API：`ARCH_ICACHE`/`ARCH_DCACHE` 能力 | 需要适配，P1 | 当前仅有启动期全 cache clean/invalidate；DMA 前置 | cacheable/non-cacheable DMA buffer 一致性；XIP 和启动回归 |
 | A08 | cycle/HPM perf events：`ARCH_HAVE_PERF_EVENTS`、`ARCH_PERF_EVENTS` | 需要适配，P2 | RISC-V 有参考 `riscv_perf_cycle.c`，当前未编入且未初始化频率 | 与 MTIME 对时；溢出、换算、开销；之后才评估 perf-tools |
@@ -152,6 +152,35 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 - 能力边界：通用 guard 是固定自地址值，可检测非定向覆盖，不是高熵抗攻击
   canary。完整配置、命令、反汇编门禁、流程和判定标准见
   [BL616CL 编译器栈保护与受控负测](bl616cl-stack-canary.md)。
+
+### A05 实测结果（2026-08-29）
+
+- 正式配置启用 `CONFIG_ARCH_LAZYFPU=y`，专项 `lazy_fpu_test` 和 D05 coredump
+  负测命令默认关闭；关闭 lazy 后恢复 eager frame 和 TCB 裁剪边界。
+- 启用审计发现两项上游阻断：`up_saveusercontext()` 向 132 B lazy buffer 写入
+  264 B，以及异步 signal 复用唯一 `fregs` 覆盖原任务 FPR/FCSR。NuttX signed
+  commit `ebf0cb7ddd5` 修复尺寸契约和独立 signal 快照，对应上游 PR `#356`。
+- 反汇编证明 eager `exception_common` 分配 264 B、lazy 分配 132 B；lazy
+  `riscv_savefpu()` 只保存 Dirty 状态，restore 只恢复 Clean/Dirty 状态。
+- 双线程分别保持不同 `fs0-fs11` 和 FCSR，执行 200 次 1 ms sleep；连续三轮两个
+  worker 均 `errors=0`，MTIMER 为 434/435/434 ticks，最终均 PASS。
+- running worker 使用 `SIGEV_THREAD_ID` 接收 10 ms POSIX timer signal；三轮均为
+  `wait=done`、worker/handler TID 一致、32 个 FPR 和 FCSR `errors=0`。
+- 非当前低优先级线程持有全部 32 个 FPR 和 FCSR；`SIGUSR1` handler 改写全部
+  caller-saved FPR、FCSR 并发生三次阻塞切换。三轮 signal count 均为 1，
+  32 FPR 和 FCSR 均 `errors=0`。
+- lazy 测试固件的 coredump safe 正常返回；fatal 输出完整 HEX coredump 后复位恢复
+  NSH，证明 264 B `SAVEUSERCONTEXT_SIZE` 缓冲区路径可用。本项不重复 D05 离线
+  ELF 解码验收。
+- 正式产品 clean build `1219/1219` 成功，`help`、Ninja 对象和 ELF 字符串均无
+  两个测试命令；USB2 回归通过 GPIO edge、TIMER-001/002/005、100 ms oneshot、
+  WDT-002/003 和最终存活。TIMER-001 最大误差 916 us（0.916%），TIMER-002
+  周期比例 2.003，WDT-002 在 3,026 ms 内喂狗 6 次且无复位。
+- 相对 eager，正式 lazy ELF 总大小不变，text 增加 88 B，bss 增加 272 B，raw
+  heap 减少 272 B；exception frame 减少 132 B。signals enabled 时每个 TCB
+  增加运行态和 signal 快照共 264 B，不能只按静态 bss 估算总 RAM。
+- 完整配置、调用链、构建命令、单 fd 流程、实测数据、资源开销和限制见
+  [BL616CL RISC-V Lazy FPU 配置与验证](bl616cl-lazy-fpu.md)。
 
 ## MM 与内存保护
 
