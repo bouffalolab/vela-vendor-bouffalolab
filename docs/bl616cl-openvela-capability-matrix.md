@@ -160,7 +160,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | M01 | 分配归属：`MM_RECORD_PID`、`MM_RECORD_SEQNO` | 已验证（ST007） | 默认 allocator 内建；RV32 每个已分配块增加 8 B，最小 chunk 从 16 B 增至 32 B | USB2 实测多线程归属、realloc 归属变化、sequence 窗口、释放清除和重复实例；关闭态裁剪成立 |
 | M02 | 分配回溯：`MM_RECORD_STACK`、`MM_RECORD_STACK_DEFAULT` | 可直接开启，P1 诊断 | 依赖 `LIBC_BACKTRACE_DEPTH>0`；先完成 A01 | 分配栈可符号化；释放后不残留；量化每块开销 |
 | M03 | OOM/破坏诊断：`DEBUG_MM`、`MM_DUMP_ON_FAILURE`、`MM_FILL_ALLOCATIONS`、`MM_NODE_GUARDSIZE` | 可直接开启，P1 诊断 | 高日志、内存和性能开销；不进默认产品配置 | OOM、越界、UAF 定向负测；正常 ostest |
-| M04 | KASAN generic heap：`MM_KASAN_GENERIC`、`MM_KASAN_INSTRUMENT_ALL` | 可直接尝试，P1 诊断 | GCC 参数探测通过；首轮关闭 `MM_KASAN_GLOBAL` | heap OOB/UAF 均报告；启动、heap shrink、镜像和性能量化 |
+| M04 | KASAN generic heap：`MM_KASAN_GENERIC`、`MM_KASAN_INSTRUMENT_ALL` | 已验证（ST012） | 全镜像插桩；正式关闭测试 app 和 `MM_KASAN_GLOBAL`；启动 early stop 处理 warm reset | USB2 实测 heap 左/右越界和 UAF 精确报告、合法访问、连续 warm reset、裁剪、开销和外设回归 |
 | M05 | UBSAN：`MM_UBSAN`、`MM_UBSAN_ALL` | 可直接尝试，P1 诊断 | GCC 参数探测通过；首轮不启用 trap | overflow/alignment 等负测；正常回归和开销量化 |
 | M06 | TLSF、mempool、task heap | 延后 | 会改变碎片、时延或隔离语义，缺少目标指标 | allocation latency、碎片、峰值、压力回归后再决策 |
 | M07 | PSRAM 第二 heap：`MM_REGIONS>1` | 需要适配，P2 | 需 PSRAM init、cache/TZC、linker region；当前 `riscv_addregion()` 为空 | 探测容量、跨 region 分配、DMA/cache、一致性和压力 |
@@ -199,6 +199,31 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
   WDT-002 在 1,000 ms timeout 下每 500 ms 喂狗并持续 3,006 ms，无复位。
 - 完整配置、命令、流程和判定标准见
   [BL616CL 堆分配归属与序号观测](bl616cl-mm-record.md)。
+
+### M04 实测结果（2026-08-29）
+
+- 正式配置启用 generic、instrument-all、2 个 region、读写检测和 fatal panic，
+  关闭 null pointer、global 和 `TESTING_KASAN`；GCC 13.4.0 编译参数为
+  `-fsanitize=kernel-address`、`asan-stack=0`、threshold 0 和
+  `asan-globals=0`。
+- BL616CL `__start` 在 gp/sp/mtvec 建立后、普通 C 和 `riscv_fpuconfig()` 前调用
+  未插桩的 `kasan_stop()`；同一 USB2 fd 连续三次 warm reset 均匹配 NSH，未出现
+  early report/assert。
+- 测试态 clean build `1220/1220` 成功。合法 heap 访问前后两次无误报；heap
+  左越界 `0x60fcdcff`、右越界 `0x60fcdd14` 和 UAF `0x60fcdd00` 均产生地址匹配的
+  1 B write report，backtrace 命中对应测试函数和 `run_child`。预期 fault 未触发而
+  正常返回会被判 FAIL。
+- 最终产品 clean build `1218/1218` 成功，`help`、archive、符号和字符串均无
+  `kasantest` 残留；`nuttx.bin` SHA256 为
+  `81a56dc3580a4b535f0a98290d2a6251797e4ebeb624b0ae09bd1702b244ea37`。
+- 正式产品相对关闭态：`final_nuttx` 增加 75,380 B，text 增加 75,126 B，
+  `nuttx.bin` 增加 75,232 B。raw heap 从 274,192 B 降至 269,696 B，再扣除
+  8,440 B descriptor/shadow，allocator region 为 261,256 B。
+- 最终产品 USB2 回归通过 GPIO edge、TIMER-001/002/005、100 ms oneshot、
+  WDT-002/003 和最终 NSH 存活；TIMER-001 100 ms 最大误差 806 us（0.806%），
+  TIMER-002 周期比例 2.003，WDT-002 在 3,026 ms 内喂狗 6 次且无复位。
+- 完整配置、命令、原始关键输出、裁剪门禁、开销和限制见
+  [BL616CL Generic KASAN 配置与验证](bl616cl-kasan.md)。
 
 ## 故障留证与可观测性
 

@@ -55,6 +55,10 @@ __start:
   ori     t0, t0, 3
   csrw    mtvec, t0
 
+#ifdef CONFIG_MM_KASAN_INSTRUMENT
+  call    kasan_stop
+#endif
+
 #ifdef CONFIG_ARCH_FPU
   call    riscv_fpuconfig
 #endif
