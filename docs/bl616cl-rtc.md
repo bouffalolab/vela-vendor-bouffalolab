@@ -281,15 +281,155 @@ rtc_product_alive
 `c999b23d1e84ba3683ac1c1806627fde3d881d9c7c1520790c2b8dec7ed7aa85`。
 烧录器读取 app 分区后的 device SHA256 与 host SHA256 相同。
 
-## 限制与后续
+## ST017 RTC upper-half ioctl 参数校验
+
+### 背景
+
+P03 实板回归之外，OpenVela 通用 RTC upper-half 的九个标准 ioctl 在
+`CONFIG_DEBUG_ASSERTIONS=n` 时仍可能把 NULL 指针传给 lower-half，或用非法
+Alarm/periodic ID 访问 upper-half 状态。`DEBUGASSERT` 在 release 配置中不求值，
+所以这不是 BL616CL 硬件异常，而是所有 RTC lower-half 都可能遇到的公共接口缺口。
+
+### 方案
+
+在每个标准 ioctl 首次解引用参数、访问 `alarminfo[]`、访问 periodic 状态或调用
+lower-half 之前加入显式运行时判断：
+
+| ioctl | 合法输入 | 非法输入结果 |
+|---|---|---|
+| `RTC_RD_TIME` | 非 NULL `rtc_time *` | `EINVAL`，不调用 lower |
+| `RTC_SET_TIME` | 非 NULL `rtc_time *` | `EINVAL`，不调用 lower，不同步系统时间 |
+| `RTC_HAVE_SET_TIME` | 非 NULL `bool *` | `EINVAL`，不调用 lower |
+| `RTC_SET_ALARM` | 非 NULL，`id < CONFIG_RTC_NALARMS` | `EINVAL`，upper/lower 状态不变 |
+| `RTC_SET_RELATIVE` | 非 NULL，`id < CONFIG_RTC_NALARMS` | `EINVAL`，upper/lower 状态不变 |
+| `RTC_CANCEL_ALARM` | `0 <= id < CONFIG_RTC_NALARMS` | `EINVAL`，不索引状态、不调用 lower |
+| `RTC_RD_ALARM` | 非 NULL，`id < CONFIG_RTC_NALARMS` | `EINVAL`，输出和状态不变 |
+| `RTC_SET_PERIODIC` | 非 NULL 且 `id == 0` | `EINVAL`，单实例状态不变 |
+| `RTC_CANCEL_PERIODIC` | `id == 0` | `EINVAL`，不调用 lower |
+
+scalar cancel 命令先校验原始 `unsigned long arg`，再转换为 `int`，避免在更宽
+ABI 上将 `0x100000000` 截断成合法 ID 0。lower 方法缺失仍返回 `ENOSYS`，未识别
+的私有 ioctl 仍按原样转发；本项不改变日期字段、相对时间、周期、PID、
+`sigevent`、锁序或销毁生命周期。
+
+### 测试构成
+
+测试 app 位于 `apps/os_feature_tests/rtc_ioctl/`，由
+`CONFIG_BL_OS_FEATURE_TESTS_RTC_IOCTL` 控制，默认关闭并且只允许 flat built-in
+配置。kernel fake lower-half 注册 `/dev/rtc99` 和一个所有方法均缺失的
+`/dev/rtc98`，记录 lower 方法及顺序、调用次数、ID、Alarm 时间、relative 秒数、
+periodic timespec、callback/priv 有效性、私有命令与参数、guard canary 和 destroy
+次数。测试完成后关闭 fd 并 unlink 两个节点，确认 fake lower 被销毁一次。
+
+`rtc_ioctl_test -c preflight` 只执行两个不会使旧实现崩溃的 NULL 用例，用来证明
+未修复 upper-half 的红测；`rtc_ioctl_test -c all` 按下列顺序执行：
+
+1. NULL 的 `RD_TIME`、`SET_TIME`、`HAVE_SET_TIME`，再执行三个基础 ioctl 的
+   正常读写和返回值检查。
+2. 在缺失方法设备上，用合法参数逐项调用九个标准 ioctl，确认每项为
+   `ENOSYS`，而不是把缺失方法误报为 `EINVAL` 或成功。
+3. Alarm 先合法布防 ID 0，再覆盖 NULL、结构 ID 上界、scalar cancel 负值/上界和
+   查询输出 guard。非法矩阵后用合法 `RD_ALARM` 确认 `active` 与原 Alarm 时间均未
+   改变；再执行 `SET_RELATIVE`，要求 lower 顺序为 `cancelalarm -> setrelative`，
+   证明 upper 仍观察到原 active 状态，最后取消。
+4. periodic 先合法设置 ID 0，再覆盖 NULL、非零结构 ID、scalar 负值/正值。后续
+   合法替换必须调用 `cancelperiodic -> setperiodic`，证明非法请求没有清除 active
+   状态，最后取消。在 `ULONG_MAX > UINT_MAX` 的 ABI 上额外覆盖低 32 位为零的
+   wrapped ID；BL616CL RV32 上该条件为假，但原始 `arg` 检查覆盖目标机可表达值。
+5. `CONFIG_RTC_IOCTL` 开启时调用一个私有命令，确认命令号、`arg` 和返回值均按原样
+   在 upper/lower 之间转发。
+6. 关闭 fd、unlink 节点，确认 destroy 和 canary；程序最后用 `echo $?` 读取退出码。
+
+每项非法输入的判据都是：返回 `ERROR`、`errno=EINVAL`、fake snapshot 完全不变；
+缺失方法的判据是 `ERROR`、`errno=ENOSYS`；正常路径除了返回 0 或 fake private
+ioctl 的固定结果 77，还必须逐项匹配预期 lower 方法、调用顺序和完整参数快照。
+
+### 命令与流程
+
+```bash
+# debug：构建后按板卡流程烧录，再复位确认 NSH
+python3 vendor/bouffalolab/bl_build.py build \
+  bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-debug -j14
+python3 vendor/bouffalolab/.agents/skills/bl-module-reset/scripts/bl_module_reset.py \
+  --port /dev/ttyUSB2 --baudrate 2000000 \
+  --expect "NuttShell (NSH)" --expect "nsh>"
+
+# 保持同一串口 fd，等待每条命令返回 nsh>
+rtc_ioctl_test -c preflight
+rtc_ioctl_test -c all
+echo $?
+```
+
+运行时不需要重新打开串口，也不发送 `reboot`；`/dev/ttyUSB2` 只是本次实测板卡的
+USB-UART 控制台，不是 RTC 设计或运行依赖。release 流程只把
+`DEBUG_ASSERTIONS` 关闭后重新 clean build，其余运行命令完全相同。
+
+宽 ABI 使用标准 NuttX `sim/nsh` x86-64 配置，打开 RTC driver、Alarm、periodic、
+private ioctl 和同一测试 app；启动模拟器后仍执行 `rtc_ioctl_test -c all` 和
+`echo $?`。
+
+### 实测数据
+
+| 配置 | 构建 | 串口结果 | 断言数 |
+|---|---:|---|---:|
+| 未修复 debug 红测 | 1228/1228 | 两个 NULL 均为 `EFAULT`，`failures=2`，无 panic | 2 |
+| 修复 debug，全 Alarm/periodic/private | 1228/1228 | `failures=0`，NSH `$?=0` | 39 |
+| 修复 release，`DEBUG_ASSERTIONS=off` | 1227/1227 | `failures=0`，NSH `$?=0` | 39 |
+| Alarm-only，periodic/private 关闭 | 1228/1228 | `failures=0`，禁用 case 未出现 | 29 |
+| 基础 RTC，Alarm/periodic/private 关闭 | 1228/1228 | `failures=0`，禁用 case 未出现 | 11 |
+| NuttX sim x86-64，全功能 | 1216/1216 | wrapped-ID case 均 PASS，`$?=0` | 41 |
+
+debug 实测输出为：
+
+```text
+RTC ioctl validation: assertions=on alarm=on periodic=on
+RTC ioctl validation: cases=39 failures=0 result=PASS
+0
+```
+
+release 实测输出为：
+
+```text
+RTC ioctl validation: assertions=off alarm=on periodic=on
+RTC ioctl validation: cases=39 failures=0 result=PASS
+0
+```
+
+Alarm-only 输出 `assertions=on alarm=on periodic=off`、
+`cases=29 failures=0 result=PASS`；基础输出
+`assertions=on alarm=off periodic=off`、`cases=11 failures=0 result=PASS`。
+四种配置均在 `/dev/ttyUSB2`、2 Mbps 上完成烧录后复位，启动匹配
+`NuttShell (NSH)` 和 `nsh>`。
+
+x86-64 输出额外包含：
+
+```text
+PASS: RTC-VAL-108A CANCEL_ALARM wrapped ID
+PASS: RTC-VAL-205A CANCEL_PERIODIC wrapped ID
+RTC ioctl validation: cases=41 failures=0 result=PASS
+0
+```
+
+修复后的 debug/release 固件还分别完成真实 `/dev/rtc0` RTC 运行路径验证；
+正式产品配置重新 clean build 为 1224/1224，`nuttx.bin` 为 479600 B，SHA256 为
+`43c2b253669b020741c233c250ca452d7fb3f78f74b67ac8b0383fa6c3404d24`。关闭测试
+Kconfig 后，最终 ELF 中不存在 fake lower、测试 main 或测试 archive 符号；实板
+`help` 同时不含 `rtc_ioctl_test` 和 `mcu_rtc_test`。正式固件的 `/dev/rtc0` 存在，
+两次 `date` 在 `sleep 2` 前后从 `2018-01-01 00:00:00` 前进到 `00:00:02`；
+TRNG 读取 128 B、GPIO edge、timer 001/002/005、oneshot、WDT 002/003 和 NSH
+全部返回 0。测试配置另完成真实 RTC 001-004 深测，报告
+`RTC test PASS (0 failures)`。两组回归均未观察到
+`FAIL/ASSERT/PANIC/KASAN/UBSAN/RV Exception`。
+
+### 限制与后续
 
 - 当前 `SYSTEM_TIME64=n`，日历和 Alarm 只验证到 2038 年 32 位边界。
 - 当前只实测 `SIGEV_SIGNAL`；`CONFIG_SIG_EVTHREAD=n`，未验证
   `SIGEV_THREAD` 或 `SIGEV_NONE`。
 - `RTC_PERIODIC`、64 位时间、完整通知模式、PM/HBN wakeup 和 HBN_OUT0
   demux 分别通过后续子任务补全。
-- NuttX RTC upper-half 仍需补运行时参数校验、唯一销毁权、producer/work
-  quiesce 和 `SIGEV_THREAD` 代际管理；这些是独立上游问题。
+- NuttX RTC upper-half 的运行时参数校验已由 ST017 补齐；唯一销毁权、
+  producer/work quiesce 和 `SIGEV_THREAD` 代际管理仍是独立上游问题。
 - `RTC_SET_TIME` 先调用 lower `settime()`，返回后才由 upper-half 执行
   `clock_synchronize()`；现有 lower ABI 没有同步完成 hook。本次只证明
   RTC/system 原先同步的标准 crossing 路径中，接收线程返回后观察到的墙钟不早于

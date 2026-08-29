@@ -5,8 +5,8 @@
 
 最后核对：2026-08-30
 
-- `vendor/bouffalolab`: `538fefe`（P03 提交前本地基线；含待上游 A05）
-- `nuttx`: `9dcb36ba0b78`（本地集成验证基线）
+- `vendor/bouffalolab`: `6a2925a`（P03 RTC/Alarm 远端基线）
+- `nuttx`: `27b42a91d71`（基于 `e987a81c32c`）
 - 板卡：Ai-M64L-32S-Kit
 - 配置：`bl616cl/ai-m64l-32s-kit/configs/nsh`
 
@@ -474,7 +474,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 |---|---|---|---|---|
 | P01 | UART1/UART2 | 需要适配，P1 | `BL616CL_UART1/2`、独立 pin/baud/buffer | 扩展 serial 实例和 IRQ 名称；回环、并发、console 隔离 |
 | P02 | TRNG `/dev/random` | 已验证（ST015） | `BL616CL_TRNG`；测试 app 独立关闭；可选 `DEV_URANDOM_ARCH` | chip adapter 直接实现 `devrandom_register()`；USB2 已验证任意长度、非对齐、标准 API、基本统计、多线程、裁剪和外设回归 |
-| P03 | RTC/Alarm | 已验证（ST016） | `BL616CL_RTC`、`BL616CL_RTC_ALARM`；测试 app 独立关闭；RC32K/DIG32K 二选一 | 48 位 HBN RTC lower-half 与 `/dev/rtc0`；UTC/亚秒、absolute/relative Alarm、取消/替换/re-arm、回绕、warm reset、unlink 和裁剪已验证 |
+| P03 | RTC/Alarm | 已验证（ST016）；upper-half ioctl 补全（ST017） | `BL616CL_RTC`、`BL616CL_RTC_ALARM`；ioctl 测试 app 独立关闭；RC32K/DIG32K 二选一 | 48 位 HBN RTC lower-half 与 `/dev/rtc0`；UTC/亚秒、absolute/relative Alarm、取消/替换/re-arm、回绕、warm reset、unlink 和裁剪已验证；九个标准 ioctl 的 NULL/ID/ENOSYS 合同已在 debug/release fake lower 实测 |
 | P04 | I2C0/I2C1 master | 需要适配，P1 | 每实例选项、SCL/SDA pin、频率 | clock/pinmux/IRQ 或 polling；EEPROM/传感器、NACK、timeout、bus recovery |
 | P05 | SPI0/SPI1 master | 需要适配，P1 | 每实例选项、pin、mode、CS policy | controller lower-half和 board select/status；loopback、多 mode/width/frequency |
 | P06 | PWM | 需要适配，P1 | controller/channel/pin 选项 | NuttX PWM lower-half；频率/占空比边界、停止电平、逻辑分析仪 |
@@ -538,9 +538,16 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 - 最终 DIG32K/no-test clean build 为 1224/1224，`nuttx.bin` 为 479888 B，
   SHA256 为 `c999b23d1e84ba3683ac1c1806627fde3d881d9c7c1520790c2b8dec7ed7aa85`；
   app 分区烧录的 host/device SHA256 一致，产品回归脚本为 `failures=[]`。
+- ST017 在独立 NuttX 分支对九个标准 ioctl 增加 release 可用的 NULL/ID 检查，
+  scalar cancel 先校验原始 `unsigned long arg` 再转换，避免宽 ABI 截断。vendor
+  fake lower-half 覆盖所有标准方法的 `ENOSYS`、正常调用方法/顺序/参数、upper
+  active 状态保持和私有 ioctl 转发；debug 与 `DEBUG_ASSERTIONS=off` 实板矩阵
+  均为 `cases=39 failures=0`，x86-64 sim 的 wrapped-ID 矩阵为
+  `cases=41 failures=0`。
 - 当前未启用 `SYSTEM_TIME64`、`RTC_PERIODIC`、`SIGEV_THREAD`、PM/HBN
   wakeup 或 HBN_OUT0 公共 demux；warm reset 结果不外推到断电保持。NuttX RTC
-  upper-half 的参数校验和并发生命周期问题需独立上游任务闭环。
+  upper-half 参数校验已提交 PR `#357`；并发生命周期问题仍由 ST018/ST019
+  独立闭环。
 
 ## 实施顺序
 
