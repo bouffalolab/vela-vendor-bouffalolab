@@ -42,6 +42,10 @@ if(CONFIG_BL616CL_WDT)
   list(APPEND SRCS bl616cl_wdt.c)
 endif()
 
+if(CONFIG_BL616CL_TRNG)
+  list(APPEND SRCS bl616cl_rng.c)
+endif()
+
 if(CONFIG_BL616CL_GPIO)
   list(APPEND SRCS bl616cl_gpio.c)
 endif()

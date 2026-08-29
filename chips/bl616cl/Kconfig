@@ -65,6 +65,15 @@ config BL616CL_WDT
 		The timeout unit is milliseconds and the maximum value
 		is 65535 ms.
 
+config BL616CL_TRNG
+	bool "True random number generator (TRNG)"
+	default n
+	select ARCH_HAVE_RNG
+	---help---
+		Enable the BL616CL security engine TRNG. DEV_RANDOM controls the
+		standard /dev/random device. DEV_URANDOM remains independent and
+		uses the same hardware when DEV_URANDOM_ARCH is selected.
+
 config BL616CL_ONESHOT
 	bool "One-shot timer"
 	default n

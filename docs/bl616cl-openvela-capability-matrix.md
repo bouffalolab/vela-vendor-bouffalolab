@@ -5,8 +5,8 @@
 
 最后核对：2026-08-29
 
-- `vendor/bouffalolab`: `ef8baee`（本项实施前基线）
-- `nuttx`: `2c63cf17085b6b7e60b841fd79de6487d950aeed`
+- `vendor/bouffalolab`: `75f17a5`（P02 实施前已推送基线；A05 本地等待上游）
+- `nuttx`: `9dcb36ba0b78`（本地集成验证基线）
 - 板卡：Ai-M64L-32S-Kit
 - 配置：`bl616cl/ai-m64l-32s-kit/configs/nsh`
 
@@ -31,8 +31,8 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | 时钟 | 1 kHz OS tick；MTimer alarm lower-half；通用 `up_perf_*` 纳秒接口 | `bl616cl_timerisr.c`；`nuttx/drivers/timers/arch_alarm.c` |
 | 内存 | 内部 SRAM 单 heap、默认 allocator、procfs meminfo | `bl616cl_allocateheap.c`；`nuttx/mm/` |
 | 启动 | chip early init、board late init、ROMFS/NSH | `chips/bl616cl/bl616cl_start.c`；`boards/bl616cl/common/` |
-| 外设 | UART0、GPIO、timer0、TIMER1 oneshot、watchdog | `chips/bl616cl/`；`cmake/bl616cl_lhal.cmake` |
-| 诊断 | assertions、stack dump、dumpstack、procfs | `configs/nsh/defconfig` |
+| 外设 | UART0、GPIO、timer0、TIMER1 oneshot、watchdog、TRNG `/dev/random` | `chips/bl616cl/`；`cmake/bl616cl_lhal.cmake` |
+| 诊断 | assertions、stack/backtrace、CPU/IRQ/critical monitor、MM record、stack canary、coredump、Note RAM trace、generic KASAN、UBSAN runtime | `configs/nsh/defconfig`；`vendor/bouffalolab/docs/` |
 
 当前 `nsh` 已选择 `CONFIG_SCHED_CPULOAD_SYSCLK=y`，并用独立的
 `CONFIG_SYSTEM_CPULOAD=y` 编入验证负载命令。后者只用于测试，不是 CPU load
@@ -473,7 +473,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | ID | 外设/能力 | 状态 | 建议裁剪边界 | 主要前置与验证 |
 |---|---|---|---|---|
 | P01 | UART1/UART2 | 需要适配，P1 | `BL616CL_UART1/2`、独立 pin/baud/buffer | 扩展 serial 实例和 IRQ 名称；回环、并发、console 隔离 |
-| P02 | TRNG `/dev/random` | 需要适配，P1 | `BL616CL_TRNG` | 编入 `bflb_sec_trng.c`、对接 random lower-half；健康检查和统计，不用短样本宣称熵质量 |
+| P02 | TRNG `/dev/random` | 已验证（ST015） | `BL616CL_TRNG`；测试 app 独立关闭；可选 `DEV_URANDOM_ARCH` | chip adapter 直接实现 `devrandom_register()`；USB2 已验证任意长度、非对齐、标准 API、基本统计、多线程、裁剪和外设回归 |
 | P03 | RTC/Alarm | 需要适配，P1 | `BL616CL_RTC`、`BL616CL_RTC_ALARM` | HBN RTC lower-half；走时、跨回绕、alarm、复位保持 |
 | P04 | I2C0/I2C1 master | 需要适配，P1 | 每实例选项、SCL/SDA pin、频率 | clock/pinmux/IRQ 或 polling；EEPROM/传感器、NACK、timeout、bus recovery |
 | P05 | SPI0/SPI1 master | 需要适配，P1 | 每实例选项、pin、mode、CS policy | controller lower-half和 board select/status；loopback、多 mode/width/frequency |
@@ -494,6 +494,23 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 `cmake/bl616cl_lhal.cmake`、`chips/bl616cl/include/irq.h`。当前 NuttX IRQ 头只
 命名现役少数 IRQ；新增外设必须补齐所用 IRQ 名称，不能复制 raw number 到驱动。
 
+### P02 TRNG 实测结论
+
+- `CONFIG_BL616CL_TRNG` 条件编入 `bl616cl_rng.c` 并选择 `ARCH_HAVE_RNG`；正式
+  配置注册只读 `/dev/random`，测试 app 默认关闭。
+- adapter 没有编入或修改同步仓的 `bflb_sec_trng.c`，而是复用 device table、SEC
+  时钟和寄存器定义，补齐两阶段 timeout、`HT_ERROR`、严格清理、任意长度和整次
+  read mutex。
+- 关闭、测试和正式 clean build 分别为 1219/1219、1222/1222、1220/1220；正式
+  相对关闭态 `nuttx.bin +1648 B`、bss `+0 B`。
+- USB2 上 `0/1/3/4/31/32/33/255/256/257` B 非对齐读全部 PASS；4096 B 四轮
+  bit 千分比为 496/497/498/501，固定块和重复块均为 0；4 线程 x 32 次共六轮
+  全部完成。
+- 正式固件无 `mcu_trng_test`，`/dev/random` 权限为 `cr--r--r--`，128 B `dd`
+  返回 NSH；GPIO、timer、oneshot、WDT 和最终存活回归通过。
+- timeout、`HT_ERROR` cleanup 未做故障注入；单核 FIFO 多线程结果不确定性证明
+  mutex 真实竞争；短样本不用于熵或合规声明。
+
 ## 实施顺序
 
 | 批次 | 独立工作项 | 原因 |
@@ -506,7 +523,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | 6 | D04 Note RAM trace | 独立诊断配置，按事件域逐批开启 |
 | 7 | M04、M05 KASAN/UBSAN | 各自独立配置、负测和 commit |
 | 8 | A05 lazy FPU | 在诊断基线稳定后做性能优化 |
-| 9 | P02、P03、P04、P05、P06 | TRNG、RTC、I2C、SPI、PWM 逐项适配 |
+| 9 | P02 已完成；继续 P03、P04、P05、P06 | RTC、I2C、SPI、PWM 逐项适配 |
 | 10 | A07+P08，再做 P07/P09/P11 | cache/DMA 是 ADC、crypto、MTD 的公共前置 |
 
 同一行合并的配置只表示一个不可分割的验收闭包；不同表项不得合并成一个
