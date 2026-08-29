@@ -437,3 +437,205 @@ TRNG 读取 128 B、GPIO edge、timer 001/002/005、oneshot、WDT 002/003 和 NS
 - RTC-005 只证明当前单线程双 fd 顺序和 `SIGEV_SIGNAL` 场景，不能作为
   upper-half 并发生命周期安全的证明。
 - 没有外部 XTAL32K、电池或功耗测量，不能声明外部晶振、掉电保持或低功耗收益。
+
+## ST020 rtc_initialize 参数与所有权校验
+
+### 背景与问题原理
+
+`rtc_initialize()` 是 RTC lower-half 接入通用字符设备 upper-half 的公共入口。
+调用成功后生成 `/dev/rtcN`，其中 `N` 是传入的 minor。原实现只用
+`DEBUGASSERT` 检查 `lower`、`lower->ops` 和 minor 范围；release 配置关闭断言后，
+这些表达式不再执行。NULL lower/ops 可能被解引用，非法 minor 则可能继续分配
+upper-half、生成路径并尝试注册，返回值取决于当时的 VFS 节点状态，而不是稳定的
+参数错误。
+
+当前源码有 30 处实际 `rtc_initialize()` 调用，均使用 minor 0；这说明正常调用路径
+不会受到兼容性影响，但不能代替公共入口的 release 防御。合法 minor 沿用原有
+`[0, 999]` 契约，不把 `devpath[20]` 的容量误当作扩大 ABI 的理由。
+
+### 方案与所有权契约
+
+NuttX 通用修复位于 `drivers/timers/rtc.c`，在任何解引用、路径生成、分配或注册前
+执行一次显式校验：
+
+```c
+if (lower == NULL || lower->ops == NULL || minor < 0 || minor >= 1000)
+  {
+    return -EINVAL;
+  }
+```
+
+修复只改变非法入口，不改变注册和销毁流程：
+
+| 阶段 | 返回值 | upper-half | lower-half 所有权和 destroy |
+|---|---|---|---|
+| lower/ops/minor 非法 | `-EINVAL` | 不分配 | 调用者保留；不调用 destroy |
+| upper 分配失败 | `-ENOMEM` | 不存在 | 调用者保留；不调用 destroy |
+| `register_driver()` 失败 | 原样透传，例如 `-EEXIST` | 销毁 mutex 并释放 | 调用者保留；不调用 destroy |
+| 注册成功 | `OK` | 绑定到 `/dev/rtcN` | 交由 upper 管理 |
+| unlink 且没有 open 引用 | `OK` | 释放 | 调用一次可选 destroy |
+| unlink 时仍有 open 引用 | `OK` | 保留到最后一次 close | 最后 close 调用一次可选 destroy |
+
+本项不修改 ioctl 参数校验、并发 close/unlink、异步 producer/work quiesce 或
+`SIGEV_THREAD` 通知代际；这些边界分别由 RTC upper-half 的其他独立任务处理。
+
+### 测试开关与构成
+
+验证复用 `apps/os_feature_tests/rtc_ioctl/` 的 fake lower-half 和同一个
+`rtc_ioctl_test` main，由以下独立开关控制：
+
+```text
+CONFIG_BL_OS_FEATURE_TESTS_RTC_IOCTL=y
+```
+
+开关默认关闭，并依赖 `BUILD_FLAT`、`BUILTIN`、`RTC_DRIVER` 和可用的 pseudo-fs
+unlink 操作。关闭后 fake lower kernel archive、测试 application、case 字符串和
+builtin 命令均不进入产品固件。测试只使用 VFS 和 fake lower 证明公共 upper-half
+契约，不依赖 BL616CL RTC 寄存器；同一组代码可在 RV32 实板和 LP64 sim 上运行。
+
+`rtc_ioctl_test -c initialize` 固定执行 37 项：
+
+| Case | 动作 | 通过条件 |
+|---|---|---|
+| `RTC-INIT-001` 至 `006` | NULL lower、NULL ops、minor `-1`、`1000`、`INT_MIN`、`INT_MAX` | 全部返回 `-EINVAL` |
+| `RTC-INIT-101` 至 `106` | 先在对应路径注册 sentinel，再执行六个非法入口 | sentinel 的私有 ioctl 仍返回 77，节点未被替换 |
+| `RTC-INIT-107` | 汇总非法 lower 的 destroy 计数 | 计数为 0 |
+| `RTC-INIT-201` 至 `204` | minor 97 注册、双 open、owner ioctl | 注册和两次 open 成功，owner 可用 |
+| `RTC-INIT-205` 至 `208` | 64 轮重复注册冲突 | 全为 `-EEXIST`，challenger 不销毁，owner 保持可用，heap used/alloc 数不变 |
+| `RTC-INIT-209` 至 `215` | 双 fd unlink、拒绝新 open、旧 fd 继续 ioctl、依次 close | 非最后 close 不销毁，最后 close 恰好销毁一次 |
+| `RTC-INIT-301` 至 `303` | 边界 minor 999 注册后无 open unlink | 注册和 unlink 成功，destroy 恰好一次 |
+| `RTC-INIT-401` 至 `406` | ops vtable 存在但所有方法为空 | 注册/open/close/unlink 成功，ioctl 为 `ENOSYS`，upper heap 完整回收 |
+
+EEXIST 冲突是可控的注册失败注入，覆盖错误透传、upper 回收和 lower 所有权。当前
+没有仅作用于该入口、不会扰动产品全局 allocator 的安全 ENOMEM 注入点，因此
+ENOMEM 只通过 `kmm_zalloc()` 失败分支和分配器契约做静态审计，不声明动态覆盖。
+
+### 构建与完整运行流程
+
+RV32 release/debug 使用独立测试配置，先 clean 再 build：
+
+```bash
+python3 vendor/bouffalolab/bl_build.py clean \
+  bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-release
+python3 vendor/bouffalolab/bl_build.py build \
+  bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-release -j14
+
+python3 vendor/bouffalolab/bl_build.py clean \
+  bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-debug
+python3 vendor/bouffalolab/bl_build.py build \
+  bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-debug -j14
+```
+
+烧录完成后的运行流程如下；所有串口命令复用同一个 fd，每一步等待 `nsh>` 后再
+继续：
+
+1. 使用固定 DTR/RTS 时序复位，按 2 Mbps 抓取启动日志。
+2. 确认启动输出包含 `BL616CL A1`、chip ID、`NuttShell (NSH)` 和 `nsh>`。
+3. 执行 `help`，确认 `rtc_ioctl_test` 已进入当前测试固件。
+4. 执行 `rtc_ioctl_test -c initialize`，逐项核对 37 行 `PASS` 和最终汇总。
+5. 执行 `echo $?`，要求输出 0。
+6. 搜索本次启动和测试输出，要求没有 `ASSERT`、`PANIC`、`KASAN`、`UBSAN` 或
+   `RV Exception`。
+7. release 与 debug 完全重复步骤 1 至 6；两者只改变 assertion 配置，不改变
+   测试命令和判据。
+
+```text
+rtc_ioctl_test -c initialize
+echo $?
+```
+
+LP64 集成回归使用 x86-64 `sim/nsh`，同时包含 ST017 ioctl 校验和 ST020 initialize
+校验；构建后分别启动全新的模拟器进程：
+
+```bash
+cmake --build <sim-lp64-integrated-build> -j4
+
+printf 'rtc_ioctl_test -c initialize\necho $?\npoweroff\n' | \
+  timeout 30s <sim-lp64-integrated-build>/nuttx
+printf 'rtc_ioctl_test -c all\necho $?\npoweroff\n' | \
+  timeout 60s <sim-lp64-integrated-build>/nuttx
+```
+
+产品关闭态恢复标准 `nsh` 配置，fresh clean build 后检查 `.config`、archive、
+`System.map`、`nm`、`strings` 和 `help`，确认测试未进入镜像。随后执行真实
+`/dev/rtc0`、date、TRNG、GPIO、timer、oneshot、WDT 和 NSH 存活回归。
+
+`/dev/ttyUSB2` 是本次实测板卡的 CH340 USB-UART 串口节点，仅用于烧录、复位、
+日志和 NSH 命令交互；它不是 RTC 功能依赖，也不表示 USB 2.0 功能要求。
+
+### 实测数据
+
+未修复 release 红测为 36 项，其中 6 个非法入口失败：它们实际返回 `-EEXIST`，
+而不是预期的 `-EINVAL`；其余 sentinel、EEXIST 回收、所有权、双 fd 生命周期、
+minor 999 和 empty ops 共 30 项通过。程序汇总和退出码为：
+
+```text
+RTC initialize validation: cases=36 failures=6 result=FAIL
+1
+```
+
+review 后的 RV32 release 与 debug 均执行 37 项：
+
+| 配置 | assertion | 结果 | 退出码 | 固件 SHA256 |
+|---|---|---|---:|---|
+| BL616CL release | off | 37/37 PASS | 0 | `611209e624d71a7a57548b9d05d98aa7d8275a9e4c3776cbf7fa2a36873f1487` |
+| BL616CL debug | on | 37/37 PASS | 0 | `d950e3f918cea44d370c4d73782bd038d4a1eff8c0b344c2da47ee889f9d1334` |
+
+两次实板身份均为：
+
+```text
+chip: BL616CL A1
+chip ID: 110c7e13e7c8
+MAC: c8e7137e0c11
+USB-UART: 1a86:7523
+baudrate: 2000000
+RTC initialize validation: cases=37 failures=0 result=PASS
+0
+```
+
+LP64 集成模拟器同时验证两个上游修复：
+
+```text
+RTC initialize validation: assertions=on
+RTC initialize validation: cases=37 failures=0 result=PASS
+0
+
+RTC ioctl validation: assertions=on alarm=on periodic=on
+RTC ioctl validation: cases=41 failures=0 result=PASS
+0
+```
+
+测试实现使用 NuttX `kmm_mallinfo()` 读取 upper-half 所属堆；在 flat build 中该
+接口映射到普通 heap，在 `CONFIG_MM_KERNEL_HEAP=y` 时读取独立 kernel heap，避免
+把用户 heap 的稳定性误当成 `kmm_zalloc()` 的回收证据。修改后 LP64 initialize
+构建和运行仍为 37/37 PASS。
+
+标准产品配置关闭测试后 fresh clean build 为 1224/1224；`.config` 同时显示
+`CONFIG_BL_OS_FEATURE_TESTS_RTC_IOCTL` 和 `CONFIG_BL_MCU_PERIPHERAL_TESTS_RTC`
+未设置，固件中不存在 `rtc_ioctl_test`、`RTC-INIT-*` 或 fake lower 符号。
+`final_nuttx` 为 859432 B，text/data/bss 为 458300/15664/20124 B；
+`nuttx.bin` 为 479616 B，SHA256 为
+`1350982d964515d762b70c7786b829e6159a16393541fe2c5375cdf8e33df402`。
+
+该产品固件烧录和固定时序复位均返回 0；启动在 2 Mbps 下匹配
+`NuttShell (NSH)` 和 `nsh>`。运行证据如下：
+
+```text
+/dev/rtc0: present, status=0
+date before: Mon, Jan 01 00:00:00 2018
+sleep 2: status=0
+date after:  Mon, Jan 01 00:00:02 2018
+/dev/random: 128 B read, status=0
+GPIO edge: PASS, status=0
+timer 001: max error 0.268%, PASS, status=0
+timer 002: prescaler ratio 2.000, PASS, status=0
+timer 005: invalid/live/lifecycle checks PASS, status=0
+oneshot 100000 us: Finished, status=0
+WDT 002: 6 feeds over 3016 ms, PASS, status=0
+WDT 003: invalid/live/lifecycle checks PASS, status=0
+final NSH command: rtc_product_alive, status=0
+```
+
+RV32 release、debug 和 LP64 两组运行均未出现 `ASSERT`、`PANIC`、`KASAN`、
+`UBSAN` 或 `RV Exception`；最终产品回归也没有这些异常关键字或 `FAIL`。NuttX
+修复对应 signed commit `ef9b0564554`。

@@ -406,6 +406,139 @@ static void rtc_ioctl_run_preflight(FAR struct rtc_ioctl_test_s *test)
                            RTC_SET_TIME, 0);
 }
 
+static void rtc_ioctl_run_initialize(FAR struct rtc_ioctl_test_s *test)
+{
+  static const char *const invalid_names[] = {
+    "RTC-INIT-001 NULL lower",
+    "RTC-INIT-002 NULL ops",
+    "RTC-INIT-003 minor -1",
+    "RTC-INIT-004 minor 1000",
+    "RTC-INIT-005 minor INT_MIN",
+    "RTC-INIT-006 minor INT_MAX",
+  };
+
+  static const char *const sentinel_names[] = {
+    "RTC-INIT-101 NULL lower sentinel",
+    "RTC-INIT-102 NULL ops sentinel",
+    "RTC-INIT-103 minor -1 sentinel",
+    "RTC-INIT-104 minor 1000 sentinel",
+    "RTC-INIT-105 minor INT_MIN sentinel",
+    "RTC-INIT-106 minor INT_MAX sentinel",
+  };
+
+  struct bl_rtc_initialize_test_result_s result;
+  int ret;
+  int i;
+
+  ret = bl_rtc_initialize_test_run(&result);
+  if (ret < 0)
+    {
+      test->failures++;
+      printf("  FAIL: RTC initialize harness ret=%d\n", ret);
+      return;
+    }
+
+  for (i = 0; i < BL_RTC_INITIALIZE_TEST_INVALID_CASES; i++)
+    {
+      rtc_ioctl_record(test, invalid_names[i],
+                       result.invalid_ret[i] == -EINVAL,
+                       result.invalid_ret[i], 0);
+    }
+
+  for (i = 0; i < BL_RTC_INITIALIZE_TEST_INVALID_CASES; i++)
+    {
+      rtc_ioctl_record(test, sentinel_names[i],
+                       result.invalid_sentinel_ok[i],
+                       result.invalid_sentinel_ok[i], 0);
+    }
+
+  rtc_ioctl_record(test, "RTC-INIT-107 invalid lower not destroyed",
+                   result.invalid_destroy_calls == 0,
+                   result.invalid_destroy_calls, 0);
+  rtc_ioctl_record(test, "RTC-INIT-201 valid register",
+                   result.register_ret == OK,
+                   result.register_ret, 0);
+  rtc_ioctl_record(test, "RTC-INIT-202 first open",
+                   result.open1_ret >= 0,
+                   result.open1_ret, result.open1_errno);
+  rtc_ioctl_record(test, "RTC-INIT-203 second open",
+                   result.open2_ret >= 0,
+                   result.open2_ret, result.open2_errno);
+  rtc_ioctl_record(test, "RTC-INIT-204 owner ioctl",
+                   result.read_ret == OK,
+                   result.read_ret, result.read_errno);
+  rtc_ioctl_record(test, "RTC-INIT-205 duplicate registration",
+                   result.duplicate_ret == -EEXIST &&
+                     result.duplicate_all_eexist,
+                   result.duplicate_ret, 0);
+  rtc_ioctl_record(test, "RTC-INIT-206 challenger not destroyed",
+                   result.challenger_destroy_calls == 0,
+                   result.challenger_destroy_calls, 0);
+  rtc_ioctl_record(test, "RTC-INIT-207 owner preserved after conflict",
+                   result.owner_after_conflict_ret == OK,
+                   result.owner_after_conflict_ret,
+                   result.owner_after_conflict_errno);
+  rtc_ioctl_record(test, "RTC-INIT-208 conflict loop releases upper",
+                   result.heap_before_used == result.heap_after_used &&
+                     result.heap_before_allocs == result.heap_after_allocs,
+                   0, 0);
+  rtc_ioctl_record(test, "RTC-INIT-209 unlink owner",
+                   result.unlink_ret == OK,
+                   result.unlink_ret, result.unlink_errno);
+  rtc_ioctl_record(test, "RTC-INIT-210 new open after unlink",
+                   result.open_after_unlink_ret == ERROR &&
+                     result.open_after_unlink_errno == ENOENT,
+                   result.open_after_unlink_ret,
+                   result.open_after_unlink_errno);
+  rtc_ioctl_record(test, "RTC-INIT-211 old fd after unlink",
+                   result.old_fd_ret == OK,
+                   result.old_fd_ret, result.old_fd_errno);
+  rtc_ioctl_record(test, "RTC-INIT-212 close non-final fd",
+                   result.close1_ret == OK,
+                   result.close1_ret, result.close1_errno);
+  rtc_ioctl_record(test, "RTC-INIT-213 non-final close keeps lower",
+                   result.destroy_after_close1 == 0,
+                   result.destroy_after_close1, 0);
+  rtc_ioctl_record(test, "RTC-INIT-214 close final fd",
+                   result.close2_ret == OK,
+                   result.close2_ret, result.close2_errno);
+  rtc_ioctl_record(test, "RTC-INIT-215 final close destroys lower",
+                   result.destroy_after_close2 == 1,
+                   result.destroy_after_close2, 0);
+  rtc_ioctl_record(test, "RTC-INIT-301 minor 999 register",
+                   result.boundary_register_ret == OK,
+                   result.boundary_register_ret, 0);
+  rtc_ioctl_record(test, "RTC-INIT-302 no-open unlink",
+                   result.boundary_unlink_ret == OK,
+                   result.boundary_unlink_ret,
+                   result.boundary_unlink_errno);
+  rtc_ioctl_record(test, "RTC-INIT-303 no-open unlink destroys lower",
+                   result.boundary_destroy_calls == 1,
+                   result.boundary_destroy_calls, 0);
+  rtc_ioctl_record(test, "RTC-INIT-401 empty ops register",
+                   result.empty_register_ret == OK,
+                   result.empty_register_ret, 0);
+  rtc_ioctl_record(test, "RTC-INIT-402 empty ops open",
+                   result.empty_open_ret >= 0,
+                   result.empty_open_ret, result.empty_open_errno);
+  rtc_ioctl_record(test, "RTC-INIT-403 empty method returns ENOSYS",
+                   result.empty_ioctl_ret == ERROR &&
+                     result.empty_ioctl_errno == ENOSYS,
+                   result.empty_ioctl_ret, result.empty_ioctl_errno);
+  rtc_ioctl_record(test, "RTC-INIT-404 empty ops close",
+                   result.empty_close_ret == OK,
+                   result.empty_close_ret, result.empty_close_errno);
+  rtc_ioctl_record(test, "RTC-INIT-405 empty ops unlink",
+                   result.empty_unlink_ret == OK,
+                   result.empty_unlink_ret, result.empty_unlink_errno);
+  rtc_ioctl_record(test, "RTC-INIT-406 empty ops releases upper",
+                   result.empty_heap_before_used ==
+                     result.empty_heap_after_used &&
+                     result.empty_heap_before_allocs ==
+                       result.empty_heap_after_allocs,
+                   0, 0);
+}
+
 static void rtc_ioctl_run_base(FAR struct rtc_ioctl_test_s *test)
 {
   struct rtc_time set_time;
@@ -677,7 +810,7 @@ static int rtc_ioctl_cleanup(FAR struct rtc_ioctl_test_s *test)
 
 static void rtc_ioctl_usage(FAR const char *progname)
 {
-  printf("Usage: %s [-c preflight|all]\n", progname);
+  printf("Usage: %s [-c preflight|initialize|all]\n", progname);
 }
 
 /****************************************************************************
@@ -692,6 +825,7 @@ int main(int argc, FAR char *argv[])
     .missing_fd = -1,
   };
 
+  bool initialize_only = false;
   bool preflight_only = false;
   unsigned int expected_cases;
   int ret;
@@ -701,6 +835,10 @@ int main(int argc, FAR char *argv[])
       if (strcmp(argv[2], "preflight") == 0)
         {
           preflight_only = true;
+        }
+      else if (strcmp(argv[2], "initialize") == 0)
+        {
+          initialize_only = true;
         }
       else if (strcmp(argv[2], "all") != 0)
         {
@@ -712,6 +850,24 @@ int main(int argc, FAR char *argv[])
     {
       rtc_ioctl_usage(argv[0]);
       return EXIT_FAILURE;
+    }
+
+  if (initialize_only)
+    {
+      printf("RTC initialize validation: assertions=%s\n",
+             RTC_IOCTL_ASSERTIONS_STATE);
+      rtc_ioctl_run_initialize(&test);
+      if (test.cases != BL_RTC_INITIALIZE_TEST_CASES)
+        {
+          test.failures++;
+          printf("  FAIL: case count actual=%u expected=%u\n",
+                 test.cases, BL_RTC_INITIALIZE_TEST_CASES);
+        }
+
+      printf("RTC initialize validation: cases=%u failures=%u result=%s\n",
+             test.cases, test.failures,
+             test.failures == 0 ? "PASS" : "FAIL");
+      return test.failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
   ret = bl_rtc_ioctl_test_lower_register();
