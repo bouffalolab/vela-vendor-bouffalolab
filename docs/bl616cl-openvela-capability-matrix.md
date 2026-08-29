@@ -161,7 +161,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | M02 | 分配回溯：`MM_RECORD_STACK`、`MM_RECORD_STACK_DEFAULT` | 可直接开启，P1 诊断 | 依赖 `LIBC_BACKTRACE_DEPTH>0`；先完成 A01 | 分配栈可符号化；释放后不残留；量化每块开销 |
 | M03 | OOM/破坏诊断：`DEBUG_MM`、`MM_DUMP_ON_FAILURE`、`MM_FILL_ALLOCATIONS`、`MM_NODE_GUARDSIZE` | 可直接开启，P1 诊断 | 高日志、内存和性能开销；不进默认产品配置 | OOM、越界、UAF 定向负测；正常 ostest |
 | M04 | KASAN generic heap：`MM_KASAN_GENERIC`、`MM_KASAN_INSTRUMENT_ALL` | 已验证（ST012） | 全镜像插桩；正式关闭测试 app 和 `MM_KASAN_GLOBAL`；启动 early stop 处理 warm reset | USB2 实测 heap 左/右越界和 UAF 精确报告、合法访问、连续 warm reset、裁剪、开销和外设回归 |
-| M05 | UBSAN：`MM_UBSAN`、`MM_UBSAN_ALL` | 可直接尝试，P1 诊断 | GCC 参数探测通过；首轮不启用 trap | overflow/alignment 等负测；正常回归和开销量化 |
+| M05 | UBSAN：`MM_UBSAN`、目标局部插桩 | 已验证（ST013） | runtime 正式启用但无引用零链接开销；`MM_UBSAN_ALL` 因 RAM 和 handler 闭包不可用；测试 app 默认关闭 | USB2 实测 signed overflow、shift 越界、三次合法对照、裁剪、开销和外设回归 |
 | M06 | TLSF、mempool、task heap | 延后 | 会改变碎片、时延或隔离语义，缺少目标指标 | allocation latency、碎片、峰值、压力回归后再决策 |
 | M07 | PSRAM 第二 heap：`MM_REGIONS>1` | 需要适配，P2 | 需 PSRAM init、cache/TZC、linker region；当前 `riscv_addregion()` 为空 | 探测容量、跨 region 分配、DMA/cache、一致性和压力 |
 | M08 | protected/kernel build 双 heap | 不支持当前基线 | 缺少完整 MPU/MMU、用户地址空间和 `up_allocate_kheap()` 适配 | 需另立移植目标，不能作为配置开关开启 |
@@ -224,6 +224,27 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
   TIMER-002 周期比例 2.003，WDT-002 在 3,026 ms 内喂狗 6 次且无复位。
 - 完整配置、命令、原始关键输出、裁剪门禁、开销和限制见
   [BL616CL Generic KASAN 配置与验证](bl616cl-kasan.md)。
+
+### M05 实测结果（2026-08-29）
+
+- GCC 13.4.0 默认 `undefined` 与当前 NuttX runtime handler 集不闭包；全镜像
+  UBSAN 与现有 KASAN 基线叠加后 cacheable RAM 溢出 67,920 B。正式方案因此使用
+  `MM_UBSAN=y`、`MM_UBSAN_ALL=n`，只给独立验收 app 添加
+  `signed-integer-overflow,shift`。
+- 测试固件 clean build `1221/1221` 成功，最终 ELF 定义
+  `__ubsan_handle_add_overflow` 和 `__ubsan_handle_shift_out_of_bounds`，且没有未定义
+  UBSAN 符号。
+- USB2 recover 负测中，add overflow 准确报告 `ubsan_test.c:39:16`，32 位移位指数
+  32 准确报告 `shift-out-of-bounds` 和 `ubsan_test.c:44:16`；两类各一条报告，均
+  返回 NSH。负测前、中、后三次合法加法均为 42 且无误报。
+- 最终产品 clean build `1219/1219` 成功；runtime handler 保留在 `libmm.a`，但测试
+  archive、命令、字符串、插桩和最终 ELF handler 均被裁掉。正式产品与 UBSAN
+  关闭态的 ELF、text/data/bss、bin 和 linker raw heap 尺寸完全相同。
+- 正式产品 USB2 回归通过 GPIO edge、TIMER-001/002/005、100 ms oneshot、
+  WDT-002/003 和最终 NSH 存活；TIMER-001 最大误差 827 us（0.827%），TIMER-002
+  周期比例 2.000，WDT-002 在 3,026 ms 内喂狗 6 次且无复位。
+- 完整配置、命令、运行流程、实测输出、制品数据和限制见
+  [BL616CL UBSAN 配置与验证](bl616cl-ubsan.md)。
 
 ## 故障留证与可观测性
 
