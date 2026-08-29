@@ -48,6 +48,10 @@
 #  include "bl616cl_tim.h"
 #endif
 
+#ifdef CONFIG_BL616CL_RTC
+#  include "bl616cl_rtc.h"
+#endif
+
 #include "bl616cl_board_common.h"
 
 /****************************************************************************
@@ -100,6 +104,15 @@ int bl616cl_bringup(void)
     {
       return ret;
     }
+
+#ifdef CONFIG_BL616CL_RTC
+  ret = bl616cl_rtc_register(0);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to register RTC driver: %d\n", ret);
+      return ret;
+    }
+#endif
 
 #ifdef CONFIG_BL616CL_ONESHOT
   ret = bl616cl_oneshot_initialize("/dev/oneshot");

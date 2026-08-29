@@ -74,6 +74,55 @@ config BL616CL_TRNG
 		standard /dev/random device. DEV_URANDOM remains independent and
 		uses the same hardware when DEV_URANDOM_ARCH is selected.
 
+menuconfig BL616CL_RTC
+	bool "Real-time clock (RTC)"
+	default n
+	select RTC
+	select RTC_DATETIME
+	select RTC_DRIVER
+	select RTC_ARCH
+	select ARCH_HAVE_RTC_SUBSECONDS
+	---help---
+		Enable the BL616CL HBN 48-bit counter as the OpenVela wall-clock
+		RTC and register the standard /dev/rtc0 device. The system timer
+		continues to provide elapsed time.
+
+if BL616CL_RTC
+
+choice
+	prompt "RTC F32K clock source"
+	default BL616CL_RTC_CLOCK_DIG32K
+
+config BL616CL_RTC_CLOCK_RC32K
+	bool "Internal RC32K"
+	---help---
+		Use the always-on internal RC32K oscillator. This source has no
+		external dependency but has lower frequency accuracy. RTC conversion
+		uses the SDK nominal F32K frequency of 32768 Hz; actual drift must be
+		measured on the target board.
+
+config BL616CL_RTC_CLOCK_DIG32K
+	bool "40 MHz crystal divided clock"
+	---help---
+		Derive the RTC clock from the 40 MHz crystal through the fixed
+		1221 divider. RTC conversion uses the resulting rational frequency,
+		40000000 / 1221 Hz, instead of assuming exactly 32768 Hz.
+
+endchoice
+
+config BL616CL_RTC_ALARM
+	bool "RTC alarm"
+	default n
+	select RTC_ALARM
+	---help---
+		Enable one standard absolute or relative RTC alarm using the full
+		48-bit HBN compare and the HBN_OUT0 interrupt. This option owns the
+		shared HBN_OUT0 IRQ until a common HBN dispatcher is introduced.
+		Changing RTC time reprograms an active absolute alarm. If the new time
+		passes the alarm, the alarm expires immediately.
+
+endif # BL616CL_RTC
+
 config BL616CL_ONESHOT
 	bool "One-shot timer"
 	default n

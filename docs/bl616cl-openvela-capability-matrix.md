@@ -3,9 +3,9 @@
 本文是 BL616CL OpenVela 能力状态的唯一结论入口。实施记录、测试原始日志和
 临时探测不在本文复制；每个能力完成后回写“状态”和“验证”列。
 
-最后核对：2026-08-29
+最后核对：2026-08-30
 
-- `vendor/bouffalolab`: `75f17a5`（P02 实施前已推送基线；A05 本地等待上游）
+- `vendor/bouffalolab`: `538fefe`（P03 提交前本地基线；含待上游 A05）
 - `nuttx`: `9dcb36ba0b78`（本地集成验证基线）
 - 板卡：Ai-M64L-32S-Kit
 - 配置：`bl616cl/ai-m64l-32s-kit/configs/nsh`
@@ -474,7 +474,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 |---|---|---|---|---|
 | P01 | UART1/UART2 | 需要适配，P1 | `BL616CL_UART1/2`、独立 pin/baud/buffer | 扩展 serial 实例和 IRQ 名称；回环、并发、console 隔离 |
 | P02 | TRNG `/dev/random` | 已验证（ST015） | `BL616CL_TRNG`；测试 app 独立关闭；可选 `DEV_URANDOM_ARCH` | chip adapter 直接实现 `devrandom_register()`；USB2 已验证任意长度、非对齐、标准 API、基本统计、多线程、裁剪和外设回归 |
-| P03 | RTC/Alarm | 需要适配，P1 | `BL616CL_RTC`、`BL616CL_RTC_ALARM` | HBN RTC lower-half；走时、跨回绕、alarm、复位保持 |
+| P03 | RTC/Alarm | 已验证（ST016） | `BL616CL_RTC`、`BL616CL_RTC_ALARM`；测试 app 独立关闭；RC32K/DIG32K 二选一 | 48 位 HBN RTC lower-half 与 `/dev/rtc0`；UTC/亚秒、absolute/relative Alarm、取消/替换/re-arm、回绕、warm reset、unlink 和裁剪已验证 |
 | P04 | I2C0/I2C1 master | 需要适配，P1 | 每实例选项、SCL/SDA pin、频率 | clock/pinmux/IRQ 或 polling；EEPROM/传感器、NACK、timeout、bus recovery |
 | P05 | SPI0/SPI1 master | 需要适配，P1 | 每实例选项、pin、mode、CS policy | controller lower-half和 board select/status；loopback、多 mode/width/frequency |
 | P06 | PWM | 需要适配，P1 | controller/channel/pin 选项 | NuttX PWM lower-half；频率/占空比边界、停止电平、逻辑分析仪 |
@@ -511,6 +511,37 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 - timeout、`HT_ERROR` cleanup 未做故障注入；单核 FIFO 多线程结果不确定性证明
   mutex 真实竞争；短样本不用于熵或合规声明。
 
+### P03 RTC/Alarm 实测结论
+
+- `CONFIG_BL616CL_RTC` 条件编入基础 RTC、arch bridge 和 `/dev/rtc0`；
+  `CONFIG_BL616CL_RTC_ALARM` 再启用单路 compare、HBN_OUT0 IRQ 和 Alarm
+  callback。adapter 位于 `arch/libarch.a`，不进入 `libbl_std.a`，测试 app
+  正式配置关闭。
+- RTC off、RTC on/Alarm off、RC32K 验收、DIG32K 验收和 DIG32K 正式产品的
+  clean build 分别为 1220/1220、1224/1224、1226/1226、1226/1226、
+  1224/1224；archive、ELF 和 builtin 命令裁剪与配置一致。
+- RTC on/Alarm off/test 的 clean build 为 1226/1226；RTC-001/004 正常执行，
+  RTC-002/003 明确 SKIP，`all` 汇总为 `PARTIAL (0 failures, 2 skipped)`，
+  RTC-005 单独报告统一 SKIP；两条命令在 NSH 中均返回 1，runner 同时解析汇总
+  文本以区分 SKIP/PARTIAL 与 FAIL，未把未编译的 Alarm 能力误报为 PASS。
+- RTC-001~003 验证 UTC 闰日、连续亚秒跨秒单调、非法日期、2038 边界、系统时钟同步、
+  absolute/relative Alarm、active query、cancel、replace、re-arm、settime
+  重编程、0.5 ms 短 absolute Alarm 和 200 ms 重复通知静默检查。RC32K 常规 Alarm 为
+  1986~1987 ms，DIG32K 为 1998~2000 ms；DIG32K 短 Alarm 实测 2 ms。
+- RTC-004 五轮以 MTimer `CLOCK_MONOTONIC` 为参考：RC32K 相对误差为
+  6378~6409 ppm，最新 DIG32K 为 2~8 ppm；软件验证 48 位回绕差值 16 ticks。
+  该结果是相对比较而非绝对校准，正式默认据此选择 DIG32K。
+- 两种时钟各完成三轮 active Alarm warm reset：每轮复位后 3 秒无旧通知，
+  `RTC_HAVE_SET_TIME=0`、Alarm inactive，并可重新布防。RTC-005 验证当前
+  `SIGEV_SIGNAL` 下双 fd unlink/最后关闭取消流程；正式固件的 `/dev/rtc0`、
+  TRNG、GPIO、timer、oneshot、WDT 和 NSH 回归通过。
+- 最终 DIG32K/no-test clean build 为 1224/1224，`nuttx.bin` 为 479888 B，
+  SHA256 为 `c999b23d1e84ba3683ac1c1806627fde3d881d9c7c1520790c2b8dec7ed7aa85`；
+  app 分区烧录的 host/device SHA256 一致，产品回归脚本为 `failures=[]`。
+- 当前未启用 `SYSTEM_TIME64`、`RTC_PERIODIC`、`SIGEV_THREAD`、PM/HBN
+  wakeup 或 HBN_OUT0 公共 demux；warm reset 结果不外推到断电保持。NuttX RTC
+  upper-half 的参数校验和并发生命周期问题需独立上游任务闭环。
+
 ## 实施顺序
 
 | 批次 | 独立工作项 | 原因 |
@@ -523,7 +554,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | 6 | D04 Note RAM trace | 独立诊断配置，按事件域逐批开启 |
 | 7 | M04、M05 KASAN/UBSAN | 各自独立配置、负测和 commit |
 | 8 | A05 lazy FPU | 在诊断基线稳定后做性能优化 |
-| 9 | P02 已完成；继续 P03、P04、P05、P06 | RTC、I2C、SPI、PWM 逐项适配 |
+| 9 | P02、P03 已完成；继续 P04、P05、P06 | I2C、SPI、PWM 逐项适配；RTC 扩展能力另按独立子任务补全 |
 | 10 | A07+P08，再做 P07/P09/P11 | cache/DMA 是 ADC、crypto、MTD 的公共前置 |
 
 同一行合并的配置只表示一个不可分割的验收闭包；不同表项不得合并成一个
