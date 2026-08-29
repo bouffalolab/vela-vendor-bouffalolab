@@ -611,7 +611,9 @@ RTC ioctl validation: cases=41 failures=0 result=PASS
 测试实现使用 NuttX `kmm_mallinfo()` 读取 upper-half 所属堆；在 flat build 中该
 接口映射到普通 heap，在 `CONFIG_MM_KERNEL_HEAP=y` 时读取独立 kernel heap，避免
 把用户 heap 的稳定性误当成 `kmm_zalloc()` 的回收证据。修改后 LP64 initialize
-构建和运行仍为 37/37 PASS。
+构建和运行仍为 37/37 PASS。本轮 BL616CL 产品配置未开启独立 kernel heap，
+因此未宣称在该配置上完成实板 kernel-heap 动态注入；代码路径已按 NuttX 公共
+`kmm_mallinfo()` ABI 保持可编译和可裁剪。
 
 标准产品配置关闭测试后 fresh clean build 为 1224/1224；`.config` 同时显示
 `CONFIG_BL_OS_FEATURE_TESTS_RTC_IOCTL` 和 `CONFIG_BL_MCU_PERIPHERAL_TESTS_RTC`
