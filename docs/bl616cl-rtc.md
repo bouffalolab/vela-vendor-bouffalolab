@@ -578,7 +578,7 @@ review 后的 RV32 release 与 debug 均执行 37 项：
 
 | 配置 | assertion | 结果 | 退出码 | 固件 SHA256 |
 |---|---|---|---:|---|
-| BL616CL release | off | 37/37 PASS | 0 | `611209e624d71a7a57548b9d05d98aa7d8275a9e4c3776cbf7fa2a36873f1487` |
+| BL616CL release | off | 37/37 PASS | 0 | `de46f1e27fa44c9ccc6bdb8ddd872038c0555eb5d95bc2b772f782e6b636d3a6` |
 | BL616CL debug | on | 37/37 PASS | 0 | `d950e3f918cea44d370c4d73782bd038d4a1eff8c0b344c2da47ee889f9d1334` |
 
 两次实板身份均为：
@@ -592,6 +592,9 @@ baudrate: 2000000
 RTC initialize validation: cases=37 failures=0 result=PASS
 0
 ```
+
+上表 release 结果对应最终 `kmm_mallinfo()` 测试实现；原始运行记录为
+`2026-08-30-postreview-kmm-release-initialize-usb2.log`。
 
 LP64 集成模拟器同时验证两个上游修复：
 
