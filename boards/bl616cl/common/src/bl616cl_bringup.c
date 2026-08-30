@@ -134,5 +134,15 @@ int bl616cl_bringup(void)
     }
 #endif
 
+#ifdef CONFIG_BL616CL_TIMER1
+  ret = bl616cl_timer_initialize("/dev/timer1", 1);
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize timer1 driver: %d\n",
+             ret);
+      return ret;
+    }
+#endif
+
   return OK;
 }

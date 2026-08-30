@@ -186,6 +186,23 @@ config BL616CL_TIMER0
 	bool "Timer 0"
 	default y
 
+config BL616CL_TIMER1
+	bool "Timer 1"
+	default n
+	depends on !BL616CL_ONESHOT
+	---help---
+		Enable the BL616CL TIMER1 ordinary timer lower-half. TIMER1 is
+		shared with the one-shot driver and is therefore mutually exclusive.
+
+config BL616CL_TIMER_TEST
+	bool
+	default n
+	depends on BL616CL_TIMER
+	---help---
+		Enable the test-only lower-half callback contract hook. This is
+		selected by the vendor timer test and must remain disabled in
+		product configurations.
+
 endif # BL616CL_TIMER
 
 config BL616CL_GPIO

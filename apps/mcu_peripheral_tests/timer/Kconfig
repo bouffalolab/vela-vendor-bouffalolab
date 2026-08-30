@@ -19,4 +19,13 @@ config BL_MCU_PERIPHERAL_TESTS_TIMER_STACKSIZE
 	int "Stack size"
 	default DEFAULT_TASK_STACKSIZE
 
+config BL_MCU_PERIPHERAL_TESTS_TIMER_RAW
+	bool "Enable raw callback contract case"
+	default n
+	depends on BL616CL_TIMER
+	select BL616CL_TIMER_TEST
+	---help---
+		Build the test-only lower-half callback contract hook and TIMER-010.
+		Keep disabled in product configurations.
+
 endif

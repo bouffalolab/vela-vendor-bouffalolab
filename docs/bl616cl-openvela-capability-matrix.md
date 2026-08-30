@@ -459,7 +459,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | ID | 能力 | 状态 | 裁剪和资源边界 | 验证要求 |
 |---|---|---|---|---|
 | E01 | WDT interrupt/capture、automonitor | 已验证（ST024） | `BL616CL_WDT` 控制 lower-half；`BL616CL_WDT_CAPTURE` 控制 ISR/capture，并在 BY_CAPTURE 时由 Kconfig 自动联动；生产 automonitor 使用 BY_WDOG | WDT-001~005 覆盖边界、live timeout、双 fd、capture handler、automonitor 接管和 `SYS_RWDT` 复位；关闭态裁剪成立 |
-| E02 | TIMER1 普通 timer | 需要适配，P1 | 与 oneshot/EXTCLK 用 Kconfig choice 互斥；独立 `/dev/timer1` | owner 冲突负测、动态 timeout、回调停止和重启 |
+| E02 | TIMER1 普通 timer | 已验证（ST025） | `BL616CL_TIMER1` 控制实例并依赖 `!BL616CL_ONESHOT`；`BL616CL_TIMER_TEST` 仅测试 hook；独立 `/dev/timer1` | USB2 实测周期、tick、poll/单 waiter、多 fd、双实例、raw callback；off/TIMER0/TIMER1/dual/oneshot 五配置裁剪通过 |
 | E03 | TIMER0 input capture | 需要适配，P2 | device table 有 capture IRQ；对接 NuttX capture lower-half并配置输入 pin | 频率、占空比、边沿、溢出和无信号超时 |
 | E04 | GPIO multipin batch | 需要适配，P2 | 当前 ioexpander multipin ops 为 `NULL`；仅 `IOEXPANDER_MULTIPIN` 时编译 | 跨 pin 原子性边界、输入/输出混合、与 IRQ 并发 |
 | E05 | GPIO debounce/wakeup | 延后 | 需要区分硬件能力、软件 worker 和 PDS/HBN 唤醒域 | 抖动波形、丢边沿、睡眠唤醒和功耗 |
@@ -493,6 +493,35 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 源码入口：`drivers/lhal/config/bl616cl/device_table.c`、`drivers/lhal/src/`、
 `cmake/bl616cl_lhal.cmake`、`chips/bl616cl/include/irq.h`。当前 NuttX IRQ 头只
 命名现役少数 IRQ；新增外设必须补齐所用 IRQ 名称，不能复制 raw number 到驱动。
+
+### E02 TIMER1 普通 timer 实测结论（2026-08-30）
+
+- 最大能力交集：TIMER1 device table 提供独立 idx、compare0、counter 和 IRQ；
+  本次接入 OpenVela 普通 timer 的 start/stop/status、1 MHz 微秒 timeout、周期/
+  单次 signal、tick ioctl、poll、multi-fd 和 lower callback。TIMER1 输入 capture
+  与 compare DMA 仍按硬件/资源边界排除。
+- 配置互斥：`BL616CL_TIMER1` 依赖 `!BL616CL_ONESHOT`；`nsh-timer-oneshot`
+  仅保留 TIMER0 普通 timer 和 TIMER1 oneshot，`ls /dev` 没有 `timer1`。TIMER0
+  与 TIMER1 dual 配置同时注册两个节点。
+- 构建与裁剪：`nsh-timer-off`、`nsh-timer0`、`nsh-timer1`、`nsh-timer-dual`
+  分别为 `1223/1223`，`nsh-timer-oneshot` 为 `1224/1224`；off 的 `libarch.a`
+  无 `bl616cl_tim.c.o`，TIMER1-only 无 TIMER0 实例，oneshot 配置无 TIMER1
+  普通实例。测试入口始终是独立的 `libapps_mcu_timer_test.a`。
+- USB2 dual 固件（`/dev/ttyUSB2`、2 Mbps）实测：TIMER1-001 两个 100ms 周期
+  最大误差 337us（0.337%）；006 向上量化 1001us 为 2 ticks、3 ticks 转
+  3000us，零值/溢出分别返回 `EINVAL`/`ERANGE`；007 的 poll 返回 `POLLIN`
+  （0x1），第二 waiter 返回 `POLLERR`（0x8）；008 关闭 fd1 后 fd2 仍保持
+  ACTIVE；009 的 30ms/50ms 双实例更新和 timer0 停止隔离通过；010 callback
+  计数 2、next=30000us、最终 inactive。每个 case 均返回 `nsh>`。
+- TIMER0 回归：002 的 div39/div79 周期分别 0.0998s/0.1999s，比值 2.002；
+  005 的非法 timeout/divider、重复 start/stop、live timeout 和恢复流程全部
+  PASS。oneshot 配置实测 `oneshot -d 100000 /dev/oneshot` 输出 `Finished`，
+  随后 `echo alive` 返回成功。
+- ABI 修正：`BL616CL_TCIOC_SETCLOCKDIV` 从 OpenVela 保留的 `_TCIOC(0x0010)`
+  迁移到 `_TCIOC(0x0040)`，未发现其他 vendor 消费者。TIMER0/TIMER1 共享
+  位域的芯片临界区保护已通过 dual 交错更新验证。
+- 证据边界：串口结果证明软件合同和生命周期，不证明 IRQ 边沿绝对精度；PWM、
+  capture、DMA 和 WDT `BY_TIMER` automonitor 仍需各自的硬件资源或独立子任务。
 
 ### P02 TRNG 实测结论
 

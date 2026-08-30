@@ -1,17 +1,16 @@
 /****************************************************************************
  * apps/vendor/bouffalolab/apps/mcu_peripheral_tests/timer/timer_case_main.c
  *
- * MCU Peripheral Timer / PWM Test Cases (TIMER-001 ~ TIMER-005)
+ * MCU Peripheral Timer / PWM Test Cases (TIMER-001 ~ TIMER-010)
  *   TIMER-001  basic counting / overflow period accuracy (/dev/timer0)
  *   TIMER-002  clock prescaler effect        (/dev/timer0 + custom ioctl)
  *   TIMER-003  PWM frequency / duty precision       (/dev/pwm0)
  *   TIMER-004  PWM duty ramp / breathing LED        (/dev/pwm0)
  *   TIMER-005  timer lifecycle and rejected requests (/dev/timer0)
  *
- * 001/002 use /dev/timer0 (002 adds a chip-layer SETCLOCKDIV ioctl); 003/004
- * use /dev/pwm0. 001/002 are judged in software (CLOCK_MONOTONIC) and can be
- * cross-checked on a scope via -g; 003/004 need a scope/logic analyzer on
- * the PWM pin (GPIO28).
+ * 001/002/005 use the selected timer node; 003/004 use /dev/pwm0. 006-010
+ * exercise tick, poll, notification lifetime, dual-instance and callback
+ * contracts. Timer measurements are software checks; PWM cases need a scope.
  ****************************************************************************/
 
 /****************************************************************************
@@ -22,6 +21,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -33,11 +33,15 @@
 #include <sys/ioctl.h>
 
 #include <fixedmath.h>
+#include <nuttx/clock.h>
 #include <nuttx/timers/timer.h>
 #include <nuttx/timers/pwm.h>
 #include <nuttx/ioexpander/gpio.h>
 
 #include <arch/chip/bl616cl_tim_ioctl.h>
+#ifdef CONFIG_BL616CL_TIMER_TEST
+#  include <arch/chip/bl616cl_timer_test.h>
+#endif
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -52,6 +56,11 @@
 #define CASE_003                 "003"
 #define CASE_004                 "004"
 #define CASE_005                 "005"
+#define CASE_006                 "006"
+#define CASE_007                 "007"
+#define CASE_008                 "008"
+#define CASE_009                 "009"
+#define CASE_010                 "010"
 #define CASE_ALL                 "all"
 
 #define TIMER_SIGNO              14
@@ -121,11 +130,13 @@ struct app_config_s
  * Private Functions
  ****************************************************************************/
 
+static int timer_set_notification(int fd, bool periodic, int signo);
+
 static void print_usage(const char *progname)
 {
   printf("Usage: %s [options]\n", progname);
   printf("Common:\n");
-  printf("  -c <id>   Case: 001,002,003,004,005,all (default: all)\n");
+  printf("  -c <id>   Case: 001..010,all (default: all)\n");
   printf("  -d <dev>  Timer device (default: %s)\n", DEFAULT_TIMER_DEVPATH);
   printf("  -p <dev>  PWM device  (default: %s)\n", DEFAULT_PWM_DEVPATH);
   printf("  -g <dev>  [001/002] toggle GPIO each expiry "
@@ -154,6 +165,11 @@ static void print_usage(const char *progname)
          DEF_BREATH_STEP_PCT);
   printf("  -i <ms>   step interval ms (default: %d)\n", DEF_BREATH_STEP_MS);
   printf("[005] lifecycle/edge requests: no additional options\n");
+  printf("[006] tick ioctl conversion: selected timer node\n");
+  printf("[007] poll and one-shot notification: selected timer node\n");
+  printf("[008] multi-fd shared state: selected timer node\n");
+  printf("[009] TIMER0/TIMER1 dual-instance isolation\n");
+  printf("[010] raw callback contract (test-only Kconfig)\n");
 }
 
 static double mono_now(void)
@@ -182,9 +198,9 @@ static int timer_open(const char *devpath)
  * sigtimedwait().
  */
 
-static int timer_arm_periodic(int fd, const struct app_config_s *cfg)
+static int timer_arm_notify(int fd, const struct app_config_s *cfg,
+                            bool periodic, int signo)
 {
-  struct timer_notify_s notify;
   int ret;
 
   ret = ioctl(fd, TCIOC_SETTIMEOUT, cfg->timeout_us);
@@ -194,11 +210,26 @@ static int timer_arm_periodic(int fd, const struct app_config_s *cfg)
       return -errno;
     }
 
+  ret = timer_set_notification(fd, periodic, signo);
+  if (ret < 0)
+    {
+      printf("  Failed: TCIOC_NOTIFICATION ret=%d errno=%d\n", ret, errno);
+      return -errno;
+    }
+
+  return 0;
+}
+
+static int timer_set_notification(int fd, bool periodic, int signo)
+{
+  struct timer_notify_s notify;
+  int ret;
+
   memset(&notify, 0, sizeof(notify));
   notify.pid                  = getpid();
-  notify.periodic             = true;
+  notify.periodic             = periodic;
   notify.event.sigev_notify   = SIGEV_SIGNAL;
-  notify.event.sigev_signo    = TIMER_SIGNO;
+  notify.event.sigev_signo    = signo;
   notify.event.sigev_value.sival_int = 0;
 
   ret = ioctl(fd, TCIOC_NOTIFICATION,
@@ -212,11 +243,16 @@ static int timer_arm_periodic(int fd, const struct app_config_s *cfg)
   return 0;
 }
 
+static int timer_arm_periodic(int fd, const struct app_config_s *cfg)
+{
+  return timer_arm_notify(fd, cfg, true, TIMER_SIGNO);
+}
+
 /* Wait for one timer expiry signal.  Returns 0 on fire, -ETIMEDOUT if the
  * signal did not arrive within (timeout_us + guard).
  */
 
-static int timer_wait_fire(const struct app_config_s *cfg, sigset_t *set)
+static int timer_wait_signal(uint32_t timeout_us, sigset_t *set)
 {
   struct timespec ts;
   siginfo_t       info;
@@ -227,7 +263,7 @@ static int timer_wait_fire(const struct app_config_s *cfg, sigset_t *set)
    * it but a lost interrupt is caught.
    */
 
-  budget_us  = (uint64_t)cfg->timeout_us * 2ull + 1000000ull;
+  budget_us  = (uint64_t)timeout_us * 2ull + 1000000ull;
   ts.tv_sec  = budget_us / 1000000ull;
   ts.tv_nsec = (budget_us % 1000000ull) * 1000ull;
 
@@ -238,6 +274,11 @@ static int timer_wait_fire(const struct app_config_s *cfg, sigset_t *set)
     }
 
   return 0;
+}
+
+static int timer_wait_fire(const struct app_config_s *cfg, sigset_t *set)
+{
+  return timer_wait_signal(cfg->timeout_us, set);
 }
 
 /* ---- optional GPIO toggle output (TIMER-001/002 oscilloscope point) ----
@@ -961,6 +1002,430 @@ fail:
 }
 
 /****************************************************************************
+ * TIMER-006 : tick ioctl conversion and boundaries
+ ****************************************************************************/
+
+static int run_case_006(const struct app_config_s *cfg)
+{
+  struct timer_status_s tick_status;
+  struct timer_status_s usec_status;
+  uint32_t tick_max;
+  uint32_t usec_max;
+  uint32_t rounded_usec = (uint32_t)USEC_PER_TICK + 1;
+  int fd;
+  int ret = -EIO;
+
+  printf("[TIMER-006] Tick ioctl conversion and boundaries\n");
+  fd = timer_open(cfg->timer_devpath);
+  if (fd < 0)
+    {
+      return fd;
+    }
+
+  (void)ioctl(fd, TCIOC_STOP, 0);
+  if (ioctl(fd, TCIOC_SETTIMEOUT, rounded_usec) < 0 ||
+      ioctl(fd, TCIOC_TICK_GETSTATUS,
+            (unsigned long)(uintptr_t)&tick_status) < 0 ||
+      tick_status.timeout != 2)
+    {
+      printf("  FAIL: microsecond timeout did not round up to 2 ticks\n");
+      goto out;
+    }
+
+  if (ioctl(fd, TCIOC_TICK_SETTIMEOUT, 3) < 0 ||
+      ioctl(fd, TCIOC_TICK_GETSTATUS,
+            (unsigned long)(uintptr_t)&tick_status) < 0 ||
+      ioctl(fd, TCIOC_GETSTATUS,
+            (unsigned long)(uintptr_t)&usec_status) < 0 ||
+      tick_status.timeout != 3 ||
+      usec_status.timeout != 3 * (uint32_t)USEC_PER_TICK)
+    {
+      printf("  FAIL: tick timeout/status conversion mismatch\n");
+      goto out;
+    }
+
+  if (ioctl(fd, TCIOC_TICK_MAXTIMEOUT,
+            (unsigned long)(uintptr_t)&tick_max) < 0 ||
+      ioctl(fd, TCIOC_MAXTIMEOUT,
+            (unsigned long)(uintptr_t)&usec_max) < 0 ||
+      tick_max != usec_max / (uint32_t)USEC_PER_TICK)
+    {
+      printf("  FAIL: tick maximum mismatch\n");
+      goto out;
+    }
+
+  if (expect_ioctl_errno(fd, TCIOC_TICK_SETTIMEOUT, 0, EINVAL,
+                         "zero tick timeout") < 0 ||
+      expect_ioctl_errno(fd, TCIOC_TICK_SETTIMEOUT, UINT32_MAX, ERANGE,
+                         "tick timeout multiplication overflow") < 0)
+    {
+      goto out;
+    }
+
+  printf("  tick=%luus rounded=%luus->2 ticks set=3 ticks max=%lu\n",
+         (unsigned long)USEC_PER_TICK, (unsigned long)rounded_usec,
+         (unsigned long)tick_max);
+  printf("  [TIMER-006] PASS tick conversion and boundaries\n\n");
+  ret = 0;
+
+out:
+  (void)ioctl(fd, TCIOC_SETTIMEOUT, cfg->timeout_us);
+  close(fd);
+  return ret;
+}
+
+/****************************************************************************
+ * TIMER-007 : poll and one-shot notification
+ ****************************************************************************/
+
+static int run_case_007(const struct app_config_s *cfg)
+{
+  struct app_config_s lcfg = *cfg;
+  struct timer_status_s status;
+  struct pollfd pfd;
+  struct pollfd busy[2];
+  sigset_t set;
+  int fd;
+  int ret = -EIO;
+
+  printf("[TIMER-007] Poll and one-shot notification\n");
+  lcfg.timeout_us = CASE005_TIMEOUT_US;
+  fd = timer_open(cfg->timer_devpath);
+  if (fd < 0)
+    {
+      return fd;
+    }
+
+  sigemptyset(&set);
+  sigaddset(&set, TIMER_SIGNO);
+  sigprocmask(SIG_BLOCK, &set, NULL);
+
+  if (timer_arm_notify(fd, &lcfg, false, TIMER_SIGNO) < 0 ||
+      ioctl(fd, TCIOC_START, 0) < 0)
+    {
+      printf("  FAIL: could not arm one-shot notification "
+             "errno=%d\n", errno);
+      goto out;
+    }
+
+  pfd.fd = fd;
+  pfd.events = POLLIN;
+  pfd.revents = 0;
+  if (poll(&pfd, 1, 1000) != 1 || (pfd.revents & POLLIN) == 0)
+    {
+      printf("  FAIL: poll did not receive timer expiry revents=0x%lx\n",
+             (unsigned long)pfd.revents);
+      goto out;
+    }
+
+  if (timer_wait_signal(lcfg.timeout_us, &set) < 0 ||
+      ioctl(fd, TCIOC_GETSTATUS, (unsigned long)(uintptr_t)&status) < 0 ||
+      (status.flags & TCFLAGS_ACTIVE) != 0)
+    {
+      printf("  FAIL: one-shot signal/status contract failed\n");
+      goto out;
+    }
+
+  memset(busy, 0, sizeof(busy));
+  busy[0].fd = fd;
+  busy[0].events = POLLIN;
+  busy[1].fd = fd;
+  busy[1].events = POLLIN;
+  if (poll(busy, 2, 0) != 1 || (busy[1].revents & POLLERR) == 0)
+    {
+      printf("  FAIL: second poll waiter boundary revents=0x%lx/0x%lx\n",
+             (unsigned long)busy[0].revents,
+             (unsigned long)busy[1].revents);
+      goto out;
+    }
+
+  printf("  poll revents=0x%lx second-waiter revents=0x%lx\n",
+         (unsigned long)pfd.revents, (unsigned long)busy[1].revents);
+  printf("  [TIMER-007] PASS poll, one-shot and single-waiter boundary\n\n");
+  ret = 0;
+
+out:
+  (void)ioctl(fd, TCIOC_STOP, 0);
+  close(fd);
+  return ret;
+}
+
+/****************************************************************************
+ * TIMER-008 : multi-fd shared state and close lifetime
+ ****************************************************************************/
+
+static int run_case_008(const struct app_config_s *cfg)
+{
+  struct app_config_s lcfg = *cfg;
+  struct timer_status_s status;
+  sigset_t set;
+  int fd1;
+  int fd2;
+  int ret = -EIO;
+
+  printf("[TIMER-008] Multi-fd shared state and close lifetime\n");
+  lcfg.timeout_us = 60000;
+  fd1 = timer_open(cfg->timer_devpath);
+  if (fd1 < 0)
+    {
+      return fd1;
+    }
+
+  fd2 = timer_open(cfg->timer_devpath);
+  if (fd2 < 0)
+    {
+      close(fd1);
+      return fd2;
+    }
+
+  sigemptyset(&set);
+  sigaddset(&set, TIMER_SIGNO);
+  sigprocmask(SIG_BLOCK, &set, NULL);
+
+  if (timer_arm_periodic(fd1, &lcfg) < 0 ||
+      ioctl(fd2, TCIOC_GETSTATUS, (unsigned long)(uintptr_t)&status) < 0 ||
+      status.timeout != lcfg.timeout_us || ioctl(fd1, TCIOC_START, 0) < 0)
+    {
+      printf("  FAIL: shared configuration/start contract failed\n");
+      goto out_both;
+    }
+
+  close(fd1);
+  fd1 = -1;
+  if (timer_wait_signal(lcfg.timeout_us, &set) < 0 ||
+      ioctl(fd2, TCIOC_GETSTATUS, (unsigned long)(uintptr_t)&status) < 0 ||
+      (status.flags & TCFLAGS_ACTIVE) == 0)
+    {
+      printf("  FAIL: closing one fd stopped shared timer\n");
+      goto out_both;
+    }
+
+  if (ioctl(fd2, TCIOC_STOP, 0) < 0)
+    {
+      printf("  FAIL: remaining fd could not stop timer errno=%d\n", errno);
+      goto out_both;
+    }
+
+  printf("  shared timeout=%luus active-after-close=yes\n",
+         (unsigned long)status.timeout);
+  printf("  [TIMER-008] PASS shared state and close lifetime\n\n");
+  ret = 0;
+
+out_both:
+  (void)ioctl(fd2, TCIOC_STOP, 0);
+  if (fd1 >= 0)
+    {
+      close(fd1);
+    }
+
+  close(fd2);
+  return ret;
+}
+
+/****************************************************************************
+ * TIMER-009 : dual-instance isolation
+ ****************************************************************************/
+
+static int run_case_009(void)
+{
+  struct app_config_s cfg0;
+  struct app_config_s cfg1;
+  struct timer_status_s status0;
+  struct timer_status_s status1;
+  sigset_t set0;
+  sigset_t set1;
+  int fd0;
+  int fd1;
+  int ret = -EIO;
+
+  printf("[TIMER-009] TIMER0/TIMER1 dual-instance isolation\n");
+  memset(&cfg0, 0, sizeof(cfg0));
+  memset(&cfg1, 0, sizeof(cfg1));
+  cfg0.timeout_us = 40000;
+  cfg1.timeout_us = 70000;
+
+  fd0 = timer_open("/dev/timer0");
+  if (fd0 < 0)
+    {
+      return fd0;
+    }
+
+  fd1 = timer_open("/dev/timer1");
+  if (fd1 < 0)
+    {
+      close(fd0);
+      return fd1;
+    }
+
+  sigemptyset(&set0);
+  sigaddset(&set0, TIMER_SIGNO);
+  sigemptyset(&set1);
+  sigaddset(&set1, TIMER_SIGNO + 1);
+  sigprocmask(SIG_BLOCK, &set0, NULL);
+  sigprocmask(SIG_BLOCK, &set1, NULL);
+
+  if (timer_arm_notify(fd0, &cfg0, true, TIMER_SIGNO) < 0 ||
+      timer_arm_notify(fd1, &cfg1, true, TIMER_SIGNO + 1) < 0 ||
+      ioctl(fd0, TCIOC_START, 0) < 0 || ioctl(fd1, TCIOC_START, 0) < 0 ||
+      timer_wait_signal(cfg0.timeout_us, &set0) < 0 ||
+      timer_wait_signal(cfg1.timeout_us, &set1) < 0)
+    {
+      printf("  FAIL: initial dual expiry failed errno=%d\n", errno);
+      goto out;
+    }
+
+  cfg0.timeout_us = 30000;
+  cfg1.timeout_us = 50000;
+  if (ioctl(fd0, TCIOC_SETTIMEOUT, cfg0.timeout_us) < 0 ||
+      ioctl(fd1, TCIOC_SETTIMEOUT, cfg1.timeout_us) < 0 ||
+      timer_wait_signal(cfg0.timeout_us, &set0) < 0 ||
+      timer_wait_signal(cfg1.timeout_us, &set1) < 0 ||
+      ioctl(fd0, TCIOC_GETSTATUS, (unsigned long)(uintptr_t)&status0) < 0 ||
+      ioctl(fd1, TCIOC_GETSTATUS, (unsigned long)(uintptr_t)&status1) < 0 ||
+      status0.timeout != cfg0.timeout_us ||
+      status1.timeout != cfg1.timeout_us)
+    {
+      printf("  FAIL: interleaved live update/status isolation failed\n");
+      goto out;
+    }
+
+  if (ioctl(fd0, TCIOC_STOP, 0) < 0 ||
+      timer_wait_signal(cfg1.timeout_us, &set1) < 0 ||
+      ioctl(fd1, TCIOC_GETSTATUS, (unsigned long)(uintptr_t)&status1) < 0 ||
+      (status1.flags & TCFLAGS_ACTIVE) == 0)
+    {
+      printf("  FAIL: stopping timer0 disturbed timer1\n");
+      goto out;
+    }
+
+  printf("  timer0=%luus timer1=%luus timer1-active-after-timer0-stop=yes\n",
+         (unsigned long)status0.timeout, (unsigned long)status1.timeout);
+  printf("  [TIMER-009] PASS dual IRQ, state and stop isolation\n\n");
+  ret = 0;
+
+out:
+  (void)ioctl(fd0, TCIOC_STOP, 0);
+  (void)ioctl(fd1, TCIOC_STOP, 0);
+  close(fd0);
+  close(fd1);
+  return ret;
+}
+
+/****************************************************************************
+ * TIMER-010 : raw lower-half callback contract
+ ****************************************************************************/
+
+#ifdef CONFIG_BL616CL_TIMER_TEST
+struct raw_callback_context_s
+{
+  volatile uint32_t count;
+  uint32_t next_interval;
+};
+
+static bool timer_raw_callback(uint32_t *next_interval, void *arg)
+{
+  struct raw_callback_context_s *ctx = arg;
+
+  ctx->count++;
+  if (ctx->count == 1)
+    {
+      *next_interval = ctx->next_interval;
+      return true;
+    }
+
+  return false;
+}
+
+static int timer_index_from_path(const char *devpath)
+{
+  size_t len = strlen(devpath);
+
+  if (len == 0 || devpath[len - 1] < '0' || devpath[len - 1] > '1')
+    {
+      return -EINVAL;
+    }
+
+  return devpath[len - 1] - '0';
+}
+#endif
+
+static int run_case_010(const struct app_config_s *cfg)
+{
+#ifdef CONFIG_BL616CL_TIMER_TEST
+  struct raw_callback_context_s ctx;
+  struct timer_lowerhalf_s *lower;
+  struct timer_status_s status;
+  int timer;
+  int waits;
+  int ret = -EIO;
+
+  printf("[TIMER-010] Raw lower-half callback contract\n");
+  memset(&status, 0, sizeof(status));
+  timer = timer_index_from_path(cfg->timer_devpath);
+  if (timer < 0)
+    {
+      printf("  FAIL: timer path must end in 0 or 1\n");
+      return timer;
+    }
+
+  lower = bl616cl_timer_test_lower((uint8_t)timer);
+  if (lower == NULL)
+    {
+      printf("  FAIL: selected timer lower is not built\n");
+      return -ENODEV;
+    }
+
+  ctx.count = 0;
+  ctx.next_interval = 30000;
+  (void)TIMER_STOP(lower);
+  if (TIMER_SETTIMEOUT(lower, 50000) < 0)
+    {
+      printf("  FAIL: raw settimeout failed\n");
+      return -EIO;
+    }
+
+  TIMER_SETCALLBACK(lower, timer_raw_callback, &ctx);
+  if (TIMER_START(lower) < 0)
+    {
+      printf("  FAIL: raw start failed\n");
+      TIMER_SETCALLBACK(lower, NULL, NULL);
+      return -EIO;
+    }
+
+  for (waits = 0; waits < 100 && ctx.count < 2; waits++)
+    {
+      usleep(10000);
+    }
+
+  if (TIMER_GETSTATUS(lower, &status) >= 0 && ctx.count == 2 &&
+      (status.flags & TCFLAGS_ACTIVE) == 0 &&
+      status.timeout == ctx.next_interval)
+    {
+      printf("  callbacks=2 next=%luus active=no\n",
+             (unsigned long)status.timeout);
+      printf("  [TIMER-010] PASS true reload, next interval and "
+             "false stop\n\n");
+      ret = 0;
+    }
+  else
+    {
+      printf("  FAIL: callbacks=%lu flags=0x%lx timeout=%lu\n",
+             (unsigned long)ctx.count, (unsigned long)status.flags,
+             (unsigned long)status.timeout);
+    }
+
+  (void)TIMER_STOP(lower);
+  TIMER_SETCALLBACK(lower, NULL, NULL);
+  (void)TIMER_SETTIMEOUT(lower, cfg->timeout_us);
+  return ret;
+#else
+  UNUSED(cfg);
+  printf("[TIMER-010] FAIL raw callback test is not enabled\n");
+  return -ENOTSUP;
+#endif
+}
+
+/****************************************************************************
  * main
  ****************************************************************************/
 
@@ -1047,7 +1512,12 @@ int main(int argc, char *argv[])
       strcmp(cfg.case_id, CASE_002) != 0 &&
       strcmp(cfg.case_id, CASE_003) != 0 &&
       strcmp(cfg.case_id, CASE_004) != 0 &&
-      strcmp(cfg.case_id, CASE_005) != 0)
+      strcmp(cfg.case_id, CASE_005) != 0 &&
+      strcmp(cfg.case_id, CASE_006) != 0 &&
+      strcmp(cfg.case_id, CASE_007) != 0 &&
+      strcmp(cfg.case_id, CASE_008) != 0 &&
+      strcmp(cfg.case_id, CASE_009) != 0 &&
+      strcmp(cfg.case_id, CASE_010) != 0)
     {
       printf("Unsupported case id: %s\n", cfg.case_id);
       return ERROR;
@@ -1124,6 +1594,91 @@ int main(int argc, char *argv[])
           passed++;
         }
       else if (strcmp(cfg.case_id, CASE_005) == 0)
+        {
+          printf("Timer Summary: executed=%d passed=%d -> FAIL\n",
+                 executed, passed);
+          return ERROR;
+        }
+    }
+
+  if (strcmp(cfg.case_id, CASE_ALL) == 0 ||
+      strcmp(cfg.case_id, CASE_006) == 0)
+    {
+      executed++;
+      ret = run_case_006(&cfg);
+      if (ret >= 0)
+        {
+          passed++;
+        }
+      else if (strcmp(cfg.case_id, CASE_006) == 0)
+        {
+          printf("Timer Summary: executed=%d passed=%d -> FAIL\n",
+                 executed, passed);
+          return ERROR;
+        }
+    }
+
+  if (strcmp(cfg.case_id, CASE_ALL) == 0 ||
+      strcmp(cfg.case_id, CASE_007) == 0)
+    {
+      executed++;
+      ret = run_case_007(&cfg);
+      if (ret >= 0)
+        {
+          passed++;
+        }
+      else if (strcmp(cfg.case_id, CASE_007) == 0)
+        {
+          printf("Timer Summary: executed=%d passed=%d -> FAIL\n",
+                 executed, passed);
+          return ERROR;
+        }
+    }
+
+  if (strcmp(cfg.case_id, CASE_ALL) == 0 ||
+      strcmp(cfg.case_id, CASE_008) == 0)
+    {
+      executed++;
+      ret = run_case_008(&cfg);
+      if (ret >= 0)
+        {
+          passed++;
+        }
+      else if (strcmp(cfg.case_id, CASE_008) == 0)
+        {
+          printf("Timer Summary: executed=%d passed=%d -> FAIL\n",
+                 executed, passed);
+          return ERROR;
+        }
+    }
+
+  if (strcmp(cfg.case_id, CASE_ALL) == 0 ||
+      strcmp(cfg.case_id, CASE_009) == 0)
+    {
+      executed++;
+      ret = run_case_009();
+      if (ret >= 0)
+        {
+          passed++;
+        }
+      else if (strcmp(cfg.case_id, CASE_009) == 0)
+        {
+          printf("Timer Summary: executed=%d passed=%d -> FAIL\n",
+                 executed, passed);
+          return ERROR;
+        }
+    }
+
+  if (strcmp(cfg.case_id, CASE_ALL) == 0 ||
+      strcmp(cfg.case_id, CASE_010) == 0)
+    {
+      executed++;
+      ret = run_case_010(&cfg);
+      if (ret >= 0)
+        {
+          passed++;
+        }
+      else if (strcmp(cfg.case_id, CASE_010) == 0)
         {
           printf("Timer Summary: executed=%d passed=%d -> FAIL\n",
                  executed, passed);

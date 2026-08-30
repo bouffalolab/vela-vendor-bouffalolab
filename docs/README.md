@@ -19,3 +19,6 @@
   闭包、裁剪和外设回归。
 - [BL616CL SPI0/SPI1 Master](bl616cl-spi.md)：说明 polling master 最大能力交集、
   双实例裁剪、GPIO CS、软件合同、构建证据和实物环回验收边界。
+- [BL616CL 普通 Timer 与 TIMER1 验证](bl616cl-timer.md)：说明 TIMER0/TIMER1
+  最大能力交集、oneshot owner 互斥、tick/poll/multi-fd/raw callback 测试、
+  五配置裁剪和 USB2 实测边界。
