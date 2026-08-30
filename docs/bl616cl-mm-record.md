@@ -1,7 +1,7 @@
 # BL616CL 堆分配归属与序号观测
 
 本文说明 BL616CL 如何启用 OpenVela 通用 heap allocation record，并给出可重复的
-多线程归属、sequence 窗口、realloc 和释放清除测试。烧录流程由 SDK 通用工具文档
+多线程归属、sequence 窗口、realloc stack 记录和释放清除测试。烧录流程由 SDK 通用工具文档
 统一维护，本文从配置和构建开始，运行流程从固件已经启动到 NSH 提示符开始。
 
 ## 背景
@@ -211,6 +211,177 @@ MM_RECORD_TEST failed: -22
 
 完成判据：新实例不继承前一实例状态；非法参数返回 `EINVAL`，不发起 allocator
 请求，系统仍响应 `echo alive`。
+
+## Realloc 失败保留调用栈记录
+
+### 背景与能力交集
+
+OpenVela default allocator 的 allocation node 可同时保存 PID、sequence 和
+backtrace pool entry。`realloc()` 可能走四类路径：缩小、原地扩展、移动扩展和
+释放旧块后的 fallback。旧实现进入 heap lock 后立即移除旧 stack；当 fallback
+分配失败时，旧地址和内容虽然按 `realloc` 合同保留，诊断记录却已经丢失。
+
+BL616CL 的最大可验证交集是 `MM_RECORD_PID`、`MM_RECORD_SEQNO`、
+`MM_RECORD_STACK` 与 default allocator 的成功/失败路径。测试使用 vendor-only
+private heap 读取 node 的 PID、sequence、stack index 和 raw frames，不新增
+NuttX public test hook；backtrace pool 的 refcount 没有固件查询 API，只在 worker
+静止、调度锁定的 dump 区间用 marker 判读。
+
+### 方案与裁剪
+
+修复只延迟旧 stack 引用的释放时机：
+
+| 路径 | 旧 stack 所有权 | 结果 |
+|---|---|---|
+| shrink/同尺寸 | 原地成功前不释放，成功点释放一次 | 解锁后重建 controller 记录 |
+| 原地 grow | 原地成功前不释放，成功点释放一次 | 地址不变并重建记录 |
+| moved grow | 保存旧引用，成功点释放一次 | 新地址重建记录 |
+| fallback success | 不显式释放 | `mm_free(oldmem)` 唯一释放旧记录 |
+| fallback failure | 完全不修改 | 旧 node、PID、sequence、stack 和内容不变 |
+
+专项配置只在测试固件打开：
+
+```text
+CONFIG_LIBC_BACKTRACE_DEPTH=8
+CONFIG_MM_RECORD_PID=y
+CONFIG_MM_RECORD_SEQNO=y
+CONFIG_MM_RECORD_STACK=y
+CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD=y
+CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD_REALLOC_STACK=y
+CONFIG_INIT_STACKSIZE=4096
+```
+
+`BL_OS_FEATURE_TESTS_MM_RECORD_REALLOC_STACK` 依赖 default allocator、
+`MM_RECORD_STACK`、`FS_PROCFS` 和可观测的 meminfo entry。关闭该选项时
+`mm_realloc_stack_test.c` 不进入 archive；关闭 `MM_RECORD_STACK` 时专项选项
+不可选。专项测试使用 16 KiB、`nokasan=true` 的 private heap，避免占用现役
+KASAN 区域；allocation 在 worker 线程执行，`realloc` 在 controller 线程执行。
+
+### 测试命令与完整流程
+
+以下流程从固件已经启动并出现 `nsh>` 开始，烧录步骤按 SDK 通用文档执行。
+
+1. 确认串口启动和测试命令存在：
+
+   ```text
+   help
+   mm_record_test realloc_stack R01
+   ```
+
+   2 Mbps USB2 实测启动输出为 `NuttShell (NSH) NuttX-3.6.1` 和 `nsh>`；
+   R01 返回 `MM_REALLOC_STACK R01 PASS`。
+
+2. 依次执行六个 case。单独执行时使用：
+
+   ```text
+   mm_record_test realloc_stack R01
+   mm_record_test realloc_stack R02
+   mm_record_test realloc_stack R03
+   mm_record_test realloc_stack R04
+   mm_record_test realloc_stack R05
+   mm_record_test realloc_stack R06
+   ```
+
+   一次性回归使用：
+
+   ```text
+   mm_record_test realloc_stack
+   ```
+
+   每个命令都必须等待 `nsh>` 再发送下一条；命令返回非 0、出现 assert/panic
+   或没有 prompt 时停止，不把启动重试当成 case 通过。
+
+3. R01 缩小：worker 分配 512 B 并写入 `0xa5`，controller 缩小到 128 B。
+   检查地址不变、前 128 B 内容、PID 切换为 controller、sequence 变化和新
+   stack 非空，然后释放 private heap。
+
+4. R02 原地向后扩展：先占用 prefix，再由 worker 分配 256 B target，保留
+   next remainder，controller 扩展到 512 B。检查地址不变、原内容保留、PID
+   切换和旧引用只释放一次。
+
+5. R03 向前移动扩展：布局为 512 B prefix、256 B target、256 B suffix，释放
+   prefix 后把 target 扩展到 512 B。检查地址向低地址移动至少 256 B、原内容
+   保留、PID/sequence 更新和新 stack 有效。
+
+6. R04 fallback 成功：target 前后各保留 occupied chunk，请求 1,024 B，迫使
+   allocator 在其它 free 区分配新块。检查返回地址改变、原内容复制、旧块由
+   `mm_free()` 清理且新记录归 controller。该 case 的比较顺序必须先保存旧
+   target，再判断 `result != target`。
+
+7. R05 fallback 失败：target 前后各保留 occupied chunk，读取 private heap 的
+   最大空闲块并用 filler 耗尽剩余空间，再请求 1,024 B。检查返回 `NULL` 后，
+   旧地址仍可读、前 128 B 仍为 `0xa5`、worker PID、sequence、stack index 和
+   raw frames 全部保持不变。
+
+8. R06 重复引用：同一 noinline allocation callsite 分配三个 64 B block，
+   在静止区间执行 `backtrace_dump()`，再依次执行 target shrink、释放一个
+   block 并处理 delay list、target 原地 grow。四个 marker 的 expected ref
+   必须为 `3`、`2`、`1`、`0`；主机只按同一次 `final_nuttx` 的 ELF 将 raw PC
+   符号化，不把其它 pool entry 归因于本 case。
+
+### 旧版 red 实测
+
+旧版未修复固件在 USB2 执行 `mm_record_test realloc_stack R05`：
+
+```text
+MM_REALLOC_STACK R05 INFO largest=15224 overhead=16
+MM_REALLOC_STACK R05 INFO before=0x60fd6d0c/3 after=0/0
+MM_REALLOC_STACK R05 FAIL old stack changed
+MM_RECORD_TEST failed: -1
+```
+
+此结果同时满足 `realloc` 返回失败、旧块仍在和旧内容未破坏，但 stack entry
+从有效地址/depth 3 变为 NULL/depth 0，证明修复前存在诊断记录丢失。
+
+### 修复版 green 实测
+
+修复版专项固件 clean build 为 `1192/1192`，USB2 分区烧录三段 SHA 校验一致，
+复位匹配 `NuttShell (NSH)` 和 `nsh>`。逐 case 实测结果如下：
+
+| Case | 固件关键结果 |
+|---|---|
+| R01 | `MM_REALLOC_STACK R01 PASS` |
+| R02 | `MM_REALLOC_STACK R02 PASS` |
+| R03 | `MM_REALLOC_STACK R03 PASS` |
+| R04 | `MM_REALLOC_STACK R04 PASS` |
+| R05 | `largest=15224 overhead=16`，`MM_REALLOC_STACK R05 PASS` |
+| R06 | `expected_ref=3/2/1/0`，`MM_REALLOC_STACK R06 PASS` |
+
+一次性执行六个 case 的最终输出为 `MM_REALLOC_STACK ALL PASS`。R06 的静止
+dump 关键数据为：
+
+```text
+expected_ref=3: slot 43 refcount 3
+expected_ref=2: slot 43 refcount 2
+expected_ref=1: slot 43 refcount 1
+expected_ref=0: slot 43 absent
+capacity: 64
+```
+
+同一 dump 中新生成的 controller stack 使用其它 slot，说明旧 entry 的引用
+在 `3 -> 2 -> 1 -> 0` 过程中按成功路径释放；测试判据比较 raw frames 内容，
+不要求 pool entry 地址必须变化。
+
+### 构建、裁剪与回归门禁
+
+专项配置的 `libapps_mm_record_test.a` 独立生成，并导出
+`mm_realloc_stack_test`；`final_nuttx`、`nuttx.bin`、`nuttx.whole.bin` 和
+`System.map` 均生成。标准 `nsh` clean build 为 `1224/1224`，关闭专项选项
+且不生成 `libapps_mm_record_test.a`，证明测试代码可裁剪。NuttX
+`mm_realloc.c` 的 nxstyle、checkpatch 和 `git diff --check` 均通过。
+
+修复版执行完 R01-R06 后，现役 GPIO edge、TIMER-001/TIMER-002/TIMER-005、
+oneshot 和 WDT-002/WDT-003 回归保持通过；串口无意外 assert、panic 或复位。
+
+### 限制与判读边界
+
+- R06 的 `capacity/used/ref` 来自静止 dump 的主机解析，不是固件 public API，
+  不能推广为运行时查询合同。
+- 测试使用 default allocator private heap，不覆盖 TLSF、mempool、task heap
+  或 IOB；这些 allocator 需要独立能力审计和测试。
+- `R03` 的移动复制沿用上游现有 `memcpy` 语义；当前 pattern 实测通过，若未来
+  布局允许重叠而出现失败，应另建独立 finding，不混入本修复。
+
 
 ## 外设回归
 

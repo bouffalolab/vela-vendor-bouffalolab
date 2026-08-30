@@ -158,7 +158,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | ID | 能力与目标选项 | 状态 | 裁剪和依赖 | 验证要求 |
 |---|---|---|---|---|
 | M01 | 分配归属：`MM_RECORD_PID`、`MM_RECORD_SEQNO` | 已验证（ST007） | 默认 allocator 内建；RV32 每个已分配块增加 8 B，最小 chunk 从 16 B 增至 32 B | USB2 实测多线程归属、realloc 归属变化、sequence 窗口、释放清除和重复实例；关闭态裁剪成立 |
-| M02 | 分配回溯：`MM_RECORD_STACK`、`MM_RECORD_STACK_DEFAULT` | 可直接开启，P1 诊断 | 依赖 `LIBC_BACKTRACE_DEPTH>0`；先完成 A01 | 分配栈可符号化；释放后不残留；量化每块开销 |
+| M02 | 分配回溯：`MM_RECORD_STACK`、`MM_RECORD_STACK_DEFAULT` | 可直接开启，P1 诊断（ST027 已修复 realloc 失败记录丢失） | 依赖 `LIBC_BACKTRACE_DEPTH>0`；先完成 A01；default allocator 修复见 NuttX PR #359 | 分配栈可符号化；释放后不残留；realloc 成功/失败所有权和重复引用均通过；量化每块开销 |
 | M03 | OOM/破坏诊断：`DEBUG_MM`、`MM_DUMP_ON_FAILURE`、`MM_FILL_ALLOCATIONS`、`MM_NODE_GUARDSIZE` | 可直接开启，P1 诊断 | 高日志、内存和性能开销；不进默认产品配置 | OOM、越界、UAF 定向负测；正常 ostest |
 | M04 | KASAN generic heap：`MM_KASAN_GENERIC`、`MM_KASAN_INSTRUMENT_ALL` | 已验证（ST012） | 全镜像插桩；正式关闭测试 app 和 `MM_KASAN_GLOBAL`；启动 early stop 处理 warm reset | USB2 实测 heap 左/右越界和 UAF 精确报告、合法访问、连续 warm reset、裁剪、开销和外设回归 |
 | M05 | UBSAN：`MM_UBSAN`、目标局部插桩 | 已验证（ST013） | runtime 正式启用但无引用零链接开销；`MM_UBSAN_ALL` 因 RAM 和 handler 闭包不可用；测试 app 默认关闭 | USB2 实测 signed overflow、shift 越界、三次合法对照、裁剪、开销和外设回归 |
@@ -199,6 +199,26 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
   WDT-002 在 1,000 ms timeout 下每 500 ms 喂狗并持续 3,006 ms，无复位。
 - 完整配置、命令、流程和判定标准见
   [BL616CL 堆分配归属与序号观测](bl616cl-mm-record.md)。
+
+### M02 realloc stack 实测结果（2026-08-31）
+
+- 专项配置启用 `CONFIG_LIBC_BACKTRACE_DEPTH=8`、`CONFIG_MM_RECORD_STACK=y` 和
+  `CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD_REALLOC_STACK=y`；测试 app 默认关闭，不进入
+  标准 `nsh` 产品固件。
+- 修复前 USB2 R05 的 `realloc` 返回 `NULL`，旧内容保持，但 stack 从有效 entry
+  `/depth 3` 变为 `NULL/depth 0`，证明 default allocator 在 fallback failure
+  前提前丢失记录。
+- 修复版 R01 shrink、R02 in-place grow、R03 moved grow、R04 fallback success、
+  R05 fallback failure 和 R06 duplicate ref 全部 PASS。R06 静止 dump 的共享 entry
+  refcount 为 `3 -> 2 -> 1 -> 0`；R05 最大空闲块为 15,224 B，请求 filler 时
+  `MM_ALLOCNODE_OVERHEAD=16`。
+- 专项 clean build `1192/1192`；标准 `nsh` clean build `1224/1224`，关闭专项
+  选项时不生成 `libapps_mm_record_test.a`。USB2 分区烧录 SHA 校验、2 Mbps 启动
+  和 NSH prompt 均通过，现役 GPIO、timer、oneshot、WDT 回归无异常复位。
+- NuttX 最小修复已以 signed commit `7d842d6f017` 推送并创建
+  `open-vela/nuttx#359`；在 PR 合入前，标准产品仍以当前基线和 vendor 测试文档
+  的证据边界为准。
+
 
 ### M04 实测结果（2026-08-29）
 
