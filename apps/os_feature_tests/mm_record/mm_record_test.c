@@ -28,6 +28,10 @@
 #define DEFAULT_SIZE0 64
 #define DEFAULT_SIZE1 96
 
+#ifdef CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD_REALLOC_STACK
+int mm_realloc_stack_test(const char *case_id);
+#endif
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
@@ -77,6 +81,9 @@ static void print_usage(const char *progname)
   printf("  %s status\n", progname);
   printf("  %s realloc <slot> <size>\n", progname);
   printf("  %s free\n", progname);
+#ifdef CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD_REALLOC_STACK
+  printf("  %s realloc_stack [R01|R02|R03|R04|R05|R06]\n", progname);
+#endif
 }
 
 static int parse_size(const char *arg, size_t *value)
@@ -444,6 +451,13 @@ int main(int argc, char *argv[])
     {
       ret = free_main();
     }
+#ifdef CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD_REALLOC_STACK
+  else if (strcmp(argv[1], "realloc_stack") == 0 &&
+           (argc == 2 || argc == 3))
+    {
+      ret = mm_realloc_stack_test(argc == 3 ? argv[2] : NULL);
+    }
+#endif
   else
     {
       print_usage(argv[0]);

@@ -18,10 +18,21 @@ config BL_OS_FEATURE_TESTS_MM_RECORD_PRIORITY
 
 config BL_OS_FEATURE_TESTS_MM_RECORD_STACKSIZE
 	int "Stack size"
+	default 4096 if BL_OS_FEATURE_TESTS_MM_RECORD_REALLOC_STACK
 	default 2048
 
 config BL_OS_FEATURE_TESTS_MM_RECORD_WORKER_STACKSIZE
 	int "Worker thread stack size"
 	default PTHREAD_STACK_DEFAULT
+
+config BL_OS_FEATURE_TESTS_MM_RECORD_REALLOC_STACK
+	bool "Default allocator realloc stack test"
+	default n
+	depends on MM_DEFAULT_MANAGER && MM_RECORD_STACK && FS_PROCFS
+	depends on !FS_PROCFS_EXCLUDE_MEMINFO
+	---help---
+		Enable deterministic private-heap tests for realloc stack record
+		ownership. This option uses NuttX default allocator internals only in
+		the test application.
 
 endif
