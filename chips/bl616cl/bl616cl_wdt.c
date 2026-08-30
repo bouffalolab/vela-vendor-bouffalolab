@@ -31,23 +31,31 @@
 
 #include <nuttx/arch.h>
 #include <nuttx/clock.h>
+#include <nuttx/irq.h>
 #include <nuttx/spinlock.h>
 #include <nuttx/timers/watchdog.h>
 
+#include "bflb_clock.h"
+#include "bflb_irq.h"
 #include "bflb_wdg.h"
 #include "bl616cl_wdt.h"
+#include "hardware/timer_reg.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* WDT clock: 32 kHz source with divider 31 gives ~1024 Hz, i.e. one
- * counter tick per millisecond. The compare value register is 16 bit.
+/* WDT clock: the nominal 32768 Hz source with divider 31 gives 1024 Hz.
+ * The compare value register is 16 bit.
  */
 
 #define BL616CL_WDT_CLKSRC   WDG_CLKSRC_32K
 #define BL616CL_WDT_CLKDIV   31
-#define BL616CL_WDT_MAXTIMEOUT 0xffff
+#define BL616CL_WDT_HZ        1024
+#define BL616CL_WDT_MAXTICKS  0xffff
+#define BL616CL_WDT_MAXTIMEOUT ((BL616CL_WDT_MAXTICKS * 1000) / \
+                                BL616CL_WDT_HZ)
+#define BL616CL_WDT_RAW_IRQ  (BL616CL_IRQ_WDG - BL616CL_RISCV_IRQ_ASYNC)
 
 /****************************************************************************
  * Private Types
@@ -62,9 +70,13 @@ struct bl616cl_wdt_lowerhalf_s
 {
   const struct watchdog_ops_s *ops; /* Lower half operations */
   struct bflb_device_s *wdg;        /* LHAL WDT device */
-  uint32_t lastreset;               /* Ticks since last keepalive */
   uint16_t timeout;                 /* Current timeout in milliseconds */
+  uint32_t lastreset;               /* System ticks at last counter reset */
   bool started;                     /* True: timer has been started */
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+  xcpt_t handler;                   /* Capture callback */
+  void *upper;                      /* Watchdog upper-half handle */
+#endif
 };
 
 /****************************************************************************
@@ -78,6 +90,11 @@ static int bl616cl_wdt_getstatus(struct watchdog_lowerhalf_s *lower,
                                  struct watchdog_status_s *status);
 static int bl616cl_wdt_settimeout(struct watchdog_lowerhalf_s *lower,
                                   uint32_t timeout);
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+static xcpt_t bl616cl_wdt_capture(struct watchdog_lowerhalf_s *lower,
+                                  xcpt_t handler);
+static int bl616cl_wdt_handler(int irq, void *context, void *arg);
+#endif
 
 /****************************************************************************
  * Private Data
@@ -90,7 +107,11 @@ static const struct watchdog_ops_s g_bl616cl_wdtops =
   .keepalive  = bl616cl_wdt_keepalive,
   .getstatus  = bl616cl_wdt_getstatus,
   .settimeout = bl616cl_wdt_settimeout,
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+  .capture    = bl616cl_wdt_capture,
+#else
   .capture    = NULL,
+#endif
   .ioctl      = NULL,
 };
 
@@ -98,9 +119,13 @@ static struct bl616cl_wdt_lowerhalf_s g_bl616cl_wdtdev =
 {
   .ops       = &g_bl616cl_wdtops,
   .wdg       = NULL,
-  .lastreset = 0,
   .timeout   = BL616CL_WDT_MAXTIMEOUT,
+  .lastreset = 0,
   .started   = false,
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+  .handler   = NULL,
+  .upper     = NULL,
+#endif
 };
 
 /****************************************************************************
@@ -122,37 +147,97 @@ static struct bl616cl_wdt_lowerhalf_s g_bl616cl_wdtdev =
  *
  ****************************************************************************/
 
+static uint16_t bl616cl_wdt_ms_to_ticks(uint32_t timeout)
+{
+  uint32_t ticks = (timeout * BL616CL_WDT_HZ + 999) / 1000;
+
+  return (uint16_t)ticks;
+}
+
+static uint32_t bl616cl_wdt_ticks_to_ms(uint32_t ticks)
+{
+  return (ticks * 1000 + BL616CL_WDT_HZ - 1) / BL616CL_WDT_HZ;
+}
+
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+static void bl616cl_wdt_set_action(
+  struct bl616cl_wdt_lowerhalf_s *priv, bool capture)
+{
+  uintptr_t base = priv->wdg->reg_base;
+  uint32_t regval;
+
+  putreg16(0xbaba, base + TIMER_WFAR_OFFSET);
+  putreg16(0xeb10, base + TIMER_WSAR_OFFSET);
+  regval = getreg32(base + TIMER_WMER_OFFSET);
+  if (capture)
+    {
+      regval &= ~TIMER_WRIE;
+    }
+  else
+    {
+      regval |= TIMER_WRIE;
+    }
+
+  putreg32(regval, base + TIMER_WMER_OFFSET);
+}
+#endif
+
+static void bl616cl_wdt_clear_irq(
+  struct bl616cl_wdt_lowerhalf_s *priv)
+{
+  bflb_wdg_compint_clear(priv->wdg);
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+  bflb_irq_clear_pending(BL616CL_WDT_RAW_IRQ);
+#endif
+}
+
+static void bl616cl_wdt_configure(struct bl616cl_wdt_lowerhalf_s *priv)
+{
+  struct bflb_wdg_config_s cfg;
+
+  cfg.clock_source = BL616CL_WDT_CLKSRC;
+  cfg.clock_div    = BL616CL_WDT_CLKDIV;
+  cfg.comp_val     = bl616cl_wdt_ms_to_ticks(priv->timeout);
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+  cfg.mode         = priv->handler != NULL ? WDG_MODE_INTERRUPT :
+                                               WDG_MODE_RESET;
+#else
+  cfg.mode         = WDG_MODE_RESET;
+#endif
+  bflb_wdg_init(priv->wdg, &cfg);
+}
+
 static int bl616cl_wdt_start(struct watchdog_lowerhalf_s *lower)
 {
   struct bl616cl_wdt_lowerhalf_s *priv =
     (struct bl616cl_wdt_lowerhalf_s *)lower;
-  struct bflb_wdg_config_s cfg;
   irqstate_t flags;
 
   DEBUGASSERT(priv != NULL && priv->wdg != NULL);
 
   wdinfo("Entry: started\n");
 
+  flags = enter_critical_section();
+
   if (priv->started)
     {
-      /* Return EBUSY to indicate that the timer was already running */
-
+      leave_critical_section(flags);
       return -EBUSY;
     }
 
-  flags = enter_critical_section();
-
-  cfg.clock_source = BL616CL_WDT_CLKSRC;
-  cfg.clock_div    = BL616CL_WDT_CLKDIV;
-  cfg.comp_val     = priv->timeout;
-  cfg.mode         = WDG_MODE_RESET;
-
-  bflb_wdg_init(priv->wdg, &cfg);
+  bl616cl_wdt_configure(priv);
+  bl616cl_wdt_clear_irq(priv);
   bflb_wdg_reset_countervalue(priv->wdg);
-  bflb_wdg_start(priv->wdg);
-
   priv->lastreset = clock_systime_ticks();
-  priv->started   = true;
+  bflb_wdg_start(priv->wdg);
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+  if (priv->handler != NULL)
+    {
+      up_enable_irq(BL616CL_IRQ_WDG);
+    }
+#endif
+
+  priv->started = true;
 
   leave_critical_section(flags);
 
@@ -178,11 +263,20 @@ static int bl616cl_wdt_stop(struct watchdog_lowerhalf_s *lower)
 {
   struct bl616cl_wdt_lowerhalf_s *priv =
     (struct bl616cl_wdt_lowerhalf_s *)lower;
+  irqstate_t flags;
 
   DEBUGASSERT(priv != NULL && priv->wdg != NULL);
 
+  flags = enter_critical_section();
+
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+  up_disable_irq(BL616CL_IRQ_WDG);
+#endif
   bflb_wdg_stop(priv->wdg);
+  bl616cl_wdt_clear_irq(priv);
   priv->started = false;
+
+  leave_critical_section(flags);
 
   return OK;
 }
@@ -214,8 +308,8 @@ static int bl616cl_wdt_keepalive(struct watchdog_lowerhalf_s *lower)
 
   flags = enter_critical_section();
 
-  priv->lastreset = clock_systime_ticks();
   bflb_wdg_reset_countervalue(priv->wdg);
+  priv->lastreset = clock_systime_ticks();
 
   leave_critical_section(flags);
 
@@ -243,9 +337,14 @@ static int bl616cl_wdt_getstatus(struct watchdog_lowerhalf_s *lower,
 {
   struct bl616cl_wdt_lowerhalf_s *priv =
     (struct bl616cl_wdt_lowerhalf_s *)lower;
+  irqstate_t flags;
+  uint32_t compare;
+  uint32_t counter;
   uint32_t elapsed;
 
   DEBUGASSERT(priv != NULL && status != NULL);
+
+  flags = enter_critical_section();
 
   status->flags = WDFLAGS_RESET;
   if (priv->started)
@@ -259,14 +358,44 @@ static int bl616cl_wdt_getstatus(struct watchdog_lowerhalf_s *lower,
 
   /* Return the approximate time until the watchdog timer expiration */
 
-  elapsed = TICK2MSEC(clock_systime_ticks() - priv->lastreset);
-  if (elapsed > (uint32_t)priv->timeout)
+  if (priv->started)
     {
-      elapsed = priv->timeout;
+      compare = bl616cl_wdt_ms_to_ticks(priv->timeout);
+      counter = bflb_wdg_get_countervalue(priv->wdg);
+      if (counter < compare)
+        {
+          status->timeleft = bl616cl_wdt_ticks_to_ms(compare - counter);
+          if (status->timeleft > priv->timeout)
+            {
+              status->timeleft = priv->timeout;
+            }
+        }
+      else
+        {
+          /* WVR can briefly expose the previous value after WCR is
+           * written. Use the software timestamp until the new count is
+           * visible instead of reporting an immediate timeout.
+           */
+
+          elapsed = TICK2MSEC(clock_systime_ticks() - priv->lastreset);
+          status->timeleft = elapsed < priv->timeout ?
+                             priv->timeout - elapsed : 0;
+        }
+    }
+  else
+    {
+      status->timeleft = priv->timeout;
     }
 
-  status->timeleft = priv->timeout - elapsed;
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+  if (priv->handler != NULL)
+    {
+      status->flags &= ~WDFLAGS_RESET;
+      status->flags |= WDFLAGS_CAPTURE;
+    }
+#endif
 
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -291,6 +420,7 @@ static int bl616cl_wdt_settimeout(struct watchdog_lowerhalf_s *lower,
 {
   struct bl616cl_wdt_lowerhalf_s *priv =
     (struct bl616cl_wdt_lowerhalf_s *)lower;
+  irqstate_t flags;
 
   DEBUGASSERT(priv != NULL);
 
@@ -302,16 +432,87 @@ static int bl616cl_wdt_settimeout(struct watchdog_lowerhalf_s *lower,
       return -ERANGE;
     }
 
+  flags = enter_critical_section();
+
   if (priv->started)
     {
-      wdwarn("WARNING: Watchdog is already started\n");
-      return -EBUSY;
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+      up_disable_irq(BL616CL_IRQ_WDG);
+#endif
+      bflb_wdg_stop(priv->wdg);
+      priv->timeout = timeout;
+      bl616cl_wdt_configure(priv);
+      bl616cl_wdt_clear_irq(priv);
+      bflb_wdg_reset_countervalue(priv->wdg);
+      priv->lastreset = clock_systime_ticks();
+      bflb_wdg_start(priv->wdg);
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+      if (priv->handler != NULL)
+        {
+          up_enable_irq(BL616CL_IRQ_WDG);
+        }
+
+#endif
+    }
+  else
+    {
+      priv->timeout = timeout;
     }
 
-  priv->timeout = timeout;
+  leave_critical_section(flags);
 
   return OK;
 }
+
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+static int bl616cl_wdt_handler(int irq, void *context, void *arg)
+{
+  struct bl616cl_wdt_lowerhalf_s *priv = arg;
+  xcpt_t handler;
+  void *upper;
+
+  bflb_wdg_compint_clear(priv->wdg);
+  bflb_irq_clear_pending(BL616CL_WDT_RAW_IRQ);
+  handler = priv->handler;
+  upper = priv->upper;
+  if (handler != NULL)
+    {
+      handler(irq, context, upper);
+    }
+
+  return OK;
+}
+
+static xcpt_t bl616cl_wdt_capture(struct watchdog_lowerhalf_s *lower,
+                                  xcpt_t handler)
+{
+  struct bl616cl_wdt_lowerhalf_s *priv =
+    (struct bl616cl_wdt_lowerhalf_s *)lower;
+  irqstate_t flags;
+  xcpt_t oldhandler;
+
+  flags = enter_critical_section();
+  oldhandler = priv->handler;
+  priv->handler = handler;
+  if (priv->started)
+    {
+      up_disable_irq(BL616CL_IRQ_WDG);
+      if ((oldhandler == NULL) != (handler == NULL))
+        {
+          bl616cl_wdt_clear_irq(priv);
+          bl616cl_wdt_set_action(priv, handler != NULL);
+        }
+
+      if (handler != NULL)
+        {
+          up_enable_irq(BL616CL_IRQ_WDG);
+        }
+    }
+
+  leave_critical_section(flags);
+  return oldhandler;
+}
+#endif
 
 /****************************************************************************
  * Public Functions
@@ -346,7 +547,30 @@ int bl616cl_wdt_initialize(FAR const char *devpath)
       return -ENODEV;
     }
 
+  PERIPHERAL_CLOCK_TIMER0_1_WDG_ENABLE();
+  bflb_wdg_stop(priv->wdg);
+  bl616cl_wdt_clear_irq(priv);
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+  if (irq_attach(BL616CL_IRQ_WDG, bl616cl_wdt_handler, priv) < 0)
+    {
+      return -EIO;
+    }
+
+  up_disable_irq(BL616CL_IRQ_WDG);
+#endif
+
   handle = watchdog_register(devpath,
                              (FAR struct watchdog_lowerhalf_s *)priv);
-  return (handle != NULL) ? OK : -ENODEV;
+  if (handle == NULL)
+    {
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+      irq_detach(BL616CL_IRQ_WDG);
+#endif
+      return -ENODEV;
+    }
+
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+  priv->upper = handle;
+#endif
+  return OK;
 }

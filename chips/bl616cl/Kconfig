@@ -61,10 +61,19 @@ config BL616CL_WDT
 	bool "Watchdog Timer (WDT)"
 	default n
 	select WATCHDOG
+	select BL616CL_WDT_CAPTURE if WATCHDOG_AUTOMONITOR_BY_CAPTURE
 	---help---
 		Enable the BL616CL watchdog timer lower half driver.
 		The timeout unit is milliseconds and the maximum value
-		is 65535 ms.
+		is 63999 ms with the default 32 kHz clock. Capture support
+		is selected automatically when automonitor uses capture.
+
+config BL616CL_WDT_CAPTURE
+	bool "Watchdog interrupt capture"
+	default n
+	depends on BL616CL_WDT
+	---help---
+		Enable watchdog interrupt capture mode and the WDT IRQ handler.
 
 config BL616CL_TRNG
 	bool "True random number generator (TRNG)"

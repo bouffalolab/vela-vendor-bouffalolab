@@ -458,7 +458,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 
 | ID | 能力 | 状态 | 裁剪和资源边界 | 验证要求 |
 |---|---|---|---|---|
-| E01 | WDT interrupt/capture、automonitor | 需要适配，P1 | LHAL 支持 interrupt mode；新增 `BL616CL_WDT_CAPTURE`，仅开启时编译 ISR/capture | capture 回调、恢复 reset mode、automonitor、真实复位回归 |
+| E01 | WDT interrupt/capture、automonitor | 已验证（ST024） | `BL616CL_WDT` 控制 lower-half；`BL616CL_WDT_CAPTURE` 控制 ISR/capture，并在 BY_CAPTURE 时由 Kconfig 自动联动；生产 automonitor 使用 BY_WDOG | WDT-001~005 覆盖边界、live timeout、双 fd、capture handler、automonitor 接管和 `SYS_RWDT` 复位；关闭态裁剪成立 |
 | E02 | TIMER1 普通 timer | 需要适配，P1 | 与 oneshot/EXTCLK 用 Kconfig choice 互斥；独立 `/dev/timer1` | owner 冲突负测、动态 timeout、回调停止和重启 |
 | E03 | TIMER0 input capture | 需要适配，P2 | device table 有 capture IRQ；对接 NuttX capture lower-half并配置输入 pin | 频率、占空比、边沿、溢出和无信号超时 |
 | E04 | GPIO multipin batch | 需要适配，P2 | 当前 ioexpander multipin ops 为 `NULL`；仅 `IOEXPANDER_MULTIPIN` 时编译 | 跨 pin 原子性边界、输入/输出混合、与 IRQ 并发 |
@@ -548,6 +548,31 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
   wakeup 或 HBN_OUT0 公共 demux；warm reset 结果不外推到断电保持。NuttX RTC
   upper-half 参数校验已提交 PR `#357`；并发生命周期问题仍由 ST018/ST019
   独立闭环。
+
+### E01 WDT 实测结论
+
+- `CONFIG_BL616CL_WDT` 条件编入主 TIMER WDT lower-half，固定 32K/div31 为
+  1024 Hz；`CONFIG_BL616CL_WDT_CAPTURE` 再编入 WDT IRQ 70、capture handler
+  和 `WDIOC_CAPTURE` 状态。WDT 测试 main 保持单一 `libapps_mcu_wdt_test.a`，
+  lower-half 位于 `arch/libarch.a`。
+- off、base、capture、BY_WDOG automonitor 四种 clean build 分别为
+  `1219/1219`、`1224/1224`、`1224/1224`、`1224/1224`。off 不含 WDT
+  object/初始化符号或测试 archive；base/automonitor 不含 capture 符号；
+  capture 含 `bl616cl_wdt_handler`/`bl616cl_wdt_capture`。
+- USB2 `/dev/ttyUSB2`、2 Mbps 实测：WDT-002 在 1000 ms timeout、500 ms
+  interval 下 3000 ms 喂狗 6 次无复位；WDT-003 拒绝 0/64000 ms、接受
+  1/63999 ms，active 1001 ms 重装、timeleft 单调下降，双 fd 共享 ACTIVE
+  和 timeout，关闭第二 fd 不停止，第二 fd STOP 后首 fd 观察无延迟复位。
+- capture 配置 WDT-004 输出 `callback0 count=1 flags=0x5`，handler 替换后
+  旧回调不再增加，取消后恢复 RESET；随后 WDT-001 1000 ms 不喂狗真实复位，
+  重启查询 `PASS: previous reset cause = WATCHDOG (SYS_RWDT)`。capture
+  读写 action 切换不重置计数器，测试检查替换/取消前后 timeleft 不增加。
+- BY_WDOG automonitor 配置 WDT-005 在静置 5000 ms（3 s timeout、1 s ping）
+  后保持 `flags=0x3`；用户 START 接管后停止 KEEPALIVE，设备真实复位，
+  `-c 005 -s` 严格检查 `SYS_RWDT`。未启用配置执行 WDT-005 返回 `-ENOTSUP`，
+  不打印假阳性 PASS。
+- 本轮不声明 HBN WDT1、window/mintime、IRQ 边沿精度或 BY_CAPTURE automonitor
+  用户 handler 并存语义；后者仍受 OpenVela upper-half 状态机限制。
 
 ## 实施顺序
 

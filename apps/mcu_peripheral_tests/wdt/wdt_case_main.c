@@ -35,11 +35,15 @@
 #define CASE_001               "001"
 #define CASE_002               "002"
 #define CASE_003               "003"
+#define CASE_004               "004"
+#define CASE_005               "005"
 #define CASE_ALL               "all"
 
 #define DEFAULT_TIMEOUT_MS     3000
 #define DEFAULT_PINGTIME_MS    9000
 #define DEFAULT_PINGDELAY_MS   1000
+#define BL616CL_WDT_MAXTIMEOUT 63999
+#define CASE003_MIN_TIMEOUT_MS 100
 
 /* Safety guard for case 001: if the device fails to reset, give up after
  * this many multiples of the configured timeout instead of hanging forever.
@@ -73,7 +77,31 @@ static int open_wdt_device(const char *devpath);
 static int run_case_001(const struct app_config_s *cfg);
 static int run_case_002(const struct app_config_s *cfg);
 static int run_case_003(const struct app_config_s *cfg);
+static int run_case_004(const struct app_config_s *cfg);
+static int run_case_005(const struct app_config_s *cfg);
 static int run_selected_cases(const struct app_config_s *cfg);
+
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+static volatile unsigned int g_capture_count[2];
+
+static int capture_callback_0(int irq, void *context, void *arg)
+{
+  (void)irq;
+  (void)context;
+  (void)arg;
+  g_capture_count[0]++;
+  return OK;
+}
+
+static int capture_callback_1(int irq, void *context, void *arg)
+{
+  (void)irq;
+  (void)context;
+  (void)arg;
+  g_capture_count[1]++;
+  return OK;
+}
+#endif
 
 /****************************************************************************
  * Private Functions
@@ -83,12 +111,14 @@ static void print_usage(const char *progname)
 {
   printf("Usage: %s [options]\n", progname);
   printf("Options:\n");
-  printf("  -c <id>    Case id: 001, 002, 003, all (default: all)\n");
+  printf("  -c <id>    Case id: 001..005, all (default: all)\n");
   printf("             001: timeout reset "
          "(two-stage, reboots the device)\n");
   printf("             002: periodic keepalive, no reset\n");
-  printf("             003: lifecycle and rejected requests, no reset\n");
-  printf("             all: run 002/003 first, then 001 (device will reset)\n");
+  printf("             003: boundaries, live timeout and lifecycle\n");
+  printf("             004: interrupt capture and reset restore\n");
+  printf("             005: automonitor stability and handoff\n");
+  printf("             all: run 002/004/003, then reset with 001\n");
   printf("  -d <dev>   Watchdog device path (default: %s)\n",
          DEFAULT_WDT_DEVPATH);
   printf("  -t <ms>    Watchdog timeout in ms (default: %d)\n",
@@ -288,6 +318,7 @@ static int run_case_002(const struct app_config_s *cfg)
   int fd;
   int ret;
 
+  memset(&status, 0, sizeof(status));
   printf("[WDT-002] Periodic keepalive, no reset\n");
   printf("  Device: %s Timeout: %lums Interval: %lums Duration: %lums\n",
          cfg->devpath, (unsigned long)cfg->timeout,
@@ -377,7 +408,7 @@ static int run_case_002(const struct app_config_s *cfg)
  *
  * Description:
  *   Exercise lifecycle operations in deliberately surprising orders and
- *   verify rejected timeout changes do not corrupt the configured state.
+ *   verify timeout boundaries and live reconfiguration preserve state.
  *   This case always stops the watchdog before returning.
  *
  ****************************************************************************/
@@ -386,10 +417,20 @@ static int run_case_003(const struct app_config_s *cfg)
 {
   struct watchdog_status_s status;
   uint32_t alternate_timeout;
+  uint32_t first_timeleft;
+  int second_fd = -1;
   int fd;
   int ret;
 
-  printf("[WDT-003] Lifecycle and rejected requests, no reset\n");
+  memset(&status, 0, sizeof(status));
+  printf("[WDT-003] Boundaries, live timeout and lifecycle, no reset\n");
+
+  if (cfg->timeout < CASE003_MIN_TIMEOUT_MS)
+    {
+      printf("  FAIL: lifecycle timeout must be at least %dms\n",
+             CASE003_MIN_TIMEOUT_MS);
+      return -ERANGE;
+    }
 
   fd = open_wdt_device(cfg->devpath);
   if (fd < 0)
@@ -408,12 +449,20 @@ static int run_case_003(const struct app_config_s *cfg)
     }
 
   errno = 0;
-  ret = ioctl(fd, WDIOC_SETTIMEOUT, 65536);
+  ret = ioctl(fd, WDIOC_SETTIMEOUT, BL616CL_WDT_MAXTIMEOUT + 1);
   if (ret >= 0 || errno != ERANGE)
     {
       printf("  FAIL: oversized timeout ret=%d errno=%d, expected ERANGE\n",
              ret, errno);
       ret = -EIO;
+      goto fail;
+    }
+
+  if (ioctl(fd, WDIOC_SETTIMEOUT, 1) < 0 ||
+      ioctl(fd, WDIOC_SETTIMEOUT, BL616CL_WDT_MAXTIMEOUT) < 0)
+    {
+      printf("  FAIL: valid timeout boundary errno=%d\n", errno);
+      ret = -errno;
       goto fail;
     }
 
@@ -435,36 +484,95 @@ static int run_case_003(const struct app_config_s *cfg)
       goto stop_fail;
     }
 
-  alternate_timeout = cfg->timeout == 65535 ? cfg->timeout - 1 :
-                                              cfg->timeout + 1;
-  errno = 0;
+  alternate_timeout = cfg->timeout == BL616CL_WDT_MAXTIMEOUT ?
+                      cfg->timeout - 1 : cfg->timeout + 1;
   ret = ioctl(fd, WDIOC_SETTIMEOUT, alternate_timeout);
-  if (ret >= 0 || errno != EBUSY)
+  if (ret < 0)
     {
-      printf("  FAIL: live timeout change ret=%d errno=%d, expected EBUSY\n",
-             ret, errno);
-      ret = -EIO;
+      printf("  FAIL: live timeout change errno=%d\n", errno);
+      ret = -errno;
       goto stop_fail;
     }
 
   ret = ioctl(fd, WDIOC_GETSTATUS, (unsigned long)(uintptr_t)&status);
   if (ret < 0 || (status.flags & WDFLAGS_ACTIVE) == 0 ||
-      status.timeout != cfg->timeout)
+      status.timeout != alternate_timeout ||
+      status.timeleft > alternate_timeout)
     {
-      printf("  FAIL: rejected request changed active state flags=0x%lx "
-             "timeout=%lu\n", (unsigned long)status.flags,
-             (unsigned long)status.timeout);
+      printf("  FAIL: live update flags=0x%lx timeout=%lu timeleft=%lu\n",
+             (unsigned long)status.flags, (unsigned long)status.timeout,
+             (unsigned long)status.timeleft);
       ret = -EIO;
       goto stop_fail;
     }
 
-  ret = ioctl(fd, WDIOC_STOP, 0);
+  first_timeleft = status.timeleft;
+  usleep(20000);
+  ret = ioctl(fd, WDIOC_GETSTATUS, (unsigned long)(uintptr_t)&status);
+  if (ret < 0 || status.timeleft >= first_timeleft)
+    {
+      printf("  FAIL: timeleft did not decrease first=%lu second=%lu\n",
+             (unsigned long)first_timeleft,
+             (unsigned long)status.timeleft);
+      ret = -EIO;
+      goto stop_fail;
+    }
+
+  ret = ioctl(fd, WDIOC_SETTIMEOUT, (unsigned long)cfg->timeout);
   if (ret < 0)
     {
-      printf("  FAIL: stop errno=%d\n", errno);
+      printf("  FAIL: restore live timeout errno=%d\n", errno);
       ret = -errno;
-      goto fail;
+      goto stop_fail;
     }
+
+  second_fd = open_wdt_device(cfg->devpath);
+  if (second_fd < 0)
+    {
+      ret = second_fd;
+      goto stop_fail;
+    }
+
+  ret = ioctl(second_fd, WDIOC_GETSTATUS,
+              (unsigned long)(uintptr_t)&status);
+  if (ret < 0 || (status.flags & WDFLAGS_ACTIVE) == 0 ||
+      status.timeout != cfg->timeout)
+    {
+      printf("  FAIL: second fd did not share active state flags=0x%lx "
+             "timeout=%lu\n", (unsigned long)status.flags,
+             (unsigned long)status.timeout);
+      ret = -EIO;
+      goto second_stop_fail;
+    }
+
+  close(second_fd);
+  second_fd = -1;
+
+  ret = ioctl(fd, WDIOC_GETSTATUS, (unsigned long)(uintptr_t)&status);
+  if (ret < 0 || (status.flags & WDFLAGS_ACTIVE) == 0)
+    {
+      printf("  FAIL: closing second fd stopped shared watchdog\n");
+      ret = -EIO;
+      goto stop_fail;
+    }
+
+  second_fd = open_wdt_device(cfg->devpath);
+  if (second_fd < 0)
+    {
+      ret = second_fd;
+      goto stop_fail;
+    }
+
+  if (ioctl(second_fd, WDIOC_KEEPALIVE, 0) < 0 ||
+      ioctl(second_fd, WDIOC_STOP, 0) < 0)
+    {
+      printf("  FAIL: second fd KEEPALIVE/STOP errno=%d\n", errno);
+      ret = -errno;
+      goto second_fail;
+    }
+
+  close(second_fd);
+  second_fd = -1;
 
   /* Repeated STOP and KEEPALIVE while inactive must be harmless and must not
    * accidentally arm the watchdog.
@@ -489,15 +597,292 @@ static int run_case_003(const struct app_config_s *cfg)
     }
 
   close(fd);
-  printf("  PASS: invalid/live changes rejected; duplicate lifecycle "
-         "preserved state\n\n");
+  printf("  PASS: boundaries rejected; live update and lifecycle "
+         "preserved shared state\n\n");
   return 0;
 
+second_stop_fail:
+  (void)ioctl(second_fd, WDIOC_STOP, 0);
+second_fail:
+  close(second_fd);
 stop_fail:
   (void)ioctl(fd, WDIOC_STOP, 0);
 fail:
   close(fd);
   return ret < 0 ? ret : -EIO;
+}
+
+/****************************************************************************
+ * Name: run_case_004
+ ****************************************************************************/
+
+static int run_case_004(const struct app_config_s *cfg)
+{
+#ifdef CONFIG_BL616CL_WDT_CAPTURE
+  struct watchdog_capture_s capture;
+  struct watchdog_status_s status;
+  uint32_t timeleft;
+  uint64_t deadline;
+  int fd = -1;
+  int ret = -EIO;
+  bool captured = false;
+
+  memset(&status, 0, sizeof(status));
+  printf("[WDT-004] Interrupt capture and reset restore\n");
+  fd = open_wdt_device(cfg->devpath);
+  if (fd < 0)
+    {
+      return fd;
+    }
+
+  ret = ioctl(fd, WDIOC_SETTIMEOUT, (unsigned long)cfg->timeout);
+  if (ret < 0)
+    {
+      printf("  Failed: ioctl(WDIOC_SETTIMEOUT) errno=%d\n", errno);
+      ret = -errno;
+      goto cleanup;
+    }
+
+  g_capture_count[0] = 0;
+  g_capture_count[1] = 0;
+  capture.newhandler = capture_callback_0;
+  capture.oldhandler = NULL;
+  ret = ioctl(fd, WDIOC_CAPTURE, (unsigned long)(uintptr_t)&capture);
+  captured = ret >= 0;
+  if (ret < 0 || capture.oldhandler != NULL)
+    {
+      printf("  FAIL: capture install ret=%d old=%p errno=%d\n", ret,
+             capture.oldhandler, errno);
+      ret = -EIO;
+      goto cleanup;
+    }
+
+  ret = ioctl(fd, WDIOC_START, 0);
+  if (ret < 0)
+    {
+      printf("  FAIL: capture start errno=%d\n", errno);
+      ret = -errno;
+      goto cleanup;
+    }
+
+  deadline = now_ms() + (uint64_t)cfg->timeout * 2;
+  while (g_capture_count[0] == 0 && now_ms() < deadline)
+    {
+      usleep(10000);
+    }
+
+  ret = ioctl(fd, WDIOC_GETSTATUS, (unsigned long)(uintptr_t)&status);
+  if (ret < 0 || (status.flags & WDFLAGS_CAPTURE) == 0 ||
+      (status.flags & WDFLAGS_ACTIVE) == 0 ||
+      (status.flags & WDFLAGS_RESET) != 0 || g_capture_count[0] != 1)
+    {
+      printf("  FAIL: capture count=%u flags=0x%lx errno=%d\n",
+             g_capture_count[0], (unsigned long)status.flags, errno);
+      ret = -EIO;
+      goto cleanup;
+    }
+
+  printf("  callback0 count=%u flags=0x%lx\n", g_capture_count[0],
+         (unsigned long)status.flags);
+
+  if (ioctl(fd, WDIOC_KEEPALIVE, 0) < 0)
+    {
+      printf("  FAIL: capture keepalive errno=%d\n", errno);
+      ret = -errno;
+      goto cleanup;
+    }
+
+  ret = ioctl(fd, WDIOC_GETSTATUS, (unsigned long)(uintptr_t)&status);
+  if (ret < 0)
+    {
+      printf("  FAIL: status before replace errno=%d\n", errno);
+      ret = -errno;
+      goto cleanup;
+    }
+
+  timeleft = status.timeleft;
+
+  capture.newhandler = capture_callback_1;
+  ret = ioctl(fd, WDIOC_CAPTURE, (unsigned long)(uintptr_t)&capture);
+  if (ret < 0 || capture.oldhandler != capture_callback_0)
+    {
+      printf("  FAIL: capture replace ret=%d old=%p errno=%d\n", ret,
+             capture.oldhandler, errno);
+      ret = -EIO;
+      goto cleanup;
+    }
+
+  ret = ioctl(fd, WDIOC_GETSTATUS, (unsigned long)(uintptr_t)&status);
+  if (ret < 0 || status.timeleft > timeleft)
+    {
+      printf("  FAIL: handler replace extended deadline %lu -> %lu\n",
+             (unsigned long)timeleft, (unsigned long)status.timeleft);
+      ret = -EIO;
+      goto cleanup;
+    }
+
+  deadline = now_ms() + (uint64_t)cfg->timeout * 2;
+  while (g_capture_count[1] == 0 && now_ms() < deadline)
+    {
+      usleep(10000);
+    }
+
+  if (g_capture_count[0] != 1 || g_capture_count[1] != 1)
+    {
+      printf("  FAIL: capture replace counts=%u/%u\n",
+             g_capture_count[0], g_capture_count[1]);
+      ret = -EIO;
+      goto cleanup;
+    }
+
+  ret = ioctl(fd, WDIOC_GETSTATUS, (unsigned long)(uintptr_t)&status);
+  if (ret < 0)
+    {
+      printf("  FAIL: status before restore errno=%d\n", errno);
+      ret = -errno;
+      goto cleanup;
+    }
+
+  timeleft = status.timeleft;
+  capture.newhandler = NULL;
+  ret = ioctl(fd, WDIOC_CAPTURE, (unsigned long)(uintptr_t)&capture);
+  if (ret < 0 || capture.oldhandler != capture_callback_1)
+    {
+      printf("  FAIL: capture restore ret=%d old=%p errno=%d\n", ret,
+             capture.oldhandler, errno);
+      ret = -EIO;
+      goto cleanup;
+    }
+
+  captured = false;
+
+  ret = ioctl(fd, WDIOC_GETSTATUS, (unsigned long)(uintptr_t)&status);
+  if (ret < 0 || (status.flags & WDFLAGS_RESET) == 0 ||
+      (status.flags & WDFLAGS_CAPTURE) != 0 || status.timeleft > timeleft)
+    {
+      printf("  FAIL: reset restore flags=0x%lx timeleft=%lu/%lu errno=%d\n",
+             (unsigned long)status.flags, (unsigned long)timeleft,
+             (unsigned long)status.timeleft, errno);
+      ret = -EIO;
+      goto cleanup;
+    }
+
+  ret = ioctl(fd, WDIOC_STOP, 0);
+  printf("  %s: handlers replaced; capture cancelled; reset restored\n\n",
+         ret == 0 ? "PASS" : "FAIL");
+cleanup:
+  if (captured)
+    {
+      capture.newhandler = NULL;
+      (void)ioctl(fd, WDIOC_CAPTURE, (unsigned long)(uintptr_t)&capture);
+    }
+
+  (void)ioctl(fd, WDIOC_STOP, 0);
+  close(fd);
+  return ret;
+#else
+  printf("[WDT-004] SKIP: BL616CL_WDT_CAPTURE is disabled\n\n");
+  return -ENOTSUP;
+#endif
+}
+
+/****************************************************************************
+ * Name: run_case_005
+ ****************************************************************************/
+
+static int run_case_005(const struct app_config_s *cfg)
+{
+#ifdef CONFIG_WATCHDOG_AUTOMONITOR
+  struct watchdog_status_s status;
+  enum boardioc_reset_cause_e cause = BOARDIOC_RESETCAUSE_NONE;
+  uint64_t deadline;
+  int fd;
+  int ret;
+
+  memset(&status, 0, sizeof(status));
+  printf("[WDT-005] Automonitor stability and handoff\n");
+  ret = read_reset_cause(&cause);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (cfg->status_only)
+    {
+      bool prev_was_wdt = cause == BOARDIOC_RESETCAUSE_SYS_RWDT;
+
+      if (prev_was_wdt)
+        {
+          printf("  PASS: previous reset cause = WATCHDOG (SYS_RWDT)\n");
+        }
+      else
+        {
+          printf("  Previous reset cause = %d (not WATCHDOG)\n",
+                 (int)cause);
+        }
+
+      printf("  status-only: automonitor handoff not performed\n\n");
+      return prev_was_wdt ? 0 : -EAGAIN;
+    }
+
+  fd = open_wdt_device(cfg->devpath);
+  if (fd < 0)
+    {
+      return fd;
+    }
+
+  ret = ioctl(fd, WDIOC_GETSTATUS, (unsigned long)(uintptr_t)&status);
+  if (ret < 0 || (status.flags & WDFLAGS_ACTIVE) == 0)
+    {
+      printf("  FAIL: automonitor not active flags=0x%lx errno=%d\n",
+             (unsigned long)status.flags, errno);
+      close(fd);
+      return -EIO;
+    }
+
+  printf("  monitor active flags=0x%lx; waiting %lums\n",
+         (unsigned long)status.flags, (unsigned long)cfg->pingtime);
+  usleep(cfg->pingtime * 1000);
+  ret = ioctl(fd, WDIOC_GETSTATUS, (unsigned long)(uintptr_t)&status);
+  if (ret < 0 || (status.flags & WDFLAGS_ACTIVE) == 0)
+    {
+      printf("  FAIL: monitor did not survive wait flags=0x%lx errno=%d\n",
+             (unsigned long)status.flags, errno);
+      close(fd);
+      return -EIO;
+    }
+
+  ret = ioctl(fd, WDIOC_SETTIMEOUT, (unsigned long)cfg->timeout);
+  if (ret < 0)
+    {
+      printf("  FAIL: handoff timeout errno=%d\n", errno);
+      close(fd);
+      return -errno;
+    }
+
+  ret = ioctl(fd, WDIOC_START, 0);
+  if (ret < 0)
+    {
+      printf("  FAIL: handoff START errno=%d\n", errno);
+      close(fd);
+      return -errno;
+    }
+
+  printf("  handoff complete; no KEEPALIVE, device should reset\n");
+  fflush(stdout);
+  deadline = now_ms() + (uint64_t)cfg->timeout * CASE001_GUARD_MULTIPLE;
+  while (now_ms() < deadline)
+    {
+      usleep(100000);
+    }
+
+  printf("  FAIL: watchdog did not reset after handoff\n\n");
+  close(fd);
+  return -ETIMEDOUT;
+#else
+  printf("[WDT-005] SKIP: WATCHDOG_AUTOMONITOR is disabled\n\n");
+  return -ENOTSUP;
+#endif
 }
 
 static int run_selected_cases(const struct app_config_s *cfg)
@@ -519,12 +904,28 @@ static int run_selected_cases(const struct app_config_s *cfg)
       return run_case_003(cfg);
     }
 
+  if (strcmp(cfg->case_id, CASE_004) == 0)
+    {
+      return run_case_004(cfg);
+    }
+
+  if (strcmp(cfg->case_id, CASE_005) == 0)
+    {
+      return run_case_005(cfg);
+    }
+
   /* "all": run the non-destructive feed case first, then the reset case
    * (which reboots the device and does not return).
    */
 
   ret = run_case_002(cfg);
   if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = run_case_004(cfg);
+  if (ret < 0 && ret != -ENOTSUP)
     {
       return ret;
     }
@@ -591,16 +992,18 @@ int main(int argc, char *argv[])
   if (strcmp(cfg.case_id, CASE_ALL) != 0 &&
       strcmp(cfg.case_id, CASE_001) != 0 &&
       strcmp(cfg.case_id, CASE_002) != 0 &&
-      strcmp(cfg.case_id, CASE_003) != 0)
+      strcmp(cfg.case_id, CASE_003) != 0 &&
+      strcmp(cfg.case_id, CASE_004) != 0 &&
+      strcmp(cfg.case_id, CASE_005) != 0)
     {
       printf("Unsupported case id: %s\n", cfg.case_id);
       return ERROR;
     }
 
-  if (cfg.timeout < 1 || cfg.timeout > 65535)
+  if (cfg.timeout < 1 || cfg.timeout > BL616CL_WDT_MAXTIMEOUT)
     {
-      printf("Invalid timeout: %lu (1..65535 ms)\n",
-             (unsigned long)cfg.timeout);
+      printf("Invalid timeout: %lu (1..%d ms)\n",
+             (unsigned long)cfg.timeout, BL616CL_WDT_MAXTIMEOUT);
       return ERROR;
     }
 
