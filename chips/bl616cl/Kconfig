@@ -75,6 +75,39 @@ config BL616CL_TRNG
 		standard /dev/random device. DEV_URANDOM remains independent and
 		uses the same hardware when DEV_URANDOM_ARCH is selected.
 
+menuconfig BL616CL_SPI
+	bool "SPI master"
+	default n
+	select SPI
+	select SPI_EXCHANGE
+	select ARCH_HAVE_SPI_BITORDER
+	---help---
+		Enable the BL616CL polling SPI master lower-half. Board code owns
+		pin selection, chip-select mapping, and /dev/spiN registration.
+
+if BL616CL_SPI
+
+config BL616CL_SPI0
+	bool "SPI0 controller"
+	default n
+
+config BL616CL_SPI1
+	bool "SPI1 controller"
+	default n
+	---help---
+		Build the independent SPI1 lower-half. The Ai-M64L-32S-Kit SPI1
+		four-wire pin mapping is not yet verified, so board registration is
+		intentionally unavailable.
+
+config BL616CL_SPI_TEST
+	bool
+	default n
+	---help---
+		Enable test-only transport and diagnostic hooks. Product
+		configurations must leave this option disabled.
+
+endif # BL616CL_SPI
+
 menuconfig BL616CL_RTC
 	bool "Real-time clock (RTC)"
 	default n

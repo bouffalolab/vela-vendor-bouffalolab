@@ -17,3 +17,5 @@
   use-after-free、启动边界、裁剪和外设回归。
 - [BL616CL UBSAN](bl616cl-ubsan.md)：配置和验证局部未定义行为插桩、runtime
   闭包、裁剪和外设回归。
+- [BL616CL SPI0/SPI1 Master](bl616cl-spi.md)：说明 polling master 最大能力交集、
+  双实例裁剪、GPIO CS、软件合同、构建证据和实物环回验收边界。

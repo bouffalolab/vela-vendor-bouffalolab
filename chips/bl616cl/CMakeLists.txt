@@ -46,6 +46,10 @@ if(CONFIG_BL616CL_TRNG)
   list(APPEND SRCS bl616cl_rng.c)
 endif()
 
+if(CONFIG_BL616CL_SPI0 OR CONFIG_BL616CL_SPI1)
+  list(APPEND SRCS bl616cl_spi.c)
+endif()
+
 if(CONFIG_BL616CL_RTC)
   list(APPEND SRCS bl616cl_rtc.c bl616cl_rtc_hw.c)
 endif()

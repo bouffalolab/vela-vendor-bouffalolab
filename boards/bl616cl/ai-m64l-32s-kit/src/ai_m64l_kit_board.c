@@ -44,13 +44,24 @@
 
 int bl616cl_board_initialize(void)
 {
-#ifdef CONFIG_BL616CL_GPIO
+#if defined(CONFIG_BL616CL_GPIO) || defined(CONFIG_AI_M64L_KIT_SPI0)
   int ret;
+#endif
 
+#ifdef CONFIG_BL616CL_GPIO
   ret = ai_m64l_kit_gpio_initialize();
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize GPIO driver: %d\n", ret);
+      return ret;
+    }
+#endif
+
+#ifdef CONFIG_AI_M64L_KIT_SPI0
+  ret = ai_m64l_kit_spi_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize SPI buses: %d\n", ret);
       return ret;
     }
 #endif

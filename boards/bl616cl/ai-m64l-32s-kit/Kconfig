@@ -1,4 +1,82 @@
 #
+
+menuconfig AI_M64L_KIT_SPI
+	bool "Ai-M64L-32S-Kit SPI buses"
+	default n
+	select BL616CL_SPI
+	---help---
+		Register board-selected SPI master buses. SPI0 uses GPIO chip select
+		and exposes the OpenVela test device as /dev/spi0.
+
+if AI_M64L_KIT_SPI
+
+config AI_M64L_KIT_SPI0
+	bool "Register SPI0"
+	default y
+	select BL616CL_SPI0
+	select SPI_DRIVER
+	---help---
+		Register SPI0 using the selected BL616CLDK-derived pin mapping.
+		This setting owns the selected pins instead of the board GPIO tests.
+
+if AI_M64L_KIT_SPI0
+
+config AI_M64L_KIT_SPI0_CS_PIN
+	int "SPI0 GPIO chip-select pin"
+	range 0 36
+	default 12
+
+config AI_M64L_KIT_SPI0_CLK_PIN
+	int "SPI0 clock pin"
+	range 0 36
+	default 13
+
+config AI_M64L_KIT_SPI0_MISO_PIN
+	int "SPI0 MISO pin"
+	range 0 36
+	default 18
+
+config AI_M64L_KIT_SPI0_MOSI_PIN
+	int "SPI0 MOSI pin"
+	range 0 36
+	default 19
+
+config AI_M64L_KIT_SPI0_CS_ACTIVE_HIGH
+	bool "SPI0 chip select is active high"
+	default n
+
+config AI_M64L_KIT_SPI0_TARGET_INDEX
+	int "SPI0 target 0 SPIDEV_USER index"
+	range 0 65535
+	default 0
+
+config AI_M64L_KIT_SPI0_TARGET1
+	bool "SPI0 target 1"
+	default n
+	help
+	  Enable a second GPIO chip select on SPI0. The target index and GPIO
+	  must differ from target 0 and all SPI signal pins.
+
+if AI_M64L_KIT_SPI0_TARGET1
+
+config AI_M64L_KIT_SPI0_TARGET1_CS_PIN
+	int "SPI0 target 1 GPIO chip-select pin"
+	range 0 36
+	default 20
+
+config AI_M64L_KIT_SPI0_TARGET1_CS_ACTIVE_HIGH
+	bool "SPI0 target 1 chip select is active high"
+	default n
+
+config AI_M64L_KIT_SPI0_TARGET1_INDEX
+	int "SPI0 target 1 SPIDEV_USER index"
+	range 0 65535
+	default 1
+
+endif # AI_M64L_KIT_SPI0_TARGET1
+
+endif # AI_M64L_KIT_SPI0
+endif # AI_M64L_KIT_SPI
 # For a description of the syntax of this configuration file,
 # see the file kconfig-language.txt in the NuttX tools repository.
 #
