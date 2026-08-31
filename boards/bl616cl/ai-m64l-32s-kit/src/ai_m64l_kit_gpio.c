@@ -113,7 +113,7 @@ static const struct ai_m64l_kit_gpio_pin_s g_ai_m64l_kit_gpio_pins[] =
 #if !AI_M64L_KIT_BUS_OWNS(19)
   { 19, GPIO_OUTPUT_PIN },
 #endif
-#if !AI_M64L_KIT_BUS_OWNS(22)
+#if !defined(CONFIG_AI_M64L_KIT_PWM) && !AI_M64L_KIT_BUS_OWNS(22)
   { 22, GPIO_OUTPUT_PIN },
 #endif
 #if !AI_M64L_KIT_BUS_OWNS(18)

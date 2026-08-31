@@ -1,0 +1,27 @@
+config BL_MCU_PERIPHERAL_TESTS_PWM
+	tristate "MCU peripheral PWM tests"
+	default n
+	depends on AI_M64L_KIT_PWM && BL616CL_PWM
+	depends on !PWM_PULSECOUNT && !PWM_MULTICHAN
+	depends on !PWM_FREQUENCY_FIXED && !PWM_DEADTIME
+	select BL616CL_PWM_TEST
+	---help---
+		Enable the BL616CL PWM contract and hardware test runner. This is a
+		test-only application and also enables the lower-half diagnostics and
+		fault-injection hooks. Keep it disabled in product configurations.
+
+if BL_MCU_PERIPHERAL_TESTS_PWM
+
+config BL_MCU_PERIPHERAL_TESTS_PWM_PROGNAME
+	string "Program name"
+	default "mcu_pwm_test"
+
+config BL_MCU_PERIPHERAL_TESTS_PWM_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_PWM_STACKSIZE
+	int "Stack size"
+	default 6144
+
+endif

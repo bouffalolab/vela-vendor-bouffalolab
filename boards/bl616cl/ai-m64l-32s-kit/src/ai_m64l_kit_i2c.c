@@ -26,6 +26,12 @@
    ((pin) >= 32 && (pin) <= 36))
 
 #ifdef CONFIG_AI_M64L_KIT_I2C0
+#  ifdef CONFIG_AI_M64L_KIT_PWM
+#    if CONFIG_AI_M64L_KIT_I2C0_SCL_PIN == 22 || \
+        CONFIG_AI_M64L_KIT_I2C0_SDA_PIN == 22
+#      error "I2C0 pin conflicts with PWM0 channel 3 on GPIO22"
+#    endif
+#  endif
 #  if (CONFIG_AI_M64L_KIT_I2C0_SCL_PIN & 1) != 0
 #    error "I2C0 SCL pin must be even"
 #  endif
@@ -39,6 +45,12 @@
 #endif
 
 #ifdef CONFIG_AI_M64L_KIT_I2C1
+#  ifdef CONFIG_AI_M64L_KIT_PWM
+#    if CONFIG_AI_M64L_KIT_I2C1_SCL_PIN == 22 || \
+        CONFIG_AI_M64L_KIT_I2C1_SDA_PIN == 22
+#      error "I2C1 pin conflicts with PWM0 channel 3 on GPIO22"
+#    endif
+#  endif
 #  if (CONFIG_AI_M64L_KIT_I2C1_SCL_PIN & 1) != 0
 #    error "I2C1 SCL pin must be even"
 #  endif

@@ -554,7 +554,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | P03 | RTC/Alarm | 已验证（ST016）；upper-half ioctl 补全（ST017） | `BL616CL_RTC`、`BL616CL_RTC_ALARM`；ioctl 测试 app 独立关闭；RC32K/DIG32K 二选一 | 48 位 HBN RTC lower-half 与 `/dev/rtc0`；UTC/亚秒、absolute/relative Alarm、取消/替换/re-arm、回绕、warm reset、unlink 和裁剪已验证；九个标准 ioctl 的 NULL/ID/ENOSYS 合同已在 debug/release fake lower 实测 |
 | P04 | I2C0/I2C1 master | 需要适配，P1 | 每实例选项、SCL/SDA pin、频率 | clock/pinmux/IRQ 或 polling；EEPROM/传感器、NACK、timeout、bus recovery |
 | P05 | SPI0/SPI1 master | 需要适配，P1 | 每实例选项、pin、mode、CS policy | controller lower-half和 board select/status；loopback、多 mode/width/frequency |
-| P06 | PWM | 需要适配，P1 | controller/channel/pin 选项 | NuttX PWM lower-half；频率/占空比边界、停止电平、逻辑分析仪 |
+| P06 | PWM | 软件闭环已通过（ST033），P1；G4 waiting | `BL616CL_PWM`、`AI_M64L_KIT_PWM`、test hook/app 独立裁剪；首版排除改变 ABI 的 multichannel/pulse/fixed/deadtime | PWM0 CH3+/GPIO22、continuous、整数频率、duty、cpol/dcpol、live update 和 multi-fd 已完成三态构建、裁剪、8/8 实机软件合同和现役回归；frequency/duty/停止电平/更新毛刺待逻辑分析仪 |
 | P07 | ADC | 需要适配，P2 | ADC、channel/pin、poll/DMA 分层 | analog lower-half；校准、量程、连续采样、溢出；外部基准电压 |
 | P08 | DMA0 | 需要适配，P1 公共前置 | controller/channel allocation；调用者各自 Kconfig | IRQ 映射、cache API A07、mem2mem 和外设传输、取消/并发 |
 | P09 | AES/SHA/GMAC | 需要适配，P2 | 算法分别裁剪，DMA 可独立 | 对接 OpenVela crypto；标准向量、分块/非对齐、并发和软件对照 |

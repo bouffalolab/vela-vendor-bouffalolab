@@ -45,8 +45,9 @@
 int bl616cl_board_initialize(void)
 {
 #if defined(CONFIG_AI_M64L_KIT_UART1) || defined(CONFIG_BL616CL_GPIO) || \
-    defined(CONFIG_AI_M64L_KIT_I2C0) || \
-    defined(CONFIG_AI_M64L_KIT_I2C1) || defined(CONFIG_AI_M64L_KIT_SPI0)
+	defined(CONFIG_AI_M64L_KIT_I2C0) || \
+	defined(CONFIG_AI_M64L_KIT_I2C1) || defined(CONFIG_AI_M64L_KIT_SPI0) || \
+	defined(CONFIG_AI_M64L_KIT_PWM)
   int ret;
 #endif
 
@@ -82,6 +83,15 @@ int bl616cl_board_initialize(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize SPI buses: %d\n", ret);
+      return ret;
+    }
+#endif
+
+#ifdef CONFIG_AI_M64L_KIT_PWM
+  ret = ai_m64l_kit_pwm_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize PWM output: %d\n", ret);
       return ret;
     }
 #endif

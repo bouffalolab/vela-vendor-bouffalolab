@@ -37,6 +37,19 @@
   (((pin) >= 6 && (pin) <= 11) || (pin) == 21 || \
    ((pin) >= 32 && (pin) <= 36))
 
+#ifdef CONFIG_AI_M64L_KIT_PWM
+#  if CONFIG_AI_M64L_KIT_SPI0_CS_PIN == 22 ||   \
+      CONFIG_AI_M64L_KIT_SPI0_CLK_PIN == 22 ||  \
+      CONFIG_AI_M64L_KIT_SPI0_MISO_PIN == 22 || \
+      CONFIG_AI_M64L_KIT_SPI0_MOSI_PIN == 22
+#    error "SPI0 pin conflicts with PWM0 channel 3 on GPIO22"
+#  endif
+#  if defined(CONFIG_AI_M64L_KIT_SPI0_TARGET1) && \
+      CONFIG_AI_M64L_KIT_SPI0_TARGET1_CS_PIN == 22
+#    error "SPI0 target 1 CS conflicts with PWM0 channel 3 on GPIO22"
+#  endif
+#endif
+
 #if CONFIG_AI_M64L_KIT_SPI0_CLK_PIN % 4 != 1
 #error "SPI0 CLK pin must map to signal 1"
 #endif

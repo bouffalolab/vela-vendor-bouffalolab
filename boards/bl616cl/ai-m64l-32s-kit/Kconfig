@@ -10,6 +10,15 @@ menuconfig AI_M64L_KIT_UART1
 		GPIO15 RX test loopback pair. Runtime termios is independently
 		controlled by SERIAL_TERMIOS.
 
+config AI_M64L_KIT_PWM
+	bool "Ai-M64L-32S-Kit PWM output"
+	default n
+	depends on BL616CL_PWM
+	---help---
+		Register PWM0 as /dev/pwm0 using PWM channel 3 positive output on
+		GPIO22. Enabling this option transfers GPIO22 ownership from the
+		board GPIO test device to PWM.
+
 menuconfig AI_M64L_KIT_I2C
 	bool "Ai-M64L-32S-Kit I2C buses"
 	default n

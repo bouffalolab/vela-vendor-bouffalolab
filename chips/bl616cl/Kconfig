@@ -170,6 +170,31 @@ config BL616CL_SPI_TEST
 
 endif # BL616CL_SPI
 
+config BL616CL_PWM
+	bool "Pulse-width modulation (PWM)"
+	default n
+	depends on PWM
+	depends on !PWM_PULSECOUNT
+	depends on !PWM_MULTICHAN
+	depends on !PWM_FREQUENCY_FIXED
+	depends on !PWM_DEADTIME
+	---help---
+		Enable the BL616CL PWM lower-half for one continuous-output channel.
+		The initial board integration uses PWM0 channel 3 positive output.
+		Pulse count, multichannel, fixed-point frequency, and dead-time ABIs
+		are intentionally excluded until their hardware paths are adapted.
+
+if BL616CL_PWM
+
+config BL616CL_PWM_TEST
+	bool
+	default n
+	---help---
+		Enable test-only timeout injection and diagnostic hooks. Product
+		configurations must leave this option disabled.
+
+endif # BL616CL_PWM
+
 menuconfig BL616CL_RTC
 	bool "Real-time clock (RTC)"
 	default n

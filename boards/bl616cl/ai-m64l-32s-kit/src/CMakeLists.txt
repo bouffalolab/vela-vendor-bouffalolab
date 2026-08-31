@@ -37,6 +37,10 @@ if(CONFIG_AI_M64L_KIT_SPI0)
   target_compile_definitions(board PRIVATE BL616CL)
 endif()
 
+if(CONFIG_AI_M64L_KIT_PWM)
+  list(APPEND SRCS ai_m64l_kit_pwm.c)
+endif()
+
 nuttx_add_romfs(
   NAME
   etc
