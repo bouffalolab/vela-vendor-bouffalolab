@@ -35,4 +35,16 @@ config BL_OS_FEATURE_TESTS_MM_RECORD_REALLOC_STACK
 		ownership. This option uses NuttX default allocator internals only in
 		the test application.
 
+config BL_OS_FEATURE_TESTS_MM_RECORD_STACK
+	bool "Heap backtrace contract test"
+	default n
+	depends on MM_DEFAULT_MANAGER && MM_RECORD_STACK
+	depends on FS_PROCFS && !FS_PROCFS_EXCLUDE_MEMINFO
+	depends on !FS_PROCFS_EXCLUDE_MEMDUMP
+	depends on BL_OS_FEATURE_TESTS_MM_RECORD
+	depends on BL_OS_FEATURE_TESTS_MM_RECORD_REALLOC_STACK
+	---help---
+		Enable the M02 heap backtrace gate, filter, pool and KASAN tests.
+		The test uses one application main and a test-only private heap.
+
 endif

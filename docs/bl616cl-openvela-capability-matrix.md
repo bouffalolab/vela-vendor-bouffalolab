@@ -3,10 +3,10 @@
 本文是 BL616CL OpenVela 能力状态的唯一结论入口。实施记录、测试原始日志和
 临时探测不在本文复制；每个能力完成后回写“状态”和“验证”列。
 
-最后核对：2026-08-30
+最后核对：2026-09-01
 
-- `vendor/bouffalolab`: `6a2925a`（P03 RTC/Alarm 远端基线）
-- `nuttx`: `27b42a91d71`（基于 `e987a81c32c`）
+- `vendor/bouffalolab`: `02402ab` + ST026 工作提交
+- `nuttx`: `e431601576d`（组织 fork 已承接 realloc stack 修复）
 - 板卡：Ai-M64L-32S-Kit
 - 配置：`bl616cl/ai-m64l-32s-kit/configs/nsh`
 
@@ -187,7 +187,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | ID | 能力与目标选项 | 状态 | 裁剪和依赖 | 验证要求 |
 |---|---|---|---|---|
 | M01 | 分配归属：`MM_RECORD_PID`、`MM_RECORD_SEQNO` | 已验证（ST007） | 默认 allocator 内建；RV32 每个已分配块增加 8 B，最小 chunk 从 16 B 增至 32 B | USB2 实测多线程归属、realloc 归属变化、sequence 窗口、释放清除和重复实例；关闭态裁剪成立 |
-| M02 | 分配回溯：`MM_RECORD_STACK`、`MM_RECORD_STACK_DEFAULT` | 可直接开启，P1 诊断（ST027 已修复 realloc 失败记录丢失） | 依赖 `LIBC_BACKTRACE_DEPTH>0`；先完成 A01；default allocator 修复见 NuttX PR #359 | 分配栈可符号化；释放后不残留；realloc 成功/失败所有权和重复引用均通过；量化每块开销 |
+| M02 | 分配回溯：`MM_RECORD_STACK`、`MM_RECORD_STACK_DEFAULT` | 已验证（ST026；ST027 修复 realloc 失败记录丢失） | 产品 depth 12、动态默认关闭；依赖 A01、procfs meminfo/memdump；测试 app 独立裁剪 | USB2 验证 global/TID 门控、过滤、realloc、完整 trace 引用、并发清理、4→8 扩容、KASAN、开销和外设回归 |
 | M03 | OOM/破坏诊断：`DEBUG_MM`、`MM_DUMP_ON_FAILURE`、`MM_FILL_ALLOCATIONS`、`MM_NODE_GUARDSIZE` | 可直接开启，P1 诊断 | 高日志、内存和性能开销；不进默认产品配置 | OOM、越界、UAF 定向负测；正常 ostest |
 | M04 | KASAN generic heap：`MM_KASAN_GENERIC`、`MM_KASAN_INSTRUMENT_ALL` | 已验证（ST012） | 全镜像插桩；正式关闭测试 app 和 `MM_KASAN_GLOBAL`；启动 early stop 处理 warm reset | USB2 实测 heap 左/右越界和 UAF 精确报告、合法访问、连续 warm reset、裁剪、开销和外设回归 |
 | M05 | UBSAN：`MM_UBSAN`、目标局部插桩 | 已验证（ST013） | runtime 正式启用但无引用零链接开销；`MM_UBSAN_ALL` 因 RAM 和 handler 闭包不可用；测试 app 默认关闭 | USB2 实测 signed overflow、shift 越界、三次合法对照、裁剪、开销和外设回归 |
@@ -229,7 +229,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 - 完整配置、命令、流程和判定标准见
   [BL616CL 堆分配归属与序号观测](bl616cl-mm-record.md)。
 
-### M02 realloc stack 实测结果（2026-08-31）
+### M02 realloc stack 正确性前置（2026-08-31）
 
 - 专项配置启用 `CONFIG_LIBC_BACKTRACE_DEPTH=8`、`CONFIG_MM_RECORD_STACK=y` 和
   `CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD_REALLOC_STACK=y`；测试 app 默认关闭，不进入
@@ -247,6 +247,34 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 - NuttX 最小修复已以 signed commit `7d842d6f017` 推送并创建
   `open-vela/nuttx#359`；在 PR 合入前，标准产品仍以当前基线和 vendor 测试文档
   的证据边界为准。
+
+### M02 动态回溯实测结果（2026-09-01）
+
+- 产品配置为 depth 12、`MM_RECORD_STACK=y`、`MM_RECORD_STACK_DEFAULT=n`；测试 app
+  关闭。off/产品 clean build 均为 `1224/1224`，default-on/test/expand 均为
+  `1230/1230`，历史 realloc 专项为 `1227/1227`。
+- 裁剪检查确认 off 不含 pool/test，产品仅含通用 stack record，三个 M02 专项才包含
+  `mm_record_stack_test`；expand 的 init size 为 4，realloc 专项不误带 M02 对象。
+- USB2 验证 global off/on/off、controller/双 worker TID 门控和 global OR 语义；
+  PID+sequence 闭区间只命中目标 allocation。
+- M02-006 使用完整 raw trace 验证共享 entry refcount `3→2→1→0`，pool used
+  `0→1→1→1→0`；M02-007 双 worker alloc/realloc/free 后 node residual 为 0，
+  pool used `0→2→0`。
+- expand fresh boot 第一条 stack test 从 `capacity=0` 开始，第 4 个唯一 callsite
+  触发 `4→8`；旧 entry 保留，逐次 free 后 used `3→2→1→0`。
+- M02-011 在 KASAN private heap 完成正常 alloc/write/free/unregister，heap used
+  `600→600`，无 KASAN report。主测试总结为 `pass=8 partial=5 skip=0 fail=0`；
+  partial 均由独立 host/expand/profile/diagnostic/peripheral 证据关闭。
+- 同次 ELF 离线解析命中 `stack_alloc_same`、`stack_realloc`、
+  `stack_worker_main`、`stack_case_duplicate`、`mm_record_stack_test`、pthread 和
+  NuttX task startup 路径。
+- 产品相对完全关闭态增加 2,464 B text、16 B bss、4,400 B ELF 和 2,464 B bin；
+  depth 12 首次全局 pool retained 为 4,128 B。31 次 profile 的 record-on malloc
+  median/p95 为 20.480/20.894 us，realloc 为 24.269/24.410 us。
+- GPIO edge、TIMER-001/002/005、oneshot、WDT-002/003 和 RTC all 均通过；最后恢复
+  标准 `nsh`，产品 RTC/date/random/GPIO/timer/oneshot/WDT 基线再次通过。
+- 完整配置、命令、逐 case 流程、实测关键输出、制品数据和限制见
+  [BL616CL 堆分配归属、序号与回溯观测](bl616cl-mm-record.md)。
 
 
 ### M04 实测结果（2026-08-29）

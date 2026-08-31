@@ -1,8 +1,9 @@
-# BL616CL 堆分配归属与序号观测
+# BL616CL 堆分配归属、序号与回溯观测
 
 本文说明 BL616CL 如何启用 OpenVela 通用 heap allocation record，并给出可重复的
-多线程归属、sequence 窗口、realloc stack 记录和释放清除测试。烧录流程由 SDK 通用工具文档
-统一维护，本文从配置和构建开始，运行流程从固件已经启动到 NSH 提示符开始。
+多线程归属、sequence 窗口、动态回溯门控、realloc stack 记录、pool 引用与释放清除
+测试。烧录流程由 SDK 通用工具文档统一维护，本文从配置和构建开始，运行流程从
+固件已经启动到 NSH 提示符开始。
 
 ## 背景
 
@@ -25,18 +26,22 @@ BL616CL 的芯片适配层只向 OpenVela 提供 heap 起止地址，实际分�
 ```text
 CONFIG_MM_RECORD_PID=y
 CONFIG_MM_RECORD_SEQNO=y
+CONFIG_LIBC_BACKTRACE_DEPTH=12
+CONFIG_MM_RECORD_STACK=y
+# CONFIG_MM_RECORD_STACK_DEFAULT is not set
 ```
 
-两项关闭时，PID/sequence 字段、sequence 计数器和按 PID 查询路径由 Kconfig
-裁掉。正式配置不启用测试命令：
+对应选项关闭时，PID/sequence/stack 字段、sequence 计数器、backtrace pool 和按 PID
+查询路径分别由 Kconfig 裁掉。产品保留按需诊断能力，但默认不为新分配捕获调用栈；
+正式配置不启用测试命令：
 
 ```text
 # CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD is not set
 ```
 
-需要复现实测时，可临时启用 `BL_OS_FEATURE_TESTS_MM_RECORD`。它依赖 flat build、
-builtin app、pthread 和上述两个 MM record 选项，并单独控制 controller 与 worker
-栈大小。关闭后 `mm_record_test` 不进入最终 ELF。
+需要复现实测时，使用 `nsh-mm-record-test`、`nsh-mm-record-default-on` 或
+`nsh-mm-record-expand` 专项配置。它们复用同一个 `mm_record_test` main；关闭
+`BL_OS_FEATURE_TESTS_MM_RECORD` 后测试代码不进入最终 ELF。
 
 全量 memdump 的格式化和串口输出调用深度较大。当前 board 同时使用：
 
@@ -63,7 +68,8 @@ sequence 读数是“下一次分配号”。动作前后分别读到 `S0`、`S1
 
 记录的是执行分配操作的 TID，不是进程组。`realloc` 需要新块时，新记录归执行
 `realloc` 的线程；旧记录随原块释放而消失。该功能只保存当前未释放块，不保存
-历史，也不包含调用栈。
+历史。产品默认关闭 stack capture，需要通过 `/proc/memdump` 全局或按 TID 开启后，
+后续分配才会保存调用栈；关闭门控不清除已有记录。
 
 ## 配置与构建
 
@@ -80,16 +86,16 @@ python3 vendor/bouffalolab/bl_build.py build \
 `flash_prog_cfg.ini`；`final_nuttx` 含 MM record 符号，不含
 `mm_record_test`。
 
-复现测试时，先完成上述 configure/build，再仅在构建目录临时启用测试 app：
+复现完整回溯合同时使用独立配置：
 
 ```sh
-prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
-  --enable BL_OS_FEATURE_TESTS_MM_RECORD
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -j14
+python3 vendor/bouffalolab/bl_build.py build \
+  bl616cl/ai-m64l-32s-kit/configs/nsh-mm-record-test -j14
 ```
 
-该临时开关不执行 `savedefconfig`。测试完成后重新 clean build，即恢复正式配置。
+默认开启语义使用 `nsh-mm-record-default-on`；pool 扩容使用
+`nsh-mm-record-expand`。三个专项配置均包含 GPIO、timer、watchdog 和 RTC 回归
+命令，测试完成后重新构建并烧录正式 `nsh`，恢复产品状态。
 
 ## 固件运行测试
 
@@ -382,6 +388,194 @@ oneshot 和 WDT-002/WDT-003 回归保持通过；串口无意外 assert、panic 
 - `R03` 的移动复制沿用上游现有 `memcpy` 语义；当前 pattern 实测通过，若未来
   布局允许重叠而出现失败，应另建独立 finding，不混入本修复。
 
+## 堆分配回溯与动态门控
+
+### 背景与最大能力交集
+
+BL616CL 使用 OpenVela default allocator。芯片只提供 SRAM heap 边界，stack record、
+backtrace pool 和 `/proc/memdump` 门控全部位于通用 MM 子系统。本轮审计结果如下：
+
+| 路径 | OpenVela 能力 | 本次处理 |
+|---|---|---|
+| default allocator | node stack、去重 pool、引用计数、扩容、全局/TID 门控、free/realloc 清理 | 纳入并完整验证 |
+| TLSF | 有 record 字段；free/realloc 引用清理和 skip 语义不完整 | P2 后续，不切换产品 allocator |
+| integrated mempool | 可记录 alloc/free stack；`/proc/mempool` 只读 | 独立能力任务，不冒充动态门控 |
+| task heap | flat build 可建立 task group heap | 独立生命周期和 RAM 任务 |
+| kernel heap | 需要独立布局和 `up_allocate_kheap()` | 当前 BL616CL 未实现 |
+| IOB | 固定 IOB 是静态池，只有 `IOB_ALLOC` 进入 heap | 动态 IOB 另行验证 |
+
+default allocator 的有效依赖不仅是 `LIBC_BACKTRACE_DEPTH>0`，还需要
+`FS_PROCFS=y`、`FS_PROCFS_EXCLUDE_MEMINFO=n`。本次动态门控还要求
+`FS_PROCFS_EXCLUDE_MEMDUMP=n`。产品选择 depth 12、动态默认关闭：保留现场诊断入口，
+正常运行时不持续采集 stack，也不创建 pool entry。
+
+### 配置矩阵与裁剪
+
+| 配置 | 关键选项 | 用途 |
+|---|---|---|
+| `nsh-mm-record-off` | `MM_RECORD_STACK=n`、测试 app 关闭 | 完全裁剪对照 |
+| `nsh` | depth 12、`MM_RECORD_STACK=y`、default off、测试 app 关闭 | 产品配置 |
+| `nsh-mm-record-default-on` | 产品能力 + default on + 测试 app | 默认状态专项 |
+| `nsh-mm-record-test` | 产品能力 + default off + 测试 app | M02-001..013 主测试 |
+| `nsh-mm-record-expand` | init size 4、load factor 75、测试 app | fresh-boot 4→8 扩容 |
+| `nsh-mm-realloc-stack` | realloc 专项开启、M02 专项关闭 | 保留 ST027 独立入口 |
+
+五类 M02 配置 clean build 实测：off 和产品均为 `1224/1224`，default-on、test、
+expand 均为 `1230/1230`；历史 realloc 专项为 `1227/1227`。目标身份检查结果：
+
+- off 无 `backtrace_record`、`backtrace_dump`、M02 对象和测试 archive；
+- 产品含 `backtrace_record`，不含 M02 对象和测试 archive；
+- default-on/test/expand 均含 `mm_record_stack_test`、`mm_realloc_stack_test` 和
+  `libapps_mm_record_test.a`；
+- expand 的生成配置为 `CONFIG_LIBC_BACKTRACE_INIT_SIZE=4`；
+- realloc 专项只含 `mm_realloc_stack_test.c.o`，不含 M02 对象。
+
+最终制品数据：
+
+| 配置 | text | data | bss | `final_nuttx` | `nuttx.bin` |
+|---|---:|---:|---:|---:|---:|
+| off | 465,028 B | 15,744 B | 20,380 B | 864,012 B | 486,416 B |
+| 产品 | 467,492 B | 15,744 B | 20,396 B | 868,412 B | 488,880 B |
+| default-on | 513,292 B | 16,624 B | 53,292 B | 920,924 B | 535,568 B |
+| test | 513,284 B | 16,624 B | 53,292 B | 920,924 B | 535,552 B |
+| expand | 515,196 B | 16,688 B | 53,292 B | 921,340 B | 537,536 B |
+
+产品相对完全关闭态增加 2,464 B text、16 B bss、4,400 B ELF 和 2,464 B bin。
+测试 app、4 KiB app 栈、worker 栈和 RTC 回归命令不计入产品能力增量。
+
+### 门控语义
+
+`/proc/memdump` 的 stack record 条件是 `heap_global || tid_flag`：
+
+```text
+echo -n off > /proc/memdump
+echo -n on > /proc/memdump
+echo -n <tid>on > /proc/memdump
+echo -n <tid>off > /proc/memdump
+```
+
+- global off 后分配 A：A 无 stack；
+- global on 后分配 B：B 有 stack；
+- 再 global off 后分配 C：C 无 stack，B 的既有 stack 保留到 free；
+- global off 时可以只打开目标 TID；其它 TID 不记录；
+- global on 时 `<tid>off` 不能覆盖全局开关；
+- 开启不追补旧 allocation，关闭不删除旧 entry；
+- 普通 `echo` 带换行，必须使用 `echo -n`。
+
+### 测试命令与逐 case 流程
+
+普通专项固件启动到 `nsh>` 后执行：
+
+```text
+mm_record_test stack_test all
+```
+
+`all` 依次执行 M02-001..008、010..012，并明确把 M02-009、013 标为外部证据；
+M02-009 必须在 expand 固件 fresh boot 后作为第一条 `stack_test` 单独执行：
+
+```text
+mm_record_test stack_test M02-009
+```
+
+各 case 的操作和判据：
+
+| Case | 操作 | 完成判据 |
+|---|---|---|
+| M02-001 | 创建 private heap 并读取初始门控 | 编译默认值与 runtime 一致；default-off 为 0/0，default-on 为 1/1 |
+| M02-002 | global off/on/off 期间保持 A/B/C 同时存活 | 只有 B 有 stack；关闭不清已有 B |
+| M02-003 | controller、worker0、worker1 分别 on/off，再打开 global | TID 隔离和 global OR 语义成立 |
+| M02-004 | 同一 worker 创建 before/target/after，按 TID+sequence 闭区间查询 | 仅 target 命中，PID/SEQNO/stack 一致 |
+| M02-005 | 执行 R01..R06 | shrink、两类 grow、fallback 成功/失败、重复引用全部通过 |
+| M02-006 | 同 callsite 分配三块并逐个 free | 完整 raw trace 对应 ref `3→2→1→0`；pool used 回到测试前基线 |
+| M02-007 | 两个 worker 并发 alloc、realloc、free | 两条目标 trace 引用正确；node 和 pool 都回到基线 |
+| M02-008 | 不存在 TID、非数字、坏 sequence 后继续分配 | 实测 `-EINVAL/0/0`，heap 仍可正常分配释放 |
+| M02-009 | init size 4，四个唯一 noinline callsite | 第 4 条触发 capacity `4→8`，旧 entry 保留，free 后 used 为 0 |
+| M02-010 | size 1..128 sweep；off/on 各 1,000 次 alloc/free | 请求边界、used 恢复、两种模式活动时长可读 |
+| M02-011 | KASAN private heap 正常 alloc/write/free/unregister | active allocation 的 stack 指针非空且 depth 大于 0；无 KASAN report，used 回到 `600→600` |
+| M02-012 | 打印 Note/coredump 组合 | 明确 `heap_note=0 note_driver=1 coredump_syslog=1`，不宣称采集 pool |
+| M02-013 | 同固件执行现役外设回归 | GPIO/timer/oneshot/WDT/RTC 全部通过，无 assert/panic/复位 |
+
+M02-006、007、009 的 pool 数据必须在 worker 静止时采集，并在主机解析。不能仅凭
+设备打印 PASS，也不能假设全局 pool 原本为空。解析器同时要求 M02-006/009 的
+`PARTIAL` 终态、M02-007 的 `PASS` 终态，每个 case 必须恰好出现一次预期终态；
+重复终态或 `PASS`/`PARTIAL`/`SKIP`/`FAIL` 冲突均拒绝日志。
+
+### USB2 实测数据
+
+expand 固件 fresh boot 第一条 stack test 输出：
+
+```text
+M02-009 BEFORE: capacity=0 used=0
+M02-009 AFTER step=1/2/3: capacity=4 used=1/2/3
+M02-009 AFTER step=4: capacity=8 used=4
+M02-009 ASSERT old_entry=present step=4
+M02-009 FREE step=1/2/3/4: capacity=8 used=3/2/1/0
+```
+
+主测试固件输出 `SUMMARY pass=8 partial=5 skip=0 fail=0`。其中 partial 是已定义的
+外部证据边界，不是失败：M02-006 需要主机 pool 解析，M02-009 需要另一次 fresh boot，
+M02-010 需要结合制品/profile，M02-012 不包含 pool capture，M02-013 由随后外设命令
+提供。主机解析确认：
+
+```text
+M02-006 target refcount: 3 -> 2 -> 1 -> 0
+M02-006 pool used: 0 -> 1 -> 1 -> 1 -> 0
+M02-007 pool used: 0 -> 2 -> 0
+M02-007 ASSERT realloc=2 free=2 residual=0
+```
+
+M02-010 在当前 100 MHz system timer 下实测：1..128 B 两种模式共 256 次，实际
+allocation size 为 16..128 B，private heap used 始终为 `600/600/600`；1,000 次
+alloc/free 的 off/on 活动时长为 5.992/49.314 ms。depth 8/12 的 31 次有效 profile
+进一步给出 depth 12 record-on malloc median/p95 为 20.480/20.894 us，realloc 为
+24.269/24.410 us，1,000 次活动 median/p95 为 27.400/27.559 ms。controller/worker
+最大栈水位为 2,564/820 B，最小余量为 1,436/1,188 B；首次全局 pool retained 为
+4,128 B。
+
+raw PC 使用同次 `final_nuttx` 离线解析，目标 trace 命中
+`stack_alloc_same`、`stack_realloc`、`stack_worker_main`、`stack_case_duplicate`、
+`mm_record_stack_test`、`mm_record_test_main`、`pthread_startup` 和 `nxtask_start`。
+
+default-on 专项单独输出：
+
+```text
+MM_RECORD_STACK M02-001 default compile=1 runtime=1
+MM_RECORD_STACK M02-001 PASS
+```
+
+### 回归与最终产品恢复
+
+M02 测试固件随后执行：
+
+```text
+mcu_gpio_test -c edge --out /dev/gpio12 -n 3 -v
+mcu_timer_test -c 001 -t 10000 -n 5 -e 5 -v
+mcu_timer_test -c 002 -t 500000 -a 39 -b 79 -v
+mcu_timer_test -c 005
+oneshot -d 100000 /dev/oneshot
+mcu_wdt_test -c 002 -t 1000 -p 3000 -i 500 -v
+mcu_wdt_test -c 003 -t 1000
+mcu_rtc_test -c all
+```
+
+GPIO edge、TIMER-001/002/005、oneshot、WDT-002/003 均输出 PASS；RTC 最终输出
+`RTC test PASS (0 failures)`。测试结束后重新烧录标准 `nsh`，产品固件的 RTC 节点、
+date 递增、random、GPIO、timer、oneshot 和 WDT 基线全部通过，模组最终保持产品固件。
+
+### 限制
+
+- pool 是进程全局资源，首次开启会保留 bucket/entry 内存；动态 off 不表示回收 pool。
+- `backtrace_dump()` 没有运行时锁定接口，只能在本测试的静止窗口使用，不能作为产品
+  并发查询 API。
+- M02-010 是单轮 ops profile，不声称是完整 benchmark；跨版本性能决策应重新执行
+  多轮 median/p95、realloc 和 CPU load profile。
+- KASAN 下不得由测试代码遍历已 poison 的 free node；M02-011 只在 allocation
+  存活时通过 test-only no-sanitize introspection 读取 allocator 元数据，确认 stack
+  指针和 depth，再用 heap used 前后值和正常注销证明生命周期。malloc、write、free
+  和 register/unregister 路径仍由 KASAN 检查。
+- TLSF、mempool、task heap、kernel heap 和动态 IOB 不在本次 default allocator
+  结论内，后续必须各自建立最大能力交集和专项测试。
+
 
 ## 外设回归
 
@@ -401,10 +595,10 @@ mcu_wdt_test -c 003 -t 1000
 | 用例 | 结果 |
 |---|---|
 | GPIO edge | 非法操作被拒绝，3 个周期均恢复，PASS |
-| TIMER-001 | 10 ms、5 轮，最大误差 233 us（2.330%），PASS |
+| TIMER-001 | 10 ms、5 轮，最大误差 242 us（2.420%），PASS |
 | TIMER-002 | divider 39/79 周期比 2.000，PASS |
 | TIMER-005 | 非法请求、运行中更新和生命周期恢复，PASS |
-| WDT-002 | 1,000 ms timeout、500 ms 喂狗，持续 3,006 ms 无复位，PASS |
+| WDT-002 | 1,000 ms timeout、500 ms 喂狗，持续 3,017 ms 无复位，PASS |
 | WDT-003 | 非法/live 修改和重复生命周期请求被拒绝，PASS |
 
 完成判据：六项均输出 PASS 或正常 stop，串口无意外 assert、panic 或复位。

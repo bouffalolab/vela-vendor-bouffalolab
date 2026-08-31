@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/apps/os_feature_tests/mm_record/mm_record_test.c
+ * apps/os_feature_tests/mm_record/mm_record_test.c
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -30,6 +30,9 @@
 
 #ifdef CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD_REALLOC_STACK
 int mm_realloc_stack_test(const char *case_id);
+#endif
+#ifdef CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD_STACK
+int mm_record_stack_test(const char *case_id);
 #endif
 
 /****************************************************************************
@@ -83,6 +86,9 @@ static void print_usage(const char *progname)
   printf("  %s free\n", progname);
 #ifdef CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD_REALLOC_STACK
   printf("  %s realloc_stack [R01|R02|R03|R04|R05|R06]\n", progname);
+#endif
+#ifdef CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD_STACK
+  printf("  %s stack_test [M02-001..M02-013|all]\n", progname);
 #endif
 }
 
@@ -458,10 +464,29 @@ int main(int argc, char *argv[])
       ret = mm_realloc_stack_test(argc == 3 ? argv[2] : NULL);
     }
 #endif
+#ifdef CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD_STACK
+  else if (strcmp(argv[1], "stack_test") == 0 &&
+           (argc == 2 || argc == 3))
+    {
+      ret = mm_record_stack_test(argc == 3 ? argv[2] : NULL);
+    }
+#endif
   else
     {
       print_usage(argv[0]);
       return EXIT_FAILURE;
+    }
+
+  if (ret == -EAGAIN)
+    {
+      fprintf(stderr, "MM_RECORD_TEST PARTIAL external evidence required\n");
+      return EXIT_FAILURE;
+    }
+
+  if (ret == -ENOTSUP)
+    {
+      fprintf(stderr, "MM_RECORD_TEST SKIP unsupported configuration\n");
+      return EXIT_SUCCESS;
     }
 
   if (ret < 0)
