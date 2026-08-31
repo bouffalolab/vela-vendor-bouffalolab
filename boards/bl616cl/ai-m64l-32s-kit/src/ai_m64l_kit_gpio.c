@@ -59,6 +59,25 @@ struct ai_m64l_kit_gpio_pin_s
   enum gpio_pintype_e pintype;  /* Default pintype at registration */
 };
 
+#ifdef CONFIG_AI_M64L_KIT_I2C0
+#  define AI_M64L_KIT_I2C0_OWNS(pin) \
+  ((pin) == CONFIG_AI_M64L_KIT_I2C0_SCL_PIN || \
+   (pin) == CONFIG_AI_M64L_KIT_I2C0_SDA_PIN)
+#else
+#  define AI_M64L_KIT_I2C0_OWNS(pin) 0
+#endif
+
+#ifdef CONFIG_AI_M64L_KIT_I2C1
+#  define AI_M64L_KIT_I2C1_OWNS(pin) \
+  ((pin) == CONFIG_AI_M64L_KIT_I2C1_SCL_PIN || \
+   (pin) == CONFIG_AI_M64L_KIT_I2C1_SDA_PIN)
+#else
+#  define AI_M64L_KIT_I2C1_OWNS(pin) 0
+#endif
+
+#define AI_M64L_KIT_I2C_OWNS(pin) \
+  (AI_M64L_KIT_I2C0_OWNS(pin) || AI_M64L_KIT_I2C1_OWNS(pin))
+
 #ifdef CONFIG_AI_M64L_KIT_SPI0
 #  ifdef CONFIG_AI_M64L_KIT_SPI0_TARGET1
 #    define AI_M64L_KIT_SPI0_TARGET1_OWNS(pin) \
@@ -76,27 +95,30 @@ struct ai_m64l_kit_gpio_pin_s
 #  define AI_M64L_KIT_SPI0_OWNS(pin) 0
 #endif
 
+#define AI_M64L_KIT_BUS_OWNS(pin) \
+  (AI_M64L_KIT_I2C_OWNS(pin) || AI_M64L_KIT_SPI0_OWNS(pin))
+
 static const struct ai_m64l_kit_gpio_pin_s g_ai_m64l_kit_gpio_pins[] =
 {
-#if !AI_M64L_KIT_SPI0_OWNS(19)
+#if !AI_M64L_KIT_BUS_OWNS(19)
   { 19, GPIO_OUTPUT_PIN },
 #endif
-#if !AI_M64L_KIT_SPI0_OWNS(22)
+#if !AI_M64L_KIT_BUS_OWNS(22)
   { 22, GPIO_OUTPUT_PIN },
 #endif
-#if !AI_M64L_KIT_SPI0_OWNS(18)
+#if !AI_M64L_KIT_BUS_OWNS(18)
   { 18, GPIO_OUTPUT_PIN },
 #endif
-#if !AI_M64L_KIT_SPI0_OWNS(23)
+#if !AI_M64L_KIT_BUS_OWNS(23)
   { 23, GPIO_OUTPUT_PIN },
 #endif
-#if !AI_M64L_KIT_SPI0_OWNS(13)
+#if !AI_M64L_KIT_BUS_OWNS(13)
   { 13, GPIO_OUTPUT_PIN },
 #endif
-#if !AI_M64L_KIT_SPI0_OWNS(12)
+#if !AI_M64L_KIT_BUS_OWNS(12)
   { 12, GPIO_OUTPUT_PIN },
 #endif
-#if !AI_M64L_KIT_SPI0_OWNS(20)
+#if !AI_M64L_KIT_BUS_OWNS(20)
   { 20, GPIO_INPUT_PIN  },
 #endif
 };

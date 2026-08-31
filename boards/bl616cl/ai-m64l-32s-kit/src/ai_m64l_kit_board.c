@@ -44,7 +44,8 @@
 
 int bl616cl_board_initialize(void)
 {
-#if defined(CONFIG_BL616CL_GPIO) || defined(CONFIG_AI_M64L_KIT_SPI0)
+#if defined(CONFIG_BL616CL_GPIO) || defined(CONFIG_AI_M64L_KIT_I2C0) || \
+    defined(CONFIG_AI_M64L_KIT_I2C1) || defined(CONFIG_AI_M64L_KIT_SPI0)
   int ret;
 #endif
 
@@ -53,6 +54,15 @@ int bl616cl_board_initialize(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize GPIO driver: %d\n", ret);
+      return ret;
+    }
+#endif
+
+#if defined(CONFIG_AI_M64L_KIT_I2C0) || defined(CONFIG_AI_M64L_KIT_I2C1)
+  ret = ai_m64l_kit_i2c_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize I2C buses: %d\n", ret);
       return ret;
     }
 #endif

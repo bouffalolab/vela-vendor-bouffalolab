@@ -29,6 +29,10 @@
 int ai_m64l_kit_gpio_initialize(void);
 #endif
 
+#if defined(CONFIG_AI_M64L_KIT_I2C0) || defined(CONFIG_AI_M64L_KIT_I2C1)
+int ai_m64l_kit_i2c_initialize(void);
+#endif
+
 #ifdef CONFIG_AI_M64L_KIT_SPI0
 int ai_m64l_kit_spi_initialize(void);
 #endif

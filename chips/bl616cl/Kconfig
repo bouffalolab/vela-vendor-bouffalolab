@@ -84,6 +84,35 @@ config BL616CL_TRNG
 		standard /dev/random device. DEV_URANDOM remains independent and
 		uses the same hardware when DEV_URANDOM_ARCH is selected.
 
+menuconfig BL616CL_I2C
+	bool "I2C master"
+	default n
+	select I2C
+	select I2C_DRIVER
+	select I2C_POLLED
+	---help---
+		Enable the BL616CL polling I2C master lower-half. Board code owns
+		the pin selection and /dev/i2cN registration.
+
+if BL616CL_I2C
+
+config BL616CL_I2C0
+	bool "I2C0 controller"
+	default n
+
+config BL616CL_I2C1
+	bool "I2C1 controller"
+	default n
+
+config BL616CL_I2C_TEST
+	bool
+	default n
+	---help---
+		Enable the test-only transport hook used by the vendor I2C contract
+		tests. Product configurations must leave this option disabled.
+
+endif # BL616CL_I2C
+
 menuconfig BL616CL_SPI
 	bool "SPI master"
 	default n

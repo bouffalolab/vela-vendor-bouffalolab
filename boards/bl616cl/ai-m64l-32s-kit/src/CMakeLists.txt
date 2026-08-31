@@ -24,6 +24,10 @@ if(CONFIG_BL616CL_GPIO)
   list(APPEND SRCS ai_m64l_kit_gpio.c)
 endif()
 
+if(CONFIG_AI_M64L_KIT_I2C0 OR CONFIG_AI_M64L_KIT_I2C1)
+  list(APPEND SRCS ai_m64l_kit_i2c.c)
+endif()
+
 if(CONFIG_AI_M64L_KIT_SPI0)
   list(APPEND SRCS ai_m64l_kit_spi.c)
   target_compile_definitions(board PRIVATE BL616CL)

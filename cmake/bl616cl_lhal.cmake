@@ -26,8 +26,16 @@ target_sources(
           ${BL616CL_LHAL_DIR}/include/arch/risc-v/t-head/rv_pmp.c
           ${BL616CL_LHAL_DIR}/config/bl616cl/device_table.c)
 
-if(CONFIG_BL616CL_SPI0 OR CONFIG_BL616CL_SPI1)
+if(CONFIG_BL616CL_I2C0 OR CONFIG_BL616CL_I2C1 OR CONFIG_BL616CL_SPI0
+   OR CONFIG_BL616CL_SPI1)
   target_sources(bl_lhal PRIVATE ${BL616CL_LHAL_DIR}/src/bflb_clock.c)
+endif()
+
+if(CONFIG_BL616CL_I2C0 OR CONFIG_BL616CL_I2C1)
+  target_sources(bl_lhal PRIVATE ${BL616CL_LHAL_DIR}/src/bflb_i2c.c)
+endif()
+
+if(CONFIG_BL616CL_SPI0 OR CONFIG_BL616CL_SPI1)
   target_sources(bl_lhal PRIVATE ${BL616CL_LHAL_DIR}/src/bflb_spi.c)
 endif()
 

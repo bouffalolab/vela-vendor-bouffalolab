@@ -1,5 +1,54 @@
 #
 
+menuconfig AI_M64L_KIT_I2C
+	bool "Ai-M64L-32S-Kit I2C buses"
+	default n
+	select BL616CL_I2C
+	---help---
+		Register the selected board I2C buses. External 3.3 V targets and
+		SCL/SDA pull-ups are required.
+
+if AI_M64L_KIT_I2C
+
+config AI_M64L_KIT_I2C0
+	bool "Register I2C0"
+	default y
+	select BL616CL_I2C0
+
+if AI_M64L_KIT_I2C0
+
+config AI_M64L_KIT_I2C0_SCL_PIN
+	int "I2C0 SCL pin"
+	range 0 36
+	default 4
+
+config AI_M64L_KIT_I2C0_SDA_PIN
+	int "I2C0 SDA pin"
+	range 0 36
+	default 5
+
+endif # AI_M64L_KIT_I2C0
+
+config AI_M64L_KIT_I2C1
+	bool "Register I2C1"
+	default n
+	select BL616CL_I2C1
+
+if AI_M64L_KIT_I2C1
+
+config AI_M64L_KIT_I2C1_SCL_PIN
+	int "I2C1 SCL pin"
+	range 0 36
+	default 12
+
+config AI_M64L_KIT_I2C1_SDA_PIN
+	int "I2C1 SDA pin"
+	range 0 36
+	default 13
+
+endif # AI_M64L_KIT_I2C1
+endif # AI_M64L_KIT_I2C
+
 menuconfig AI_M64L_KIT_SPI
 	bool "Ai-M64L-32S-Kit SPI buses"
 	default n
@@ -13,6 +62,7 @@ if AI_M64L_KIT_SPI
 config AI_M64L_KIT_SPI0
 	bool "Register SPI0"
 	default y
+	depends on !AI_M64L_KIT_I2C1
 	select BL616CL_SPI0
 	select SPI_DRIVER
 	---help---
