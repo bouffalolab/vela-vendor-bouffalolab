@@ -178,7 +178,7 @@ active/inactive stop-state，不能把枚举值直接写入 bit。
 
 完成判据：两条更新路径均成功，重复 START/STOP 幂等，最终资源清理。
 
-## PWM-007 LHAL timeout 与强制清理
+## PWM-007 LHAL timeout、强制清理与 active close 恢复
 
 背景：LHAL `init/start/stop/deinit` 返回 void，并在等待硬件状态超过 100ms 后静默返回；
 chip adapter 必须回读状态并转成 `ETIMEDOUT`。
@@ -196,10 +196,11 @@ chip adapter 必须回读状态并转成 `ETIMEDOUT`。
 4. 重新 START，注入独立 deinit timeout 后 close；shutdown 会走 deinit 状态门禁。
    OpenVela close 固定返回成功，不能期待 close 传播 errno，只通过内部诊断检查
    `last_error=ETIMEDOUT` 和强制清理。
-5. 清除所有 fault，重新 open/close，证明测试没有把设备永久留在故障状态。
+5. 清除所有 fault，重新 open 后直接 START；lower `start_calls` 必须增加一次且输出状态
+   恢复，再 STOP/close。该步骤验证 active close 后 upper/lower 生命周期一致。
 
 完成判据：init/start/stop ioctl 的 errno 和所有清理位正确；close 只检查诊断，不虚构
-shutdown errno 传播。
+shutdown errno 传播；active close 后 reopen+START 必须真实调用 lower 并恢复输出状态。
 
 ## PWM-008 owner、节点与关闭态裁剪
 
@@ -242,7 +243,7 @@ PWM-003  PBCLK=160000000Hz; actual=100/1000/10000Hz      PASS
 PWM-004  duty=0/25/50/75/65535; high max=period-1       PASS
 PWM-005  CPOL/DCPOL four register mappings              PASS
 PWM-006  1k=4/40000 100=25/64000 10k=1/16000            PASS
-PWM-007  init/start/stop timeout errno=110; cleanup      PASS
+PWM-007  timeout errno=110; active-close/reopen restart PASS
 PWM-008  pwm0=yes pwm1=no gpio22=no                     PASS
 PWM Summary: executed=8 passed=8 failed=0 -> PASS
 ```
@@ -251,6 +252,11 @@ PWM Summary: executed=8 passed=8 failed=0 -> PASS
 均通过；TIMER-001 最大误差 253 us（0.253%），TIMER-002 周期比 2.000，WDT-002
 在 3026 ms 内 keepalive 6 次，RTC 时间从 `00:00:21` 递增到 `00:00:23`，最终
 `ST033_PWM_ALIVE=0`。
+
+ST034 使用未修复 NuttX 首先得到 `executed=8 passed=7 failed=1`，唯一失败为
+`active close/reopen did not restart lower`。NuttX upper 在最后 close 后清除
+`started` 后，同一 USB2、固件配置和命令得到 8/8 PASS；同次 TIMER-001 最大误差
+275 us（0.275%），其余上述回归和系统存活检查继续通过。
 
 ## 待补齐的波形数据
 

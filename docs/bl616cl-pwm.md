@@ -127,6 +127,10 @@ LHAL `init/start/stop/deinit` 返回 `void`，等待硬件状态超过 100ms 时
 - `pwm_register()` 注册失败时通用 upper allocation 未释放。本项只保证静态 lower 在
   注册前不占 pin/clock，不在运行时用重复注册制造泄漏。
 
+ST034 补充修复了 active close 生命周期：最后一个 fd close 调用 lower shutdown 后，
+upper 同步清除 `started`。否则 reopen 后 `PWMIOC_START` 会因旧状态跳过 lower start，
+向应用返回成功但硬件不输出。
+
 ## 构建与裁剪门禁
 
 专项配置为 `nsh-pwm` 和 `nsh-pwm-test`；基线关闭态使用 `nsh`。在 SDK 根目录执行：
@@ -183,13 +187,17 @@ patch 可以进入 vendor 开发 `trunk`，但在补齐仪器数据前本能力�
 | PWM-004 | duty 0、25%、50%、75%、65535/65536 全通过；最大 duty 为 `period-1` |
 | PWM-005 | CPOL/DCPOL 四组合全部通过；CONFIG1 polarity/stop-state 回读匹配 |
 | PWM-006 | 同 divider 更新保持 4/40000；跨 divider 为 25/64000 和 1/16000；重复 START/STOP 幂等 |
-| PWM-007 | INIT、START、STOP timeout 均返回 errno 110；清理和恢复全部通过 |
+| PWM-007 | INIT、START、STOP timeout 均返回 errno 110；active-close/reopen 后 lower 重新 START |
 | PWM-008 | `pwm0=yes pwm1=no gpio22=no`；owner 和 close 清理通过 |
 
 汇总为 `PWM Summary: executed=8 passed=8 failed=0 -> PASS`。随后在同一固件和同一串口
 完成现役回归：GPIO edge 3 cycles、TIMER-001 0.253% 最大误差、TIMER-002 周期比
 2.000、TIMER-005、oneshot 100000 us、WDT-002（3026 ms 内 keepalive 6 次）、
 WDT-003、`/dev/rtc0` 以及 `date` 两秒递增；系统存活检查为 `ST033_PWM_ALIVE=0`。
+
+ST034 先在未修复 NuttX 上复现 `executed=8 passed=7 failed=1`，唯一失败为 active
+close/reopen 未重新调用 lower。修复后同一 USB2、配置和命令得到 8/8 PASS；同次
+TIMER-001 最大误差 0.275%，其他现役外设回归和系统存活检查继续通过。
 
 最新 `nsh-pwm-test` whole image 为 4 MiB，boot2、双 partition 和 app magic 正确，
 MFG 区域保持全 `0xff`；烧录到 USB2 后设备端 SHA256 与主机一致。产品配置无测试

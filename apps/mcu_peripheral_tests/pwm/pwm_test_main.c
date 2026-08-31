@@ -858,6 +858,7 @@ static int run_case_007(FAR const struct app_config_s *cfg)
   /* clang-format on */
 
   struct bl616cl_pwm_test_diag_s diag;
+  uint32_t start_calls;
   int fd = -1;
   int ret = -EIO;
 
@@ -936,10 +937,24 @@ static int run_case_007(FAR const struct app_config_s *cfg)
       return -EIO;
     }
 
+  start_calls = diag.start_calls;
   (void)bl616cl_pwm_test_set_fault(BL616CL_PWM_TEST_FAULT_NONE);
   fd = pwm_open(cfg->devpath);
-  if (fd < 0)
+  if (fd < 0 || pwm_start(fd) < 0 || get_diag(&diag) < 0 ||
+      !diag.started || diag.start_calls != start_calls + 1)
     {
+      printf("  FAIL: active close/reopen did not restart lower\n");
+      if (fd >= 0)
+        {
+          close(fd);
+        }
+
+      return -EIO;
+    }
+
+  if (pwm_stop(fd) < 0)
+    {
+      close(fd);
       return -EIO;
     }
 
