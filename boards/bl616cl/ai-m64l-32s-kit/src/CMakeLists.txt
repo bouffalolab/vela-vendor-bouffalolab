@@ -20,6 +20,10 @@
 
 set(SRCS ai_m64l_kit_board.c ai_m64l_kit_fw_header.c)
 
+if(CONFIG_AI_M64L_KIT_UART1)
+  list(APPEND SRCS ai_m64l_kit_uart.c)
+endif()
+
 if(CONFIG_BL616CL_GPIO)
   list(APPEND SRCS ai_m64l_kit_gpio.c)
 endif()

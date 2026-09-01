@@ -1,5 +1,15 @@
 #
 
+menuconfig AI_M64L_KIT_UART1
+	bool "Ai-M64L-32S-Kit UART1"
+	default n
+	depends on BL616CL_UART0
+	select BL616CL_UART1
+	---help---
+		Register UART1 as /dev/ttyS1 using the board-owned GPIO14 TX and
+		GPIO15 RX test loopback pair. Runtime termios is independently
+		controlled by SERIAL_TERMIOS.
+
 menuconfig AI_M64L_KIT_I2C
 	bool "Ai-M64L-32S-Kit I2C buses"
 	default n

@@ -22,8 +22,19 @@
 #define __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_AI_M64L_KIT_AI_M64L_KIT_H
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define AI_M64L_KIT_UART1_TX_PIN 14
+#define AI_M64L_KIT_UART1_RX_PIN 15
+
+/****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
+
+#ifdef CONFIG_AI_M64L_KIT_UART1
+int ai_m64l_kit_uart_initialize(void);
+#endif
 
 #ifdef CONFIG_BL616CL_GPIO
 int ai_m64l_kit_gpio_initialize(void);

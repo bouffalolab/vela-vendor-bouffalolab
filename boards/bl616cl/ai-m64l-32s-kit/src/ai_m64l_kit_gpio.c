@@ -31,6 +31,7 @@
 #include <nuttx/ioexpander/gpio.h>
 
 #include "bl616cl_gpio.h"
+#include "ai_m64l_kit.h"
 
 #ifdef CONFIG_BL616CL_GPIO
 
@@ -78,6 +79,14 @@ struct ai_m64l_kit_gpio_pin_s
 #define AI_M64L_KIT_I2C_OWNS(pin) \
   (AI_M64L_KIT_I2C0_OWNS(pin) || AI_M64L_KIT_I2C1_OWNS(pin))
 
+#ifdef CONFIG_AI_M64L_KIT_UART1
+#  define AI_M64L_KIT_UART1_OWNS(pin) \
+  ((pin) == AI_M64L_KIT_UART1_TX_PIN || \
+   (pin) == AI_M64L_KIT_UART1_RX_PIN)
+#else
+#  define AI_M64L_KIT_UART1_OWNS(pin) 0
+#endif
+
 #ifdef CONFIG_AI_M64L_KIT_SPI0
 #  ifdef CONFIG_AI_M64L_KIT_SPI0_TARGET1
 #    define AI_M64L_KIT_SPI0_TARGET1_OWNS(pin) \
@@ -96,7 +105,8 @@ struct ai_m64l_kit_gpio_pin_s
 #endif
 
 #define AI_M64L_KIT_BUS_OWNS(pin) \
-  (AI_M64L_KIT_I2C_OWNS(pin) || AI_M64L_KIT_SPI0_OWNS(pin))
+  (AI_M64L_KIT_UART1_OWNS(pin) || AI_M64L_KIT_I2C_OWNS(pin) || \
+   AI_M64L_KIT_SPI0_OWNS(pin))
 
 static const struct ai_m64l_kit_gpio_pin_s g_ai_m64l_kit_gpio_pins[] =
 {

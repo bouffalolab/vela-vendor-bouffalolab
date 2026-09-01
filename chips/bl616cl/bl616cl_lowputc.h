@@ -70,12 +70,16 @@ extern "C"
 EXTERN struct bl616cl_uart_s g_uart0_config;
 #endif
 
+#ifdef CONFIG_BL616CL_UART1
+EXTERN struct bl616cl_uart_s g_uart1_config;
+#endif
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
 void bl616cl_lowsetup(void);
-void bl616cl_lowputc_config(struct bl616cl_uart_s *config);
+int bl616cl_lowputc_config(struct bl616cl_uart_s *config);
 
 #undef EXTERN
 #if defined(__cplusplus)

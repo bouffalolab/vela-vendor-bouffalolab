@@ -48,13 +48,37 @@ if BL616CL_UART0
 
 config BL616CL_UART0_RXPIN
 	int "UART0 RX pin"
+	range 0 36
 	default 35
 
 config BL616CL_UART0_TXPIN
 	int "UART0 TX pin"
+	range 0 36
 	default 34
 
 endif # BL616CL_UART0
+
+config BL616CL_UART1
+	bool "UART1"
+	default n
+	depends on BL616CL_UART0
+	select UART1_SERIALDRIVER
+	---help---
+		Build the UART1 standard serial lower-half. Board code owns pin
+		selection and /dev/ttyS1 registration. UART1 console, flow control,
+		and RX/TX DMA are not supported by this lower-half. The BL616CL
+		integration requires UART0 to remain the serial console.
+
+if BL616CL_UART1
+
+config UART1_BITS
+	range 5 8
+
+config UART1_2STOP
+	range 0 1
+
+endif # BL616CL_UART1
+
 endif # BL616CL_UART
 
 config BL616CL_WDT

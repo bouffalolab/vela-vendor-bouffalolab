@@ -549,7 +549,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 
 | ID | 外设/能力 | 状态 | 建议裁剪边界 | 主要前置与验证 |
 |---|---|---|---|---|
-| P01 | UART1/UART2 | 需要适配，P1 | `BL616CL_UART1/2`、独立 pin/baud/buffer | 扩展 serial 实例和 IRQ 名称；回环、并发、console 隔离 |
+| P01 | UART1/UART2 | UART1 已验证（ST035）；UART2 待独立重评 | `BL616CL_UART1/2`、独立 pin/baud/buffer | UART1 GPIO14/15 回环、FIFO IRQ、基础 termios、standard serial ABI、并发、溢出恢复、console 隔离和裁剪已验证；UART2 已有 GPIO16/17 短接资源，仍需审计 std signal、clock、IRQ、board owner 和实例链 |
 | P02 | TRNG `/dev/random` | 已验证（ST015） | `BL616CL_TRNG`；测试 app 独立关闭；可选 `DEV_URANDOM_ARCH` | chip adapter 直接实现 `devrandom_register()`；USB2 已验证任意长度、非对齐、标准 API、基本统计、多线程、裁剪和外设回归 |
 | P03 | RTC/Alarm | 已验证（ST016）；upper-half ioctl 补全（ST017） | `BL616CL_RTC`、`BL616CL_RTC_ALARM`；ioctl 测试 app 独立关闭；RC32K/DIG32K 二选一 | 48 位 HBN RTC lower-half 与 `/dev/rtc0`；UTC/亚秒、absolute/relative Alarm、取消/替换/re-arm、回绕、warm reset、unlink 和裁剪已验证；九个标准 ioctl 的 NULL/ID/ENOSYS 合同已在 debug/release fake lower 实测 |
 | P04 | I2C0/I2C1 master | 需要适配，P1 | 每实例选项、SCL/SDA pin、频率 | clock/pinmux/IRQ 或 polling；EEPROM/传感器、NACK、timeout、bus recovery |
@@ -692,7 +692,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | 6 | D04 Note RAM trace | 独立诊断配置，按事件域逐批开启 |
 | 7 | M04、M05 KASAN/UBSAN | 各自独立配置、负测和 commit |
 | 8 | A05 lazy FPU | 在诊断基线稳定后做性能优化 |
-| 9 | P02、P03 已完成；继续 P04、P05、P06 | I2C、SPI、PWM 逐项适配；RTC 扩展能力另按独立子任务补全 |
+| 9 | P01 UART1、P02、P03 已完成；继续 P01 UART2、P04、P05、P06 | UART2 回矩阵重评；I2C、SPI、PWM 按资源条件恢复；RTC 扩展能力另按独立子任务补全 |
 | 10 | A07+P08，再做 P07/P09/P11 | cache/DMA 是 ADC、crypto、MTD 的公共前置 |
 
 同一行合并的配置只表示一个不可分割的验收闭包；不同表项不得合并成一个

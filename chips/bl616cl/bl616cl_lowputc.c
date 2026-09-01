@@ -25,7 +25,12 @@
 #include <nuttx/config.h>
 
 #include <debug.h>
+#include <errno.h>
+#include <stdbool.h>
 #include <stdint.h>
+
+#include <nuttx/irq.h>
+#include <nuttx/spinlock.h>
 
 #include "bflb_clock.h"
 #include "bflb_gpio.h"
@@ -54,7 +59,9 @@ extern int bl616cl_sdk_pm_disable_gpio_keep(uint32_t pin)
  * Private Functions
  ****************************************************************************/
 
-#ifdef CONFIG_BL616CL_UART0
+#if defined(CONFIG_BL616CL_UART0) || defined(CONFIG_BL616CL_UART1)
+static bool g_uart_clock_configured;
+
 static uint8_t bl616cl_data_bits(uint8_t bits)
 {
   switch (bits)
@@ -73,8 +80,11 @@ static uint8_t bl616cl_data_bits(uint8_t bits)
     }
 }
 
-static void bl616cl_uart_clock_enable(uint8_t id)
+static int bl616cl_uart_clock_enable(uint8_t id)
 {
+  irqstate_t flags;
+  int ret = OK;
+
   switch (id)
     {
       case 0:
@@ -86,12 +96,32 @@ static void bl616cl_uart_clock_enable(uint8_t id)
         break;
 
       default:
-        break;
+        return -EINVAL;
     }
 
-  (void)bl616cl_sdk_glb_set_uart_clk(BL616CL_SDK_ENABLE,
-                                     BL616CL_SDK_UART_CLK_XCLK,
-                                     BL616CL_SDK_UART_CLK_DIV);
+  flags = enter_critical_section();
+  if (!g_uart_clock_configured)
+    {
+      if (bl616cl_sdk_glb_set_uart_clk(BL616CL_SDK_ENABLE,
+                                      BL616CL_SDK_UART_CLK_XCLK,
+                                      BL616CL_SDK_UART_CLK_DIV) == 0)
+        {
+          g_uart_clock_configured = true;
+        }
+      else
+        {
+          ret = -EIO;
+        }
+    }
+
+  leave_critical_section(flags);
+
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  return OK;
 }
 
 static const char *bl616cl_uart_name(uint8_t id)
@@ -130,6 +160,20 @@ struct bl616cl_uart_s g_uart0_config =
 };
 #endif
 
+#ifdef CONFIG_BL616CL_UART1
+struct bl616cl_uart_s g_uart1_config =
+{
+  .id         = 1,
+  .irq        = BL616CL_IRQ_UART1,
+  .baud       = CONFIG_UART1_BAUD,
+  .data_bits  = CONFIG_UART1_BITS,
+  .stop_b2    = CONFIG_UART1_2STOP,
+  .parity     = CONFIG_UART1_PARITY,
+  .tx_fifo_th = 7,
+  .rx_fifo_th = 7,
+};
+#endif
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -142,21 +186,24 @@ struct bl616cl_uart_s g_uart0_config =
  *
  ****************************************************************************/
 
-void bl616cl_lowputc_config(struct bl616cl_uart_s *config)
+int bl616cl_lowputc_config(struct bl616cl_uart_s *config)
 {
-#ifdef CONFIG_BL616CL_UART0
+#if defined(CONFIG_BL616CL_UART0) || defined(CONFIG_BL616CL_UART1)
   struct bflb_uart_config_s cfg;
   struct bflb_device_s *gpio;
 
   DEBUGASSERT(config != NULL);
 
-  bl616cl_uart_clock_enable(config->id);
+  if (bl616cl_uart_clock_enable(config->id) < 0)
+    {
+      return -EIO;
+    }
 
   gpio = bflb_device_get_by_name(BFLB_NAME_GPIO);
   DEBUGASSERT(gpio != NULL);
   if (gpio == NULL)
     {
-      return;
+      return -ENODEV;
     }
 
   (void)bl616cl_sdk_pm_disable_gpio_keep(config->txpin);
@@ -171,7 +218,7 @@ void bl616cl_lowputc_config(struct bl616cl_uart_s *config)
   DEBUGASSERT(config->device != NULL);
   if (config->device == NULL)
     {
-      return;
+      return -ENODEV;
     }
 
   cfg.baudrate          = config->baud;
@@ -186,8 +233,10 @@ void bl616cl_lowputc_config(struct bl616cl_uart_s *config)
   cfg.rx_fifo_threshold = config->rx_fifo_th;
 
   bflb_uart_init(config->device, &cfg);
+  return OK;
 #else
   UNUSED(config);
+  return -ENOSYS;
 #endif
 }
 
@@ -227,6 +276,6 @@ void bl616cl_lowsetup(void)
 {
 #if defined(HAVE_SERIAL_CONSOLE) && defined(CONFIG_BL616CL_UART0) && \
     !defined(CONFIG_SUPPRESS_UART_CONFIG)
-  bl616cl_lowputc_config(&g_uart0_config);
+  (void)bl616cl_lowputc_config(&g_uart0_config);
 #endif
 }

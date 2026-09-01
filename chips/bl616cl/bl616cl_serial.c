@@ -41,12 +41,27 @@
 
 #include "riscv_internal.h"
 
+#include "bflb_clock.h"
 #include "bflb_uart.h"
+#include "bl616cl_uart.h"
 #include "bl616cl_lowputc.h"
+#include "hardware/uart_reg.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
+
+#if defined(CONFIG_BL616CL_UART1) && !defined(CONFIG_UART0_SERIAL_CONSOLE)
+#  error "BL616CL UART1 requires UART0 as the serial console"
+#endif
+
+#if defined(CONFIG_BL616CL_UART1) && \
+    (defined(CONFIG_UART1_SERIAL_CONSOLE) || \
+     defined(CONFIG_UART1_IFLOWCONTROL) || \
+     defined(CONFIG_UART1_OFLOWCONTROL) || defined(CONFIG_UART1_RXDMA) || \
+     defined(CONFIG_UART1_TXDMA))
+#  error "BL616CL UART1 console, flow control, and DMA are not supported"
+#endif
 
 #ifdef CONFIG_UART0_SERIAL_CONSOLE
 #  define CONSOLE_DEV g_uart0port
@@ -55,6 +70,8 @@
 #ifdef CONFIG_BL616CL_UART0
 #  define TTYS0_DEV g_uart0port
 #endif
+
+#define BL616CL_UART_DIVISOR_LIMIT 0xffff
 
 /****************************************************************************
  * Private Function Prototypes
@@ -125,6 +142,31 @@ static uart_dev_t g_uart0port =
 #endif
 };
 #endif
+
+#ifdef CONFIG_BL616CL_UART1
+static char g_uart1rxbuffer[CONFIG_UART1_RXBUFSIZE];
+static char g_uart1txbuffer[CONFIG_UART1_TXBUFSIZE];
+
+static uart_dev_t g_uart1port =
+{
+  .isconsole = false,
+  .recv =
+  {
+    .size   = CONFIG_UART1_RXBUFSIZE,
+    .buffer = g_uart1rxbuffer,
+  },
+  .xmit =
+  {
+    .size   = CONFIG_UART1_TXBUFSIZE,
+    .buffer = g_uart1txbuffer,
+  },
+  .ops  = &g_uart_ops,
+  .priv = &g_uart1_config,
+#ifdef CONFIG_SERIAL_TERMIOS
+  .minrecv = 1,
+#endif
+};
+#endif
 #endif
 
 /****************************************************************************
@@ -141,6 +183,82 @@ static void bl616cl_disableuartint(struct uart_dev_s *dev)
   bflb_uart_errint_mask(priv->device, true);
 }
 
+#ifdef CONFIG_SERIAL_TERMIOS
+static int bl616cl_apply_termios(struct bl616cl_uart_s *priv,
+                                const struct bl616cl_uart_s *config)
+{
+  int ret;
+
+  ret = bflb_uart_feature_control(priv->device, UART_CMD_SET_BAUD_RATE,
+                                  config->baud);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = bflb_uart_feature_control(priv->device, UART_CMD_SET_DATA_BITS,
+                                  config->data_bits - 5);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = bflb_uart_feature_control(priv->device, UART_CMD_SET_STOP_BITS,
+                                  config->stop_b2 ? UART_STOP_BITS_2 :
+                                                    UART_STOP_BITS_1);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  return bflb_uart_feature_control(priv->device, UART_CMD_SET_PARITY_BITS,
+                                   config->parity);
+}
+#endif
+
+static int bl616cl_validate_baud(struct bl616cl_uart_s *priv, uint32_t baud)
+{
+  uint64_t scaled;
+  uint32_t clock;
+  uint32_t divisor;
+
+  if (baud == 0)
+    {
+      return -EINVAL;
+    }
+
+  clock = bflb_clk_get_peripheral_clock(BFLB_DEVICE_TYPE_UART, priv->id);
+  if (clock == 0)
+    {
+      return -EINVAL;
+    }
+
+  if ((uint64_t)baud * 2 >= clock)
+    {
+      return -EINVAL;
+    }
+
+  scaled = (uint64_t)clock * 10 / baud;
+  divisor = (uint32_t)((scaled + 5) / 10);
+  if (divisor == 0 || divisor >= BL616CL_UART_DIVISOR_LIMIT)
+    {
+      return -EINVAL;
+    }
+
+  return OK;
+}
+
+static int bl616cl_validate_format(const struct bl616cl_uart_s *priv)
+{
+  if (priv->data_bits < 5 || priv->data_bits > 8 || priv->parity > 2 ||
+      priv->stop_b2 > 1)
+    {
+      return -EINVAL;
+    }
+
+  return OK;
+}
+
 /****************************************************************************
  * Name: bl616cl_setup
  ****************************************************************************/
@@ -148,8 +266,26 @@ static void bl616cl_disableuartint(struct uart_dev_s *dev)
 static int bl616cl_setup(struct uart_dev_s *dev)
 {
   struct bl616cl_uart_s *priv = dev->priv;
+  int ret;
 
-  bl616cl_lowputc_config(priv);
+  ret = bl616cl_validate_baud(priv, priv->baud);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = bl616cl_validate_format(priv);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = bl616cl_lowputc_config(priv);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   if (priv->device == NULL)
     {
       return -ENODEV;
@@ -266,7 +402,12 @@ static int bl616cl_ioctl(struct file *filep, int cmd, unsigned long arg)
             }
           else
             {
-              memcpy(user, dev->priv, sizeof(struct bl616cl_uart_s));
+              struct bl616cl_uart_s snapshot;
+              irqstate_t flags = uart_spinlock(dev, true);
+
+              snapshot = *(struct bl616cl_uart_s *)dev->priv;
+              uart_spinunlock(dev, true, flags);
+              memcpy(user, &snapshot, sizeof(snapshot));
             }
         }
         break;
@@ -277,6 +418,8 @@ static int bl616cl_ioctl(struct file *filep, int cmd, unsigned long arg)
         {
           struct termios *termiosp = (struct termios *)arg;
           struct bl616cl_uart_s *priv = dev->priv;
+          struct bl616cl_uart_s snapshot;
+          irqstate_t flags;
 
           if (termiosp == NULL)
             {
@@ -284,11 +427,15 @@ static int bl616cl_ioctl(struct file *filep, int cmd, unsigned long arg)
               break;
             }
 
-          termiosp->c_cflag = ((priv->parity != 0) ? PARENB : 0) |
-                              ((priv->parity == 1) ? PARODD : 0);
-          termiosp->c_cflag |= priv->stop_b2 ? CSTOPB : 0;
+          flags = uart_spinlock(dev, true);
+          snapshot = *priv;
+          uart_spinunlock(dev, true, flags);
 
-          switch (priv->data_bits)
+          termiosp->c_cflag = ((snapshot.parity != 0) ? PARENB : 0) |
+                              ((snapshot.parity == 1) ? PARODD : 0);
+          termiosp->c_cflag |= snapshot.stop_b2 ? CSTOPB : 0;
+
+          switch (snapshot.data_bits)
             {
               case 5:
                 termiosp->c_cflag |= CS5;
@@ -307,7 +454,7 @@ static int bl616cl_ioctl(struct file *filep, int cmd, unsigned long arg)
                 break;
             }
 
-          cfsetispeed(termiosp, priv->baud);
+          cfsetispeed(termiosp, snapshot.baud);
         }
         break;
 
@@ -315,6 +462,8 @@ static int bl616cl_ioctl(struct file *filep, int cmd, unsigned long arg)
         {
           struct termios *termiosp = (struct termios *)arg;
           struct bl616cl_uart_s *priv = dev->priv;
+          struct bl616cl_uart_s candidate;
+          irqstate_t flags;
           uint32_t baud;
           uint8_t bits = 8;
           uint8_t parity;
@@ -323,6 +472,12 @@ static int bl616cl_ioctl(struct file *filep, int cmd, unsigned long arg)
           if (termiosp == NULL)
             {
               ret = -EINVAL;
+              break;
+            }
+
+          if ((termiosp->c_cflag & CRTSCTS) != 0)
+            {
+              ret = -EOPNOTSUPP;
               break;
             }
 
@@ -356,17 +511,40 @@ static int bl616cl_ioctl(struct file *filep, int cmd, unsigned long arg)
               break;
             }
 
+          ret = bl616cl_validate_baud(priv, baud);
+          if (ret < 0)
+            {
+              break;
+            }
+
           parity = ((termiosp->c_cflag & PARENB) != 0) ?
                    ((termiosp->c_cflag & PARODD) != 0 ? 1 : 2) : 0;
           stop2 = ((termiosp->c_cflag & CSTOPB) != 0) ? 1 : 0;
 
-          priv->baud = baud;
-          priv->parity = parity;
-          priv->data_bits = bits;
-          priv->stop_b2 = stop2;
+          flags = uart_spinlock(dev, true);
+          candidate = *priv;
+          candidate.baud = baud;
+          candidate.parity = parity;
+          candidate.data_bits = bits;
+          candidate.stop_b2 = stop2;
 
-          bflb_uart_disable(priv->device);
-          bl616cl_lowputc_config(priv);
+          ret = bl616cl_apply_termios(priv, &candidate);
+          if (ret < 0)
+            {
+              int rollback;
+
+              rollback = bl616cl_apply_termios(priv, priv);
+              if (rollback < 0)
+                {
+                  ret = rollback;
+                }
+            }
+          else
+            {
+              *priv = candidate;
+            }
+
+          uart_spinunlock(dev, true, flags);
         }
         break;
 #endif
@@ -473,7 +651,9 @@ static bool bl616cl_txempty(struct uart_dev_s *dev)
 {
   struct bl616cl_uart_s *priv = dev->priv;
 
-  return bflb_uart_txempty(priv->device);
+  return bflb_uart_txempty(priv->device) &&
+         (getreg32(priv->device->reg_base + UART_STATUS_OFFSET) &
+          UART_STS_UTX_BUS_BUSY) == 0;
 }
 #endif
 
@@ -507,6 +687,15 @@ void riscv_serialinit(void)
   uart_register("/dev/ttyS0", &TTYS0_DEV);
 #endif
 }
+
+#ifdef CONFIG_BL616CL_UART1
+int bl616cl_uart1_register(uint8_t txpin, uint8_t rxpin)
+{
+  g_uart1_config.txpin = txpin;
+  g_uart1_config.rxpin = rxpin;
+  return uart_register("/dev/ttyS1", &g_uart1port);
+}
+#endif
 
 /****************************************************************************
  * Name: up_putc
