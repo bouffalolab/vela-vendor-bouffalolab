@@ -26,7 +26,7 @@ I-cache 为 32 KiB，D-cache 为 16 KiB；BL616CL 1.0 手册中的 16 KiB/8 KiB 
 | 超大 range 分块 | 纳入 | 对齐后按 `INT32_MAX` 内最大块调用 uint32 LHAL |
 | runtime toggle 幂等性 | 纳入 | 读取 MHCR 后只在状态变化时调用 enable/disable |
 | cache 容量 getter | 纳入 | 重新确认的芯片规格为 I=32 KiB、D=16 KiB |
-| DMA cache policy | 保留 | 公共 API 已提供 clean/invalidate，具体 controller owner 由后续 DMA 子任务接入 |
+| DMA cache policy | 部分纳入 | DMA0 公共 mem2mem adapter 已接入；公共 API 提供 clean/invalidate，具体外设 consumer 仍由调用方定义 ownership |
 
 ## 调用链与归属
 
@@ -110,6 +110,12 @@ working-set/HPM 探针不属于最终验收。
 周期比 2.000、TIMER-005、oneshot 100000 us、WDT-002 九次喂狗、WDT-003、RTC
 `/dev/rtc0` 和两秒 date 推进均正常，最终 alive 标记正常回显。
 
+2026-09-02 在 vendor `eed440156e1f` 上重新 clean build 并通过 USB2 验证：构建
+`1227/1227`，`nuttx.bin` SHA256 为
+`b049c544fcf10f9fd92af1ada68145c62a9eadb1751dcaaacaeab9d1e42d9e1f`，设备端
+校验一致；CACHE-001..008 仍为 `pass=8 fail=0`，GPIO、timer、oneshot、WDT、RTC
+回归和最终存活检查通过。容量仅核对 getter 发布的确认规格，不执行容量探测。
+
 详细逐 case 流程和运行时关键输出见
 `apps/os_feature_tests/cache/README.md`。
 
@@ -117,8 +123,8 @@ working-set/HPM 探针不属于最终验收。
 
 - cache 容量使用重新确认的芯片规格。后续芯片 revision 或 cache 配置变化时，应先
   更新权威规格和 getter，再重新审查依赖该容量的调用方。
-- DMA controller 尚未接入；本适配只提供公共 cache maintenance ABI，DMA owner 的
-  buffer policy、descriptor cache 属性和并发取消留给 P08。
+- DMA0 公共 mem2mem adapter 已接入；外设 consumer 尚未接入。具体 consumer 的
+  buffer policy、descriptor cache 属性、request owner 和并发取消仍需独立适配与验证。
 - pure D-cache invalidate-all 前必须先处理当前执行栈的 dirty ownership；测试 trampoline
   位于 XIP，切换到 `.nocache_noinit_ram` 中的专用栈后再调用公共接口。
 - range API 不宣称对 MMIO、non-cacheable alias 或跨 RAM/XIP 区间生效；调用方必须先

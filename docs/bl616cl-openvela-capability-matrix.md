@@ -3,9 +3,9 @@
 本文是 BL616CL OpenVela 能力状态的唯一结论入口。实施记录、测试原始日志和
 临时探测不在本文复制；每个能力完成后回写“状态”和“验证”列。
 
-最后核对：2026-09-02
+最后核对：2026-09-02；能力基线 v1 已完成
 
-- `vendor/bouffalolab`: `e40318f` + ST037 DMA0 工作提交
+- `vendor/bouffalolab`: `eed440156e1f`（含 A07 cache 与 P08 DMA0）
 - `nuttx`: `8db268e69cb`（组织 fork 已承接 PWM final-close 修复）
 - 板卡：Ai-M64L-32S-Kit
 - 配置：`bl616cl/ai-m64l-32s-kit/configs/nsh`
@@ -31,7 +31,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | 时钟 | 1 kHz OS tick；MTimer alarm lower-half；通用 `up_perf_*` 纳秒接口 | `bl616cl_timerisr.c`；`nuttx/drivers/timers/arch_alarm.c` |
 | 内存 | 内部 SRAM 单 heap、默认 allocator、procfs meminfo | `bl616cl_allocateheap.c`；`nuttx/mm/` |
 | 启动 | chip early init、board late init、ROMFS/NSH | `chips/bl616cl/bl616cl_start.c`；`boards/bl616cl/common/` |
-| 外设 | UART0、GPIO、timer0、TIMER1 oneshot、watchdog、TRNG `/dev/random` | `chips/bl616cl/`；`cmake/bl616cl_lhal.cmake` |
+| 外设 | UART0/UART1、GPIO、timer0/TIMER1、oneshot、watchdog、TRNG、RTC、DMA0；I2C/SPI/PWM 软件路径按实物边界声明 | `chips/bl616cl/`；`boards/bl616cl/`；`cmake/bl616cl_lhal.cmake` |
 | 诊断 | assertions、stack/backtrace、CPU/IRQ/critical monitor、MM record、stack canary、coredump、Note RAM trace、generic KASAN、UBSAN runtime | `configs/nsh/defconfig`；`vendor/bouffalolab/docs/` |
 
 当前 `nsh` 已选择 `CONFIG_SCHED_CPULOAD_SYSCLK=y`，并用独立的
@@ -552,8 +552,8 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | P01 | UART1/UART2 | UART1 已验证（ST035）；UART2 待独立重评 | `BL616CL_UART1/2`、独立 pin/baud/buffer | UART1 GPIO14/15 回环、FIFO IRQ、基础 termios、standard serial ABI、并发、溢出恢复、console 隔离和裁剪已验证；UART2 已有 GPIO16/17 短接资源，仍需审计 std signal、clock、IRQ、board owner 和实例链 |
 | P02 | TRNG `/dev/random` | 已验证（ST015） | `BL616CL_TRNG`；测试 app 独立关闭；可选 `DEV_URANDOM_ARCH` | chip adapter 直接实现 `devrandom_register()`；USB2 已验证任意长度、非对齐、标准 API、基本统计、多线程、裁剪和外设回归 |
 | P03 | RTC/Alarm | 已验证（ST016）；upper-half ioctl 补全（ST017） | `BL616CL_RTC`、`BL616CL_RTC_ALARM`；ioctl 测试 app 独立关闭；RC32K/DIG32K 二选一 | 48 位 HBN RTC lower-half 与 `/dev/rtc0`；UTC/亚秒、absolute/relative Alarm、取消/替换/re-arm、回绕、warm reset、unlink 和裁剪已验证；九个标准 ioctl 的 NULL/ID/ENOSYS 合同已在 debug/release fake lower 实测 |
-| P04 | I2C0/I2C1 master | 需要适配，P1 | 每实例选项、SCL/SDA pin、频率 | clock/pinmux/IRQ 或 polling；EEPROM/传感器、NACK、timeout、bus recovery |
-| P05 | SPI0/SPI1 master | 需要适配，P1 | 每实例选项、pin、mode、CS policy | controller lower-half和 board select/status；loopback、多 mode/width/frequency |
+| P04 | I2C0/I2C1 master | 软件闭环已通过（ST021），P1；实物 blocked | 每实例选项、SCL/SDA pin、频率 | polling lower-half、裁剪和无 target 负向路径已验证；正向 target、波形、I2C0 pin 仍待资源 |
+| P05 | SPI0/SPI1 master | 软件闭环已通过（ST023），P1；实物 blocked | 每实例选项、pin、mode、CS policy | polling lower-half、裁剪和 fake 合同已验证；SPI0 环回及 SPI1 pin/target 仍待资源 |
 | P06 | PWM | 软件闭环已通过（ST033），P1；G4 waiting | `BL616CL_PWM`、`AI_M64L_KIT_PWM`、test hook/app 独立裁剪；首版排除改变 ABI 的 multichannel/pulse/fixed/deadtime | PWM0 CH3+/GPIO22、continuous、整数频率、duty、cpol/dcpol、live update 和 multi-fd 已完成三态构建、裁剪、8/8 实机软件合同和现役回归；frequency/duty/停止电平/更新毛刺待逻辑分析仪 |
 | P07 | ADC | 需要适配，P2 | ADC、channel/pin、poll/DMA 分层 | analog lower-half；校准、量程、连续采样、溢出；外部基准电压 |
 | P08 | DMA0 | 已验证（ST037） | `BL616CL_DMA0` 默认关闭；test hook/app 独立；首版依赖 `!DMA_LINK` | 八通道 fixed-ident、1/2/4-byte mem2mem、TC/error 状态机、stop/residual、cache ownership 和并发生命周期；外设 consumer/LLI/cyclic 延后 |
@@ -701,7 +701,11 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 - 本轮不声明 HBN WDT1、window/mintime、IRQ 边沿精度或 BY_CAPTURE automonitor
   用户 handler 并存语义；后者仍受 OpenVela upper-half 状态机限制。
 
-## 实施顺序
+## 能力基线 v1 结论与后续顺序
+
+当前板级资源可验证的 v1 高价值能力已完成调研、可裁剪适配、构建和实板验证。
+表中“需要适配”“延后”和 blocked/waiting 项是后续路线图，不是 v1 未完成项；恢复时
+仍须按 P0-P3 双轴重新排序，并从对应限制和验证要求继续。
 
 | 批次 | 独立工作项 | 原因 |
 |---|---|---|
@@ -713,8 +717,8 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | 6 | D04 Note RAM trace | 独立诊断配置，按事件域逐批开启 |
 | 7 | M04、M05 KASAN/UBSAN | 各自独立配置、负测和 commit |
 | 8 | A05 lazy FPU | 在诊断基线稳定后做性能优化 |
-| 9 | P01 UART1、P02、P03 已完成；继续 P01 UART2、P04、P05、P06 | UART2 回矩阵重评；I2C、SPI、PWM 按资源条件恢复；RTC 扩展能力另按独立子任务补全 |
-| 10 | A07+P08，再做 P07/P09/P11 | cache/DMA 是 ADC、crypto、MTD 的公共前置 |
+| 9 | P01 UART1、P02、P03 已完成；P01 UART2 和 P04/P05/P06 实物边界保留后续 | UART2 回矩阵重评；I2C、SPI、PWM 按资源条件恢复；RTC 扩展能力另按独立子任务补全 |
+| 10 | A07+P08 已完成；P07/P09/P11 保留后续 | cache/DMA 公共前置已闭环；ADC、crypto、MTD 仍需各自 adapter、owner 和实物证据 |
 
 同一行合并的配置只表示一个不可分割的验收闭包；不同表项不得合并成一个
 commit。每项完成时至少记录静态、构建、烧录/启动和功能运行四层；故障诊断项
