@@ -42,6 +42,11 @@ if(CONFIG_BL616CL_WDT)
   list(APPEND SRCS bl616cl_wdt.c)
 endif()
 
+if(CONFIG_BL616CL_DMA0)
+  list(APPEND SRCS bl616cl_dma.c)
+  target_link_options(nuttx PRIVATE -Wl,-u,riscv_dma_initialize)
+endif()
+
 if(CONFIG_BL616CL_TRNG)
   list(APPEND SRCS bl616cl_rng.c)
 endif()

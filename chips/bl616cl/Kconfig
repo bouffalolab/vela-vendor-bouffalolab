@@ -131,6 +131,28 @@ config BL616CL_TRNG
 		standard /dev/random device. DEV_URANDOM remains independent and
 		uses the same hardware when DEV_URANDOM_ARCH is selected.
 
+config BL616CL_DMA0
+	bool "DMA0 generic DMA adapter"
+	default n
+	depends on DMA
+	depends on !DMA_LINK
+	---help---
+		Enable the BL616CL DMA0 adapter for the OpenVela generic DMA API.
+		The first revision supports fixed-channel memory-to-memory transfers
+		only. Peripheral request users, linked lists, cyclic transfers, and
+		pause/resume are intentionally excluded.
+
+if BL616CL_DMA0
+
+config BL616CL_DMA0_TEST
+	bool
+	default n
+	---help---
+		Build test-only DMA0 IRQ injection, start hold, and runtime diagnostics.
+		Product configurations must keep this option disabled.
+
+endif # BL616CL_DMA0
+
 menuconfig BL616CL_I2C
 	bool "I2C master"
 	default n

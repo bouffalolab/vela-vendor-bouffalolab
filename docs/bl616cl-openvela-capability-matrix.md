@@ -3,10 +3,10 @@
 本文是 BL616CL OpenVela 能力状态的唯一结论入口。实施记录、测试原始日志和
 临时探测不在本文复制；每个能力完成后回写“状态”和“验证”列。
 
-最后核对：2026-09-01
+最后核对：2026-09-02
 
-- `vendor/bouffalolab`: `02402ab` + ST026 工作提交
-- `nuttx`: `e431601576d`（组织 fork 已承接 realloc stack 修复）
+- `vendor/bouffalolab`: `e40318f` + ST037 DMA0 工作提交
+- `nuttx`: `8db268e69cb`（组织 fork 已承接 PWM final-close 修复）
 - 板卡：Ai-M64L-32S-Kit
 - 配置：`bl616cl/ai-m64l-32s-kit/configs/nsh`
 
@@ -556,7 +556,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | P05 | SPI0/SPI1 master | 需要适配，P1 | 每实例选项、pin、mode、CS policy | controller lower-half和 board select/status；loopback、多 mode/width/frequency |
 | P06 | PWM | 软件闭环已通过（ST033），P1；G4 waiting | `BL616CL_PWM`、`AI_M64L_KIT_PWM`、test hook/app 独立裁剪；首版排除改变 ABI 的 multichannel/pulse/fixed/deadtime | PWM0 CH3+/GPIO22、continuous、整数频率、duty、cpol/dcpol、live update 和 multi-fd 已完成三态构建、裁剪、8/8 实机软件合同和现役回归；frequency/duty/停止电平/更新毛刺待逻辑分析仪 |
 | P07 | ADC | 需要适配，P2 | ADC、channel/pin、poll/DMA 分层 | analog lower-half；校准、量程、连续采样、溢出；外部基准电压 |
-| P08 | DMA0 | 需要适配，P1 公共前置 | controller/channel allocation；调用者各自 Kconfig | IRQ 映射、cache API A07、mem2mem 和外设传输、取消/并发 |
+| P08 | DMA0 | 已验证（ST037） | `BL616CL_DMA0` 默认关闭；test hook/app 独立；首版依赖 `!DMA_LINK` | 八通道 fixed-ident、1/2/4-byte mem2mem、TC/error 状态机、stop/residual、cache ownership 和并发生命周期；外设 consumer/LLI/cyclic 延后 |
 | P09 | AES/SHA/GMAC | 需要适配，P2 | 算法分别裁剪，DMA 可独立 | 对接 OpenVela crypto；标准向量、分块/非对齐、并发和软件对照 |
 | P10 | EFUSE/unique ID | 需要适配，P2 | read 与 irreversible program 分离；默认只读 | 明确 NuttX ABI；只读实测、越界/权限；烧写需单独授权和治具 |
 | P11 | SPI flash MTD | 需要适配，P2 | `BL616CL_FLASH_MTD`、partition/fs 独立 | XIP 并发、擦写临界区、cache、边界、掉电恢复；不得覆盖 boot/app/MFG |
@@ -599,6 +599,27 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
   位域的芯片临界区保护已通过 dual 交错更新验证。
 - 证据边界：串口结果证明软件合同和生命周期，不证明 IRQ 边沿绝对精度；PWM、
   capture、DMA 和 WDT `BY_TIMER` automonitor 仍需各自的硬件资源或独立子任务。
+
+### P08 DMA0 实测结论（2026-09-02）
+
+- 最大能力交集：DMA0 CH0..CH7、共享 raw IRQ 31、1/2/4-byte width、地址固定或按
+  width 递增、TC/error status 和 12-bit TransferSize 与 OpenVela generic DMA 的
+  channel、mem2mem one-shot、callback、stop/residual 合同形成首版交集。
+- 配置与裁剪：`BL616CL_DMA0` 默认关闭并依赖 `DMA && !DMA_LINK`；test hook 和
+  `mcu_dma_test` 独立关闭。off/product/test clean build 为 1224/1224、1227/1227、
+  1229/1229；关闭态无 adapter/LHAL DMA/test，产品态有强
+  `riscv_dma_initialize` 而没有 test symbol。
+- USB2 实测：DMA-001..008 全部 PASS，覆盖 1/2/4-byte width、固定/递增 step、逐字节
+  数据、4095 units 和 4096 `E2BIG`、无效请求原子拒绝、八通道 TC、NULL callback、
+  stop/residual、cache alias、owner wait、并发 put 和 callback drain；最终汇总为
+  `passed=8 failed=0`。
+- error 边界：同 channel 的 TC+error 软件注入证明 adapter error 优先、单 callback、
+  `-EIO` 和 residual 合同，但不构成硬件 error IRQ 注入证据。
+- stop/cache 边界：test-only hold 证明 programmed-but-not-enabled stop 和 byte residual，
+  不声明线速取消；cached/non-cache alias 只证明调用方执行 clean/invalidate 后的可见性，
+  DMA adapter 不代替 client 维护 cache。
+- 外设 consumer、pause/resume、cyclic、LLI/link/insert 保持延后；后续必须按 UART、
+  I2C、SPI、ADC、MTD 或 crypto 分别建立 owner、request、cache 和实物验证闭环。
 
 ### P02 TRNG 实测结论
 

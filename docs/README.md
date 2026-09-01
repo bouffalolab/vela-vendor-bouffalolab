@@ -26,6 +26,8 @@
   最大能力交集、CH3+/GPIO22 owner、频率和极性合同、裁剪及波形验收边界。
 - [BL616CL Cache](bl616cl-cache.md)：说明 OpenVela cache 公共 ABI、地址域、partial
   ownership、运行时开关、裁剪和已确认的 cache geometry。
+- [BL616CL DMA0](bl616cl-dma.md)：说明 OpenVela generic DMA adapter、八通道
+  mem2mem、共享 IRQ、cache ownership、裁剪、实板验证和后续 consumer 边界。
 - [BL616CL 普通 Timer 与 TIMER1 验证](bl616cl-timer.md)：说明 TIMER0/TIMER1
   最大能力交集、oneshot owner 互斥、tick/poll/multi-fd/raw callback 测试、
   五配置裁剪和 USB2 实测边界。

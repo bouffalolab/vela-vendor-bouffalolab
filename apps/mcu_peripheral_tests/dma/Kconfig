@@ -1,0 +1,26 @@
+config BL_MCU_PERIPHERAL_TESTS_DMA
+	tristate "MCU peripheral DMA tests"
+	default n
+	depends on BUILD_FLAT && BUILTIN
+	depends on ARCH_CHIP_BL616CL && DMA && BL616CL_DMA0
+	select BL616CL_DMA0_TEST
+	---help---
+		Enable the BL616CL DMA0 contract and hardware test runner. This is a
+		test-only application and enables DMA adapter test hooks. Keep it
+		disabled in product configurations.
+
+if BL_MCU_PERIPHERAL_TESTS_DMA
+
+config BL_MCU_PERIPHERAL_TESTS_DMA_PROGNAME
+	string "Program name"
+	default "mcu_dma_test"
+
+config BL_MCU_PERIPHERAL_TESTS_DMA_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_DMA_STACKSIZE
+	int "Stack size"
+	default 8192
+
+endif

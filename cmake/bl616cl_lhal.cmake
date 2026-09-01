@@ -27,7 +27,7 @@ target_sources(
           ${BL616CL_LHAL_DIR}/config/bl616cl/device_table.c)
 
 if(CONFIG_BL616CL_I2C0 OR CONFIG_BL616CL_I2C1 OR CONFIG_BL616CL_SPI0
-   OR CONFIG_BL616CL_SPI1 OR CONFIG_BL616CL_PWM)
+   OR CONFIG_BL616CL_SPI1 OR CONFIG_BL616CL_PWM OR CONFIG_BL616CL_DMA0)
   target_sources(bl_lhal PRIVATE ${BL616CL_LHAL_DIR}/src/bflb_clock.c)
 endif()
 
@@ -43,6 +43,10 @@ if(CONFIG_BL616CL_PWM)
   target_sources(
     bl_lhal
     PRIVATE ${BL616CL_LHAL_DIR}/src/bflb_pwm_v2.c)
+endif()
+
+if(CONFIG_BL616CL_DMA0)
+  target_sources(bl_lhal PRIVATE ${BL616CL_LHAL_DIR}/src/bflb_dma.c)
 endif()
 
 target_include_directories(
