@@ -52,6 +52,10 @@ SECTIONS
   } > fw_header :fw_header
 
   __rom_header_start__ = ORIGIN(rom_header);
+  __bl616cl_cache_xip_start = ABSOLUTE(ORIGIN(rom_header));
+  __bl616cl_cache_xip_end = ABSOLUTE(ORIGIN(flash) + LENGTH(flash));
+  __bl616cl_cache_ram_start = ABSOLUTE(ORIGIN(ram));
+  __bl616cl_cache_ram_end = ABSOLUTE(ORIGIN(ram) + LENGTH(ram));
 
   .init ORIGIN(rom_header) :
   {

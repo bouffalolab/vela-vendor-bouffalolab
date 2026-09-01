@@ -50,7 +50,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | A04 | 静态栈报告：`STACK_USAGE`、`STACK_USAGE_WARNING` | 可直接开启，P2 工具 | 仅构建期，不作为运行保护 | 生成 `.su`；阈值负测能使构建告警 |
 | A05 | lazy FPU：`ARCH_LAZYFPU` | 已验证（ST014） | RISC-V 通用实现；依赖 NuttX user context/signal 修复；测试 app 默认关闭 | USB2 实测双任务、异步 signal 全 FPR/FCSR、MTIMER、coredump、裁剪、开销和外设回归 |
 | A06 | CLIC threshold 上下文：`ARCH_RV_HAVE_CLIC` | 需要适配，P2 | 当前自定义 CLIC 仍用全局 `mstatus` 屏蔽；开启会改变 trap frame 和 `up_irq_save()` 语义 | 嵌套/优先级/上下文切换专项；不能只做编译验证 |
-| A07 | NuttX range cache API：`ARCH_ICACHE`/`ARCH_DCACHE` 能力 | 需要适配，P1 | 当前仅有启动期全 cache clean/invalidate；DMA 前置 | cacheable/non-cacheable DMA buffer 一致性；XIP 和启动回归 |
+| A07 | NuttX range cache API：`ARCH_ICACHE`/`ARCH_DCACHE` 能力 | 已验证（ST036） | 默认开启、可显式裁剪；I=32 KiB、D=16 KiB；DMA 前置 | all/range、地址域、partial ownership、coherent、toggle、alias、XIP 和外设回归 |
 | A08 | cycle/HPM perf events：`ARCH_HAVE_PERF_EVENTS`、`ARCH_PERF_EVENTS` | 需要适配，P2 | RISC-V 有参考 `riscv_perf_cycle.c`，当前未编入且未初始化频率 | 与 MTIME 对时；溢出、换算、开销；之后才评估 perf-tools |
 | A09 | T-Head `xtheade`/`-mtune=e907` | 延后 | 当前 GCC 拒绝 `-mtune=e907`，汇编器要求扩展版本 | 先完成工具链版本、反汇编和 ABI 矩阵 |
 | A10 | MMU、S-mode、SMP、Vector、DPFPU、shadow stack | 不支持 | 当前为单核 M-mode RV32IMAF+C，无对应硬件/移植 select | 无；硬件或工具链依据变化后重审 |

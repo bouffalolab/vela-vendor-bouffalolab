@@ -24,6 +24,8 @@
   双实例裁剪、GPIO CS、软件合同、构建证据和实物环回验收边界。
 - [BL616CL PWM](bl616cl-pwm.md)：说明 PWM controller 与 OpenVela upper-half 的
   最大能力交集、CH3+/GPIO22 owner、频率和极性合同、裁剪及波形验收边界。
+- [BL616CL Cache](bl616cl-cache.md)：说明 OpenVela cache 公共 ABI、地址域、partial
+  ownership、运行时开关、裁剪和已确认的 cache geometry。
 - [BL616CL 普通 Timer 与 TIMER1 验证](bl616cl-timer.md)：说明 TIMER0/TIMER1
   最大能力交集、oneshot owner 互斥、tick/poll/multi-fd/raw callback 测试、
   五配置裁剪和 USB2 实测边界。

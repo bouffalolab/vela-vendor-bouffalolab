@@ -30,6 +30,29 @@ config ARCH_CHIP_BL616CL
 
 endchoice
 
+config BL616CL_CACHE
+	bool "OpenVela cache maintenance API"
+	default y
+	select ARCH_ICACHE
+	select ARCH_DCACHE
+	---help---
+		Expose the BL616CL instruction and data cache through the complete
+		OpenVela cache API. I-cache and D-cache are selected together because
+		the coherent-cache ABI requires both implementations. The boot path
+		continues to enable hardware caches when this option is disabled.
+
+if BL616CL_CACHE
+
+config BL616CL_CACHE_TEST
+	bool
+	depends on BL_OS_FEATURE_TESTS_CACHE
+	default y if BL_OS_FEATURE_TESTS_CACHE
+	---help---
+		Enable test-only operation tracing, hardware bypass, chunk override,
+		and MHCR inspection. This is only enabled by the cache test app.
+
+endif # BL616CL_CACHE
+
 menu "BL616CL Peripheral Support"
 
 menuconfig BL616CL_UART

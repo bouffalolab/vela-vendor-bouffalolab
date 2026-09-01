@@ -1,0 +1,22 @@
+config BL_OS_FEATURE_TESTS_CACHE
+	bool "BL616CL cache contract test"
+	default n
+	depends on BUILD_FLAT && BUILTIN
+	depends on ARCH_CHIP_BL616CL && BL616CL_CACHE
+	---help---
+		Enable the BL616CL cache API contract and controlled hardware tests.
+		This selects private tracing and MHCR hooks that are excluded from
+		product configurations.
+
+if BL_OS_FEATURE_TESTS_CACHE
+
+config BL_OS_FEATURE_TESTS_CACHE_PRIORITY
+	int "Task priority"
+	range 2 255
+	default 100
+
+config BL_OS_FEATURE_TESTS_CACHE_STACKSIZE
+	int "Task stack size"
+	default 4096
+
+endif
