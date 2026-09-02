@@ -3,7 +3,7 @@
 # Bouffalo Lab vendor top-level.
 #
 # nuttx_add_subdirectory() globs ONLY the immediate "*/CMakeLists.txt" (one
-# level, non-recursive), so it pulls in examples/ and components/. The drivers
+# level, non-recursive), so it pulls in components/. The drivers
 # release repo uses Bouffalo SDK build files, so OpenVela selects supported
 # sources through parent-owned wrappers. Tools are host-only, while boards/ and
 # chips/ are included through the custom board/chip configuration.
