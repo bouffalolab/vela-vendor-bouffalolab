@@ -233,7 +233,7 @@ runner，在同一个 fd 内完成启动、命令和全部回归：
 测试固件：
 
 ```sh
-python3 vendor/bouffalolab/tools/ai-m64l-32s-kit/ubsan_validate.py \
+python3 vendor/bouffalolab/apps/os_feature_tests/ubsan/ubsan_validate.py \
   --mode test \
   --port /dev/ttyUSB2 \
   --baudrate 2000000 \
@@ -243,7 +243,7 @@ python3 vendor/bouffalolab/tools/ai-m64l-32s-kit/ubsan_validate.py \
 正式产品：
 
 ```sh
-python3 vendor/bouffalolab/tools/ai-m64l-32s-kit/ubsan_validate.py \
+python3 vendor/bouffalolab/apps/os_feature_tests/ubsan/ubsan_validate.py \
   --mode product \
   --port /dev/ttyUSB2 \
   --baudrate 2000000 \

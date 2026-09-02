@@ -11,11 +11,10 @@
   中同步 FlashCube 工具树；对应 FlashCube commit
   `11d409a9ff451ba3d8658d4ed4e6f3b9da587193`，包含全部平台工具、芯片配置、
   GUI、文档和调试工具，不跟踪上游 `*.bin`、`*.ini` 烧录产物。
-- `ai-m64l-32s-kit/postprocess_bl616cl.sh`：Ai-M64L-32S-Kit 的 CMake postbuild
+- `bl616cl/postprocess_bl616cl.sh`：Ai-M64L-32S-Kit 的 CMake postbuild
   wrapper；在临时目录生成处理后的 app 和 4 MiB whole image。
-- `ai-m64l-32s-kit/kasan_validate.py`：在单一 USB-UART fd 中完成 BL616CL KASAN
-  报告核对、warm reset 和现役外设回归。
-- `ai-m64l-32s-kit/ubsan_validate.py`：在单一 USB-UART fd 中完成 BL616CL UBSAN
+- `vendor/bouffalolab/apps/os_feature_tests/ubsan/ubsan_validate.py`：在单一
+  USB-UART fd 中完成 BL616CL UBSAN
   recover 报告核对、正式产品裁剪和现役外设回归。
 
 编译和 UART 烧录统一通过仓库根目录的 `bl_build.py` 执行；本目录只保留它调用的

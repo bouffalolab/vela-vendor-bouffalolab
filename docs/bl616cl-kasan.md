@@ -79,7 +79,7 @@ CONFIG_TESTING_KASAN_PERF_CYCLES=256
 fault case 创建独立 child task 和 custom heap 注册窗口。预期 fault 如果没有触发、
 测试函数正常返回，child 明确输出 `KASANTEST expected fault was not triggered` 并以
 正常状态结束；controller 必须将其判为 `FAIL`。child 非零退出只能证明发生了故障，
-controller 输出 `FAULT verification=required` 而不宣称通过；宿主 runner 必须继续核对
+controller 输出 `FAULT verification=required` 而不宣称通过；宿主侧必须继续核对
 唯一 KASAN report、访问类型、大小、目标地址和 backtrace 后才能判 PASS。
 
 ## 调用链与启动 early stop
@@ -288,33 +288,12 @@ test ! -e "$OUT/apps/testing/mm/kasantest/libapps_kasantest.a"
 Ai-M64L-32S-Kit 打开串口时会因 USB-UART modem line 瞬时变化而重启。完整负测、
 warm reset 和回归使用同一个 `/dev/ttyUSB2` fd：
 
-仓库提供可执行 runner，测试固件使用：
-
-```sh
-python3 vendor/bouffalolab/tools/ai-m64l-32s-kit/kasan_validate.py \
-  --mode test \
-  --port /dev/ttyUSB2 \
-  --baudrate 2000000 \
-  --warm-resets 3 \
-  --log kasan-test-runtime.log
-```
-
-正式产品使用：
-
-```sh
-python3 vendor/bouffalolab/tools/ai-m64l-32s-kit/kasan_validate.py \
-  --mode product \
-  --port /dev/ttyUSB2 \
-  --baudrate 2000000 \
-  --log kasan-product-runtime.log
-```
-
-runner 的固定流程如下：
+宿主侧验收流程如下：
 
 1. 以 2,000,000 baud、8N1、raw mode、无流控且无 `HUPCL` 打开一次 USB2。
 2. open 后立即设置运行态 `DTR=1, RTS=0`，等待 `NuttShell (NSH)` 和 `nsh>`。
 3. 逐字节发送命令并等待下一次 `nsh>`，期间不 close/reopen fd。
-4. 每个 fault case 单独发送一条 `kasantest` 命令；runner 核对 target、唯一 KASAN
+4. 每个 fault case 单独发送一条 `kasantest` 命令；核对 target、唯一 KASAN
    report、1 B write、backtrace、child status 和 `FAULT verification=required`。
 5. 测试模式在同一 fd 上执行三次 warm reset：`DTR up -> 50 ms -> RTS up ->
    50 ms -> RTS down -> 100 ms`，每轮等待两个启动标志并拒绝 early fault。
@@ -392,7 +371,7 @@ KASANTEST result: case=3 name=heap use after free FAULT status=256 verification=
 三个 fault case 的完成判据相同：预打印 target 与 report 地址完全一致，访问类型为
 write、大小为 1 B，只出现一份 report，backtrace 包含对应测试函数和 `run_child`，
 child 非零退出后 controller 只输出 `FAULT status=256 verification=required`。宿主
-runner 完成其余匹配后才把该 case 判为 PASS；缺少 report、地址/类型/大小不匹配、
+宿主侧完成其余匹配后才把该 case 判为 PASS；缺少 report、地址/类型/大小不匹配、
 backtrace 不匹配，或预期 fault 未触发并正常返回，均必须判 FAIL。
 
 ### 性能样例
