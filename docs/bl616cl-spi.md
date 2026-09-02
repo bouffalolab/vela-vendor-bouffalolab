@@ -117,6 +117,8 @@ FIFO 和 CS 故障注入，不能宣称完整 controller recovery 已通过。
 
 ## 构建和裁剪实测
 
+以下历史矩阵来自已删除的一次性临时配置；复测时从 `nsh-spi` 派生，验证后删除临时目录。
+
 在 SDK 根目录对 `nsh`、`nsh-spi`、`nsh`、`nsh`、
 `nsh`、`nsh`、`nsh` 分别执行：
 
