@@ -17,11 +17,20 @@ from typing import Dict, Optional, Sequence
 
 EXTRA_FLAGS = "-Wno-cpp -Wno-deprecated-declarations"
 BOARD_ROOT = "vendor/bouffalolab/boards"
-COMMANDS = ("build", "clean", "menuconfig", "flash", "completion", "__complete")
+COMMANDS = (
+    "build",
+    "clean",
+    "menuconfig",
+    "savedefconfig",
+    "flash",
+    "completion",
+    "__complete",
+)
 COMMAND_OPTIONS = {
     "build": ("--help", "-j", "--jobs", "--use-lib", "--list"),
     "clean": ("--help", "--list", "--all"),
-    "menuconfig": ("--help", "--list"),
+    "menuconfig": ("--help", "--list", "--no-savedefconfig"),
+    "savedefconfig": ("--help", "--list"),
     "flash": (
         "--help",
         "--list",
@@ -223,8 +232,32 @@ def cmake_build(root: Path, out_dir: Path, jobs: str) -> int:
     return subprocess.run(cmd, cwd=root, env=build_env(root), check=False).returncode
 
 
-def cmake_menuconfig(root: Path, out_dir: Path) -> int:
+def cmake_menuconfig(root: Path, out_dir: Path, no_savedefconfig: bool = False) -> int:
+    before = config_snapshot(out_dir)
     cmd = ["cmake", "--build", str(out_dir), "-t", "menuconfig"]
+    ret = subprocess.run(cmd, cwd=root, env=build_env(root), check=False).returncode
+    if ret != 0:
+        return ret
+    if no_savedefconfig:
+        return ret
+    # Write the modified .config back to the board's defconfig, but only when
+    # the menuconfig session actually changed it (browsing without saving
+    # must not touch the defconfig).
+    config = out_dir / ".config"
+    if config.is_file() and config.read_bytes() != before:
+        info("configuration changed; writing back to board defconfig")
+        return cmake_savedefconfig(root, out_dir)
+    return ret
+
+
+def config_snapshot(out_dir: Path) -> Optional[bytes]:
+    """Return the current .config contents, or None when absent."""
+    config = out_dir / ".config"
+    return config.read_bytes() if config.is_file() else None
+
+
+def cmake_savedefconfig(root: Path, out_dir: Path) -> int:
+    cmd = ["cmake", "--build", str(out_dir), "-t", "savedefconfig"]
     return subprocess.run(cmd, cwd=root, env=build_env(root), check=False).returncode
 
 
@@ -493,7 +526,7 @@ def complete_candidates(root: Path, words: Sequence[str]) -> list:
         if words[-1].startswith("-") or len(words) >= 3:
             return opts
         return [*board_candidates(root), *opts]
-    if first in ("build", "clean", "menuconfig"):
+    if first in ("build", "clean", "menuconfig", "savedefconfig"):
         if words[-1].startswith("-") or len(words) >= 3:
             return opts
         return [*board_candidates(root), *opts]
@@ -547,6 +580,7 @@ def make_parser() -> argparse.ArgumentParser:
             "examples:\n"
             "  bl_build.py build bl616cl/ai-m64l-32s-kit/configs/nsh -j8\n"
             "  bl_build.py menuconfig ai-m64l-32s-kit/nsh\n"
+            "  bl_build.py savedefconfig ai-m64l-32s-kit/nsh\n"
             "  bl_build.py flash --port /dev/ttyUSB0\n"
             "  bl_build.py build --list      # list all available board configs\n"
             "  bl_build.py flash --list      # list built firmware targets\n"
@@ -610,6 +644,26 @@ def make_parser() -> argparse.ArgumentParser:
         help="board target, e.g. bl616cl/ai-m64l-32s-kit/configs/nsh",
     )
     p_menuconfig.add_argument(
+        "--list",
+        action="store_true",
+        help="list all available board configs and exit",
+    )
+    p_menuconfig.add_argument(
+        "--no-savedefconfig",
+        action="store_true",
+        help="exit without writing the configuration back to the board defconfig",
+    )
+
+    p_savedefconfig = sub.add_parser(
+        "savedefconfig",
+        help="write the current .config back to the board's defconfig",
+    )
+    p_savedefconfig.add_argument(
+        "board",
+        nargs="?",
+        help="board target, e.g. bl616cl/ai-m64l-32s-kit/configs/nsh",
+    )
+    p_savedefconfig.add_argument(
         "--list",
         action="store_true",
         help="list all available board configs and exit",
@@ -689,7 +743,7 @@ def styled(code: int, text: str) -> str:
 
 def hint_candidates(root: Path, command: str) -> tuple:
     """(title, candidates) shown when a command invocation is invalid."""
-    if command in ("build", "clean", "menuconfig"):
+    if command in ("build", "clean", "menuconfig", "savedefconfig"):
         return (
             "Available boards (pass one as <board>/<config>):",
             list_configs(root),
@@ -757,7 +811,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         sys.stdout.write(completion_script(args.shell))
         return 0
 
-    if args.command in ("build", "clean", "menuconfig"):
+    if args.command in ("build", "clean", "menuconfig", "savedefconfig"):
         if args.list:
             for config in list_configs(root):
                 print(config)
@@ -833,7 +887,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return ret
 
     if args.command == "menuconfig":
-        return cmake_menuconfig(root, out_dir)
+        return cmake_menuconfig(
+            root, out_dir, getattr(args, "no_savedefconfig", False)
+        )
+
+    if args.command == "savedefconfig":
+        return cmake_savedefconfig(root, out_dir)
 
     return cmake_build(root, out_dir, args.jobs)
 
