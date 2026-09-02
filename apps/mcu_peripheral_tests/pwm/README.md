@@ -225,7 +225,7 @@ test-only 资源按配置出现。
 
 ## 当前实测数据
 
-测试固件 `nsh-pwm-test` 在 `/dev/ttyUSB2`、2,000,000 baud 启动并进入 NSH。
+测试固件 `nsh` 在 `/dev/ttyUSB2`、2,000,000 baud 启动并进入 NSH。
 `help` 包含 `mcu_pwm_test`；`ls /dev` 有 `pwm0`，无 `pwm1` 和 `gpio22`。
 
 执行命令：

@@ -47,44 +47,44 @@ USB-UART 只能证明固件启动、节点、callback、状态和软件计时。
 
 ```bash
 python3 vendor/bouffalolab/bl_build.py clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-timer-off
+  bl616cl/ai-m64l-32s-kit/configs/nsh
 python3 vendor/bouffalolab/bl_build.py build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-timer-off -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 
 python3 vendor/bouffalolab/bl_build.py clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-timer0
+  bl616cl/ai-m64l-32s-kit/configs/nsh
 python3 vendor/bouffalolab/bl_build.py build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-timer0 -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 
 python3 vendor/bouffalolab/bl_build.py clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-timer1
+  bl616cl/ai-m64l-32s-kit/configs/nsh
 python3 vendor/bouffalolab/bl_build.py build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-timer1 -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 
 python3 vendor/bouffalolab/bl_build.py clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-timer-dual
+  bl616cl/ai-m64l-32s-kit/configs/nsh-timer
 python3 vendor/bouffalolab/bl_build.py build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-timer-dual -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh-timer -j14
 
 python3 vendor/bouffalolab/bl_build.py clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-timer-oneshot
+  bl616cl/ai-m64l-32s-kit/configs/nsh
 python3 vendor/bouffalolab/bl_build.py build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-timer-oneshot -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
 本轮 clean build 结果：
 
 | 配置 | 结果 | 归档/节点检查 |
 |---|---:|---|
-| `nsh-timer-off` | 1223/1223 | `libarch.a` 无 `bl616cl_tim.c.o`，只有 oneshot；无 timer0/1 |
-| `nsh-timer0` | 1223/1223 | `bl616cl_tim.c.o` 仅有 TIMER0，节点为 timer0 |
-| `nsh-timer1` | 1223/1223 | 仅有 TIMER1，含 test hook，节点为 timer1 |
-| `nsh-timer-dual` | 1223/1223 | TIMER0/TIMER1 均存在，含 test hook |
-| `nsh-timer-oneshot` | 1224/1224 | TIMER0 与 oneshot 存在，无 TIMER1 普通实例 |
+| `nsh` | 1223/1223 | `libarch.a` 无 `bl616cl_tim.c.o`，只有 oneshot；无 timer0/1 |
+| `nsh` | 1223/1223 | `bl616cl_tim.c.o` 仅有 TIMER0，节点为 timer0 |
+| `nsh` | 1223/1223 | 仅有 TIMER1，含 test hook，节点为 timer1 |
+| `nsh-timer` | 1223/1223 | TIMER0/TIMER1 均存在，含 test hook |
+| `nsh` | 1224/1224 | TIMER0 与 oneshot 存在，无 TIMER1 普通实例 |
 
 测试 main 的归档路径为 `apps/vendor/bouffalolab/apps/mcu_peripheral_tests/timer/`
 `libapps_mcu_timer_test.a`，不属于 `libarch.a`；chip lower 才进入
-`arch/libarch.a`。`nsh-timer-off` 仍编译测试 main，是为了保持命令接口在
+`arch/libarch.a`。`nsh` 仍编译测试 main，是为了保持命令接口在
 oneshot 基线可见；它不代表普通 timer lower 被启用。
 
 ## 串口流程
@@ -260,7 +260,7 @@ nsh>
 
 ## oneshot 互斥实测
 
-`nsh-timer-oneshot` clean build 为 `1224/1224`，`libarch.a` 含
+`nsh` clean build 为 `1224/1224`，`libarch.a` 含
 `bl616cl_oneshot.c.o`、`bl616cl_tim.c.o` 和 TIMER0 实例，但没有 TIMER1 普通
 实例。USB2 烧录后 `ls /dev` 输出包含 `oneshot`、`timer0`，不包含 `timer1`；
 执行以下命令完成 TIMER1 owner 回归：

@@ -115,14 +115,14 @@ arbitration 或 frame errno 分类。
 
 ```bash
 python3 vendor/bouffalolab/bl_build.py clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-i2c-no-instance
+  bl616cl/ai-m64l-32s-kit/configs/nsh
 python3 vendor/bouffalolab/bl_build.py build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-i2c-no-instance -j6
+  bl616cl/ai-m64l-32s-kit/configs/nsh -j6
 
 # 将目标依次替换为：
-# nsh-i2c-i2c0-only
-# nsh-i2c-i2c1-only
-# nsh-i2c-dual
+# nsh
+# nsh-i2c
+# nsh
 ```
 
 2026-08-30 fresh clean build 数据：

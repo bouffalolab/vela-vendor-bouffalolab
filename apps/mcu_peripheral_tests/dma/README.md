@@ -18,7 +18,7 @@ error 注入和外设 DMA consumer 不属于本轮能力。
 |---|---:|---:|---:|
 | `nsh` | n | n | 1224/1224 |
 | `nsh-dma` | y | n | 1227/1227 |
-| `nsh-dma-test` | y | y | 1229/1229 |
+| `nsh` | y | y | 1229/1229 |
 
 在 SDK 根目录依次执行：
 
@@ -34,9 +34,9 @@ python3 vendor/bouffalolab/bl_build.py build \
   bl616cl/ai-m64l-32s-kit/configs/nsh-dma -j14
 
 python3 vendor/bouffalolab/bl_build.py clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-dma-test
+  bl616cl/ai-m64l-32s-kit/configs/nsh
 python3 vendor/bouffalolab/bl_build.py build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-dma-test -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
 裁剪检查结果：

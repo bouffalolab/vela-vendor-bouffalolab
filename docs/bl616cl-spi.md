@@ -117,8 +117,8 @@ FIFO 和 CS 故障注入，不能宣称完整 controller recovery 已通过。
 
 ## 构建和裁剪实测
 
-在 SDK 根目录对 `nsh`、`nsh-spi0`、`nsh-spi0-test`、`nsh-spi1`、
-`nsh-spi1-test`、`nsh-spi-dual`、`nsh-spi-dual-test` 分别执行：
+在 SDK 根目录对 `nsh`、`nsh-spi`、`nsh`、`nsh`、
+`nsh`、`nsh`、`nsh` 分别执行：
 
 ```bash
 python3 vendor/bouffalolab/bl_build.py clean \
@@ -132,26 +132,26 @@ python3 vendor/bouffalolab/bl_build.py build \
 | 配置 | 构建 | chip/board/LHAL/test 对象 | ELF SPI0/SPI1 | 大小 | SHA256 |
 |---|---:|---|---|---:|---|
 | `nsh` | 1224/1224 | 0/0/0/0 | 0/0 | 479632 | `8fa89db568cff6dc13e0b4c325ee4eb929eeacff4496936fe4630fc5403e7eb7` |
-| `nsh-spi0` | 1234/1234 | 1/1/1/0 | 1/0 | 493312 | `5533d0417dd5a529190ece9b9d177f95da96fbda2db88966dd7e310cc7749e04` |
-| `nsh-spi0-test` | 1236/1236 | 1/1/1/1 | 1/0 | 514448 | `53729fa86c06dc139574481418d4ee4820b69ff337b48088345b422b50b18428` |
-| `nsh-spi1` | 1232/1232 | 1/0/1/0 | 0/0 | 479632 | `5067b5024900bfc9fffffe9a04dc2e35428f54ed191b7f2571b3321270a9f072` |
-| `nsh-spi1-test` | 1234/1234 | 1/0/1/1 | 0/1 | 510624 | `b252dad6312ac3c0a1bb0317ff67f73c9b5ae1878fafc07283e325664f1366ba` |
-| `nsh-spi-dual` | 1234/1234 | 1/1/1/0 | 1/1 | 494016 | `0e76cffd096c1f5d01f7c97b7f65a85584739e7cb1b848227cac8ba7a1c3dc1b` |
-| `nsh-spi-dual-test` | 1236/1236 | 1/1/1/1 | 1/1 | 515360 | `e252b9dfa4782c221166af959073c60c145f2121395421c1ccc499d732e3b48d` |
+| `nsh-spi` | 1234/1234 | 1/1/1/0 | 1/0 | 493312 | `5533d0417dd5a529190ece9b9d177f95da96fbda2db88966dd7e310cc7749e04` |
+| `nsh` | 1236/1236 | 1/1/1/1 | 1/0 | 514448 | `53729fa86c06dc139574481418d4ee4820b69ff337b48088345b422b50b18428` |
+| `nsh` | 1232/1232 | 1/0/1/0 | 0/0 | 479632 | `5067b5024900bfc9fffffe9a04dc2e35428f54ed191b7f2571b3321270a9f072` |
+| `nsh` | 1234/1234 | 1/0/1/1 | 0/1 | 510624 | `b252dad6312ac3c0a1bb0317ff67f73c9b5ae1878fafc07283e325664f1366ba` |
+| `nsh` | 1234/1234 | 1/1/1/0 | 1/1 | 494016 | `0e76cffd096c1f5d01f7c97b7f65a85584739e7cb1b848227cac8ba7a1c3dc1b` |
+| `nsh` | 1236/1236 | 1/1/1/1 | 1/1 | 515360 | `e252b9dfa4782c221166af959073c60c145f2121395421c1ccc499d732e3b48d` |
 
-`nsh-spi1` 的 archive 含 chip/LHAL 对象，但最终 ELF 没有 consumer，故链接裁剪为
-与 `nsh` 相同大小；`nsh-spi1-test` 由测试 app 引用后保留实例 1。这组对照同时证明
+`nsh` 的 archive 含 chip/LHAL 对象，但最终 ELF 没有 consumer，故链接裁剪为
+与 `nsh` 相同大小；`nsh` 由测试 app 引用后保留实例 1。这组对照同时证明
 源码选择和最终链接裁剪，不用“archive 中有对象”替代“产品镜像中存在”。
 
 ## USB2 软件实测
 
 运行环境：Ai-M64L-32S-Kit、CH340 `1a86:7523`、`/dev/ttyUSB2`、2 Mbps。
-`nsh-spi1-test` 固件 SHA256 为
+`nsh` 固件 SHA256 为
 `b252dad6312ac3c0a1bb0317ff67f73c9b5ae1878fafc07283e325664f1366ba`；单实例执行
 `fake dual` 返回 `FAIL overlap=0` 和退出码 1，随后 alive 命令退出码为 0，全程没有
 assert、panic、reset 或 hang，证明缺少另一实例时清理边界安全。
 
-`nsh-spi-dual-test` 固件 SHA256 为
+`nsh` 固件 SHA256 为
 `e252b9dfa4782c221166af959073c60c145f2121395421c1ccc499d732e3b48d`。启动出现
 `NuttShell (NSH)` 和 `nsh>`，`help` 可见 `mcu_spi_test`；`/dev/spi0` 存在，
 `/dev/spi1` 不存在。

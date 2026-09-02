@@ -1,5 +1,7 @@
 # BL616CL OpenVela 能力矩阵
 
+> 配置治理：board 目录只保留每项功能一个正式入口。关闭态、测试态和实例组合仅从正式 defconfig 临时派生，验证后删除，不提交到仓库。
+
 本文是 BL616CL OpenVela 能力状态的唯一结论入口。实施记录、测试原始日志和
 临时探测不在本文复制；每个能力完成后回写“状态”和“验证”列。
 
@@ -577,11 +579,11 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
   本次接入 OpenVela 普通 timer 的 start/stop/status、1 MHz 微秒 timeout、周期/
   单次 signal、tick ioctl、poll、multi-fd 和 lower callback。TIMER1 输入 capture
   与 compare DMA 仍按硬件/资源边界排除。
-- 配置互斥：`BL616CL_TIMER1` 依赖 `!BL616CL_ONESHOT`；`nsh-timer-oneshot`
+- 配置互斥：`BL616CL_TIMER1` 依赖 `!BL616CL_ONESHOT`；`nsh`
   仅保留 TIMER0 普通 timer 和 TIMER1 oneshot，`ls /dev` 没有 `timer1`。TIMER0
   与 TIMER1 dual 配置同时注册两个节点。
-- 构建与裁剪：`nsh-timer-off`、`nsh-timer0`、`nsh-timer1`、`nsh-timer-dual`
-  分别为 `1223/1223`，`nsh-timer-oneshot` 为 `1224/1224`；off 的 `libarch.a`
+- 构建与裁剪：`nsh`、`nsh`、`nsh`、`nsh-timer`
+  分别为 `1223/1223`，`nsh` 为 `1224/1224`；off 的 `libarch.a`
   无 `bl616cl_tim.c.o`，TIMER1-only 无 TIMER0 实例，oneshot 配置无 TIMER1
   普通实例。测试入口始终是独立的 `libapps_mcu_timer_test.a`。
 - USB2 dual 固件（`/dev/ttyUSB2`、2 Mbps）实测：TIMER1-001 两个 100ms 周期

@@ -287,14 +287,14 @@ nsh>
 ## 构建与裁剪矩阵
 
 ```text
-nsh-timer-off      1223/1223  无普通 timer lower
-nsh-timer0         1223/1223  仅 TIMER0
-nsh-timer1         1223/1223  仅 TIMER1，含 test-only raw hook
-nsh-timer-dual     1223/1223  TIMER0 + TIMER1
-nsh-timer-oneshot  1224/1224  TIMER0 + oneshot，无 TIMER1 普通实例
+nsh      1223/1223  无普通 timer lower
+nsh         1223/1223  仅 TIMER0
+nsh         1223/1223  仅 TIMER1，含 test-only raw hook
+nsh-timer     1223/1223  TIMER0 + TIMER1
+nsh  1224/1224  TIMER0 + oneshot，无 TIMER1 普通实例
 ```
 
-`nsh-timer-off` 保留 oneshot 和测试命令，用于证明普通 `bl616cl_tim.c.o` 可裁剪；
+`nsh` 保留 oneshot 和测试命令，用于证明普通 `bl616cl_tim.c.o` 可裁剪；
 它不是“所有 timer API 和测试 app 全关闭”。TIMER0/TIMER1 实例由各自 Kconfig
 控制；同一个 `bl616cl_tim.c.o` 包含公共 ops，最终实例和 bringup 节点按配置裁剪。
 

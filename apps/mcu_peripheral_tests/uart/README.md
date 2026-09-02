@@ -43,14 +43,14 @@ python3 vendor/bouffalolab/bl_build.py clean nsh-uart
 python3 vendor/bouffalolab/bl_build.py build nsh-uart -j14
 
 # 测试态：UART1 + termios + mcu_uart_test
-python3 vendor/bouffalolab/bl_build.py clean nsh-uart-test
-python3 vendor/bouffalolab/bl_build.py build nsh-uart-test -j14
+python3 vendor/bouffalolab/bl_build.py clean nsh
+python3 vendor/bouffalolab/bl_build.py build nsh -j14
 ```
 
 `nsh-uart` 显式开启 `CONFIG_AI_M64L_KIT_UART1=y`、
 `CONFIG_SERIAL_TERMIOS=y` 和 `CONFIG_UART1_RXBUFSIZE=1024`。1024 字节 RX ring
 用于吸收 UART0 console 长输出调度期间的 UART1 无流控突发，不改变 UART1 TX ring
-默认值。`nsh-uart-test` 另开启
+默认值。`nsh` 另开启
 `CONFIG_BL_MCU_PERIPHERAL_TESTS_UART=y`。产品配置不依赖测试 app。
 
 ## 实物准备与总流程
@@ -58,7 +58,7 @@ python3 vendor/bouffalolab/bl_build.py build nsh-uart-test -j14
 1. 确认测试板为 Ai-M64L-32S-Kit，运行控制台为 `/dev/ttyUSB2`、2000000 baud。
 2. 确认 UART0 console 仍使用板级默认 GPIO34 TX、GPIO35 RX。
 3. 用导线短接 GPIO14（UART1 TX）和 GPIO15（UART1 RX）。
-4. 启动 `nsh-uart-test` 固件，在 USB2 NSH 中确认 `/dev/ttyS1` 存在。
+4. 启动 `nsh` 固件，在 USB2 NSH 中确认 `/dev/ttyS1` 存在。
 5. 依次执行 UART-001..009；每个 case 完成后记录完整 stdout、返回码和接线状态。
 6. 用 `mcu_uart_test 010 &` 在后台运行 UART-010；在同一 USB2 NSH 中持续执行
    `help`、`ls /dev` 等命令，记录命令仍可交互，再等待后台任务打印最终结果；不要把
@@ -233,10 +233,10 @@ AR=prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf-ar
 
 $NM -a cmake_out/ai-m64l-32s-kit_nsh/final_nuttx
 $NM -a cmake_out/ai-m64l-32s-kit_nsh-uart/final_nuttx
-$NM -a cmake_out/ai-m64l-32s-kit_nsh-uart-test/final_nuttx
+$NM -a cmake_out/ai-m64l-32s-kit_nsh/final_nuttx
 $AR t cmake_out/ai-m64l-32s-kit_nsh-uart/arch/libarch.a
 $AR t cmake_out/ai-m64l-32s-kit_nsh-uart/boards/libboard.a
-$AR t cmake_out/ai-m64l-32s-kit_nsh-uart-test/apps/vendor/bouffalolab/apps/mcu_peripheral_tests/uart/libapps_mcu_uart_test.a
+$AR t cmake_out/ai-m64l-32s-kit_nsh/apps/vendor/bouffalolab/apps/mcu_peripheral_tests/uart/libapps_mcu_uart_test.a
 ```
 
 判定：off 无 `bl616cl_uart1_register`、`g_uart1port`、
@@ -247,7 +247,7 @@ lower/board 符号、不含 test main；test 四个符号均存在。UART lower 
 
 ### UART-012：unsupported 和 pin owner 负构建
 
-从 `nsh-uart-test/defconfig` 复制临时配置，使用
+从 `nsh/defconfig` 复制临时配置，使用
 `prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak` 改动临时 defconfig，执行 clean
 build。每轮要求“构建失败，并命中指定错误”，随后用 `bl_build.py clean` 清除输出并
 删除临时配置。
@@ -275,7 +275,7 @@ GPIO14/15 是 board 固定映射，因此不再提供任意 UART1 pin Kconfig；
 | --- | --- | --- | --- | --- |
 | `nsh` | `1224/1224` | `467772/15744/20396` | 868452 | 489168 |
 | `nsh-uart` | `1225/1225` | `471772/16000/21676` | 873436 | 493424 |
-| `nsh-uart-test` | `1227/1227` | `484024/16192/21676` | 887424 | 505856 |
+| `nsh` | `1227/1227` | `484024/16192/21676` | 887424 | 505856 |
 
 最终产物校验值：
 
@@ -283,14 +283,14 @@ GPIO14/15 是 board 固定映射，因此不再提供任意 UART1 pin Kconfig；
 | --- | --- | --- |
 | `nsh` | `18347196db1b1198ec5f03ea0f3ca40e186b43385f2509495280f58cf6e8b86f` | `60a72a5e99a0499cb28f837b1ba785ac11d29ba02de4abcc7879f9c21f70fb21` |
 | `nsh-uart` | `ddf1e655470ab8a3d55920d6d59280e1d924c7df42a07fe5b0d1202d6aecd9e0` | `1b8c4c496ad3ac29d6c40683a81e18619c680ede7742598e0f098e58e165c570` |
-| `nsh-uart-test` | `102d70e76dee84edd63b5acca019435fa7ac96b1dce9459b226d5cdd4330db76` | `5bb5efdb124ef8eac9ba67c66466bdbe5512771464158cb2ed739a7627f90eb7` |
+| `nsh` | `102d70e76dee84edd63b5acca019435fa7ac96b1dce9459b226d5cdd4330db76` | `5bb5efdb124ef8eac9ba67c66466bdbe5512771464158cb2ed739a7627f90eb7` |
 
 裁剪实测：
 
 - `nsh`：无 UART1 lower、board 注册和 UART test 符号。
 - `nsh-uart`：存在 `bl616cl_uart1_register`、`g_uart1port`、
   `ai_m64l_kit_uart_initialize`；无 `mcu_uart_test_main`。
-- `nsh-uart-test`：存在上述 UART1 符号和 `mcu_uart_test_main`；生成独立
+- `nsh`：存在上述 UART1 符号和 `mcu_uart_test_main`；生成独立
   `libapps_mcu_uart_test.a`。
 - `bl616cl_serial.c.o`/`bl616cl_lowputc.c.o` 位于 `libarch.a`；
   `ai_m64l_kit_uart.c.o` 位于 `libboard.a`。
@@ -298,7 +298,7 @@ GPIO14/15 是 board 固定映射，因此不再提供任意 UART1 pin Kconfig；
 负构建实测均按预期失败并命中指定错误：UART0 物理 pin、UART0 signal slot、UART1
 console、flow control、I2C1 owner、SPI0 owner。临时配置和构建目录均已清理。
 
-运行时使用上述 `nsh-uart-test` 最终产物，烧录校验的 app SHA256 与本地
+运行时使用上述 `nsh` 最终产物，烧录校验的 app SHA256 与本地
 `nuttx.bin` SHA256 一致。UART-001..009 关键输出如下：
 
 ```text

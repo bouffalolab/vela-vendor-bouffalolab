@@ -39,8 +39,8 @@ CONFIG_MM_RECORD_STACK=y
 # CONFIG_BL_OS_FEATURE_TESTS_MM_RECORD is not set
 ```
 
-需要复现实测时，使用 `nsh-mm-record-test`、`nsh-mm-record-default-on` 或
-`nsh-mm-record-expand` 专项配置。它们复用同一个 `mm_record_test` main；关闭
+需要复现实测时，使用 `nsh`、`nsh` 或
+`nsh` 专项配置。它们复用同一个 `mm_record_test` main；关闭
 `BL_OS_FEATURE_TESTS_MM_RECORD` 后测试代码不进入最终 ELF。
 
 全量 memdump 的格式化和串口输出调用深度较大。当前 board 同时使用：
@@ -90,11 +90,11 @@ python3 vendor/bouffalolab/bl_build.py build \
 
 ```sh
 python3 vendor/bouffalolab/bl_build.py build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-mm-record-test -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
-默认开启语义使用 `nsh-mm-record-default-on`；pool 扩容使用
-`nsh-mm-record-expand`。三个专项配置均包含 GPIO、timer、watchdog 和 RTC 回归
+默认开启语义使用 `nsh`；pool 扩容使用
+`nsh`。三个专项配置均包含 GPIO、timer、watchdog 和 RTC 回归
 命令，测试完成后重新构建并烧录正式 `nsh`，恢复产品状态。
 
 ## 固件运行测试
@@ -413,12 +413,12 @@ default allocator 的有效依赖不仅是 `LIBC_BACKTRACE_DEPTH>0`，还需要
 
 | 配置 | 关键选项 | 用途 |
 |---|---|---|
-| `nsh-mm-record-off` | `MM_RECORD_STACK=n`、测试 app 关闭 | 完全裁剪对照 |
+| `nsh` | `MM_RECORD_STACK=n`、测试 app 关闭 | 完全裁剪对照 |
 | `nsh` | depth 12、`MM_RECORD_STACK=y`、default off、测试 app 关闭 | 产品配置 |
-| `nsh-mm-record-default-on` | 产品能力 + default on + 测试 app | 默认状态专项 |
-| `nsh-mm-record-test` | 产品能力 + default off + 测试 app | M02-001..013 主测试 |
-| `nsh-mm-record-expand` | init size 4、load factor 75、测试 app | fresh-boot 4→8 扩容 |
-| `nsh-mm-realloc-stack` | realloc 专项开启、M02 专项关闭 | 保留 ST027 独立入口 |
+| `nsh` | 产品能力 + default on + 测试 app | 默认状态专项 |
+| `nsh` | 产品能力 + default off + 测试 app | M02-001..013 主测试 |
+| `nsh` | init size 4、load factor 75、测试 app | fresh-boot 4→8 扩容 |
+| `nsh` | realloc 专项开启、M02 专项关闭 | 保留 ST027 独立入口 |
 
 五类 M02 配置 clean build 实测：off 和产品均为 `1224/1224`，default-on、test、
 expand 均为 `1230/1230`；历史 realloc 专项为 `1227/1227`。目标身份检查结果：

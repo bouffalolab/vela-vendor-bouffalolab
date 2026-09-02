@@ -57,19 +57,19 @@ CONFIG_BL_MCU_PERIPHERAL_TESTS_SPI_ITERATIONS=32
 
 ```bash
 python3 vendor/bouffalolab/bl_build.py clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-spi-dual-test
+  bl616cl/ai-m64l-32s-kit/configs/nsh
 python3 vendor/bouffalolab/bl_build.py build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-spi-dual-test -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
 ```text
 nsh
-nsh-spi0
-nsh-spi0-test
-nsh-spi1
-nsh-spi1-test
-nsh-spi-dual
-nsh-spi-dual-test
+nsh-spi
+nsh
+nsh
+nsh
+nsh
+nsh
 ```
 
 2026-08-30 fresh clean build 和裁剪数据：
@@ -77,42 +77,42 @@ nsh-spi-dual-test
 | 配置 | 构建 | arch SPI | board SPI0 | LHAL SPI | test app | ELF SPI0/SPI1 | `nuttx.bin` |
 |---|---:|---:|---:|---:|---:|---|---:|
 | `nsh` | 1224/1224 | 0 | 0 | 0 | 0 | 0/0 | 479632 B |
-| `nsh-spi0` | 1234/1234 | 1 | 1 | 1 | 0 | 1/0 | 493312 B |
-| `nsh-spi0-test` | 1236/1236 | 1 | 1 | 1 | 1 | 1/0 | 514448 B |
-| `nsh-spi1` | 1232/1232 | 1 | 0 | 1 | 0 | 0/0 | 479632 B |
-| `nsh-spi1-test` | 1234/1234 | 1 | 0 | 1 | 1 | 0/1 | 510624 B |
-| `nsh-spi-dual` | 1234/1234 | 1 | 1 | 1 | 0 | 1/1 | 494016 B |
-| `nsh-spi-dual-test` | 1236/1236 | 1 | 1 | 1 | 1 | 1/1 | 515360 B |
+| `nsh-spi` | 1234/1234 | 1 | 1 | 1 | 0 | 1/0 | 493312 B |
+| `nsh` | 1236/1236 | 1 | 1 | 1 | 1 | 1/0 | 514448 B |
+| `nsh` | 1232/1232 | 1 | 0 | 1 | 0 | 0/0 | 479632 B |
+| `nsh` | 1234/1234 | 1 | 0 | 1 | 1 | 0/1 | 510624 B |
+| `nsh` | 1234/1234 | 1 | 1 | 1 | 0 | 1/1 | 494016 B |
+| `nsh` | 1236/1236 | 1 | 1 | 1 | 1 | 1/1 | 515360 B |
 
-`nsh-spi1` 中 chip/LHAL 对象进入 archive，但没有 board 或 app consumer，最终 ELF
+`nsh` 中 chip/LHAL 对象进入 archive，但没有 board 或 app consumer，最终 ELF
 通过 archive selection/section GC 移除全部 SPI1 代码；这不是 SPI1 lower-half 未编译。
-`nsh-spi1-test` 由测试 app 引用实例 1，最终 ELF 才保留该实例。
+`nsh` 由测试 app 引用实例 1，最终 ELF 才保留该实例。
 
 对应 SHA256：
 
 ```text
 nsh                 8fa89db568cff6dc13e0b4c325ee4eb929eeacff4496936fe4630fc5403e7eb7
-nsh-spi0            5533d0417dd5a529190ece9b9d177f95da96fbda2db88966dd7e310cc7749e04
-nsh-spi0-test       53729fa86c06dc139574481418d4ee4820b69ff337b48088345b422b50b18428
-nsh-spi1            5067b5024900bfc9fffffe9a04dc2e35428f54ed191b7f2571b3321270a9f072
-nsh-spi1-test       b252dad6312ac3c0a1bb0317ff67f73c9b5ae1878fafc07283e325664f1366ba
-nsh-spi-dual        0e76cffd096c1f5d01f7c97b7f65a85584739e7cb1b848227cac8ba7a1c3dc1b
-nsh-spi-dual-test   e252b9dfa4782c221166af959073c60c145f2121395421c1ccc499d732e3b48d
+nsh-spi            5533d0417dd5a529190ece9b9d177f95da96fbda2db88966dd7e310cc7749e04
+nsh       53729fa86c06dc139574481418d4ee4820b69ff337b48088345b422b50b18428
+nsh            5067b5024900bfc9fffffe9a04dc2e35428f54ed191b7f2571b3321270a9f072
+nsh       b252dad6312ac3c0a1bb0317ff67f73c9b5ae1878fafc07283e325664f1366ba
+nsh        0e76cffd096c1f5d01f7c97b7f65a85584739e7cb1b848227cac8ba7a1c3dc1b
+nsh   e252b9dfa4782c221166af959073c60c145f2121395421c1ccc499d732e3b48d
 ```
 
 裁剪检查使用 `ar t` 确认对象归属，使用 RISC-V `nm` 检查最终 ELF：
 
 ```bash
-ar t cmake_out/ai-m64l-32s-kit_nsh-spi-dual-test/arch/libarch.a \
+ar t cmake_out/ai-m64l-32s-kit_nsh/arch/libarch.a \
   | grep -Fx bl616cl_spi.c.o
-ar t cmake_out/ai-m64l-32s-kit_nsh-spi-dual-test/boards/libboard.a \
+ar t cmake_out/ai-m64l-32s-kit_nsh/boards/libboard.a \
   | grep -Fx ai_m64l_kit_spi.c.o
-ar t cmake_out/ai-m64l-32s-kit_nsh-spi-dual-test/apps/vendor/bouffalolab/libbl_lhal.a \
+ar t cmake_out/ai-m64l-32s-kit_nsh/apps/vendor/bouffalolab/libbl_lhal.a \
   | grep -Fx bflb_spi.c.o
-ar t cmake_out/ai-m64l-32s-kit_nsh-spi-dual-test/apps/vendor/bouffalolab/apps/mcu_peripheral_tests/spi/libapps_mcu_spi_test.a \
+ar t cmake_out/ai-m64l-32s-kit_nsh/apps/vendor/bouffalolab/apps/mcu_peripheral_tests/spi/libapps_mcu_spi_test.a \
   | grep -Fx spi_test_main.c.o
 prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf-nm \
-  cmake_out/ai-m64l-32s-kit_nsh-spi-dual-test/final_nuttx \
+  cmake_out/ai-m64l-32s-kit_nsh/final_nuttx \
   | grep -E 'g_bl616cl_spi[01]|mcu_spi_test_main'
 ```
 
@@ -284,7 +284,7 @@ mutex；该负测用于确认缺少另一个实例时的清理边界。
 ## 2026-08-30 USB2 软件实测
 
 环境：Ai-M64L-32S-Kit、CH340 `1a86:7523`、`/dev/ttyUSB2`、2,000,000 baud。
-先烧录 `nsh-spi1-test`，固件 SHA256 为
+先烧录 `nsh`，固件 SHA256 为
 `b252dad6312ac3c0a1bb0317ff67f73c9b5ae1878fafc07283e325664f1366ba`，验证单实例
 失败清理：
 
@@ -298,7 +298,7 @@ ST023_SPI1_SINGLE_ALIVE
 ```
 
 该负测后控制台继续响应，没有 assert、panic、reset 或 hang。随后烧录
-`nsh-spi-dual-test`，固件 SHA256 为
+`nsh`，固件 SHA256 为
 `e252b9dfa4782c221166af959073c60c145f2121395421c1ccc499d732e3b48d`。启动后出现
 `NuttShell (NSH)` 和 `nsh>`；`help` 列出 `mcu_spi_test`。当前 board 只注册 SPI0，
 因此 `/dev/spi0` 存在，`/dev/spi1` 返回 `stat failed: 2`，符合设计边界。

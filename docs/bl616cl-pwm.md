@@ -133,7 +133,7 @@ upper 同步清除 `started`。否则 reopen 后 `PWMIOC_START` 会因旧状态�
 
 ## 构建与裁剪门禁
 
-专项配置为 `nsh-pwm` 和 `nsh-pwm-test`；基线关闭态使用 `nsh`。在 SDK 根目录执行：
+专项配置为 `nsh-pwm` 和 `nsh`；基线关闭态使用 `nsh`。在 SDK 根目录执行：
 
 ```bash
 python3 vendor/bouffalolab/bl_build.py clean \
@@ -148,7 +148,7 @@ python3 vendor/bouffalolab/bl_build.py build \
 |---|---|---|---|
 | `nsh` | 无 | 无 | clean build 通过，1224/1224 |
 | `nsh-pwm` | 有 | 无 | clean build 通过，1229/1229 |
-| `nsh-pwm-test` | 有 | 有 | clean build 通过，1231/1231；栈 6144 |
+| `nsh` | 有 | 有 | clean build 通过，1231/1231；栈 6144 |
 
 defconfig 通过 Kconfig 工具和 `savedefconfig` 生成，不手工追加选项。
 
@@ -173,7 +173,7 @@ patch 可以进入 vendor 开发 `trunk`，但在补齐仪器数据前本能力�
 
 ## 软件实测数据
 
-测试固件为 `nsh-pwm-test`，通过 `/dev/ttyUSB2`、2,000,000 baud 启动，USB ID 为
+测试固件为 `nsh`，通过 `/dev/ttyUSB2`、2,000,000 baud 启动，USB ID 为
 `1a86:7523`。启动后出现 `NuttShell (NSH)` 和 `nsh>`；`help` 包含
 `mcu_pwm_test`，`ls /dev` 包含 `/dev/pwm0`，且没有 `/dev/pwm1`、`/dev/gpio22`。
 
@@ -199,6 +199,6 @@ ST034 先在未修复 NuttX 上复现 `executed=8 passed=7 failed=1`，唯一失
 close/reopen 未重新调用 lower。修复后同一 USB2、配置和命令得到 8/8 PASS；同次
 TIMER-001 最大误差 0.275%，其他现役外设回归和系统存活检查继续通过。
 
-最新 `nsh-pwm-test` whole image 为 4 MiB，boot2、双 partition 和 app magic 正确，
+最新 `nsh` whole image 为 4 MiB，boot2、双 partition 和 app magic 正确，
 MFG 区域保持全 `0xff`；烧录到 USB2 后设备端 SHA256 与主机一致。产品配置无测试
 命令和 test hook，关闭态无 PWM lower、board 和 LHAL PWM 对象。

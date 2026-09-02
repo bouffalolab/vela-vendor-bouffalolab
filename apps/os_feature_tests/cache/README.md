@@ -14,7 +14,7 @@ I-cache 32 KiB、D-cache 16 KiB 采用重新确认的芯片规格，本轮不以
 
 ## 命令
 
-在已经启动到 NSH 的 `st036-cache-test` 固件中执行：
+在已经启动到 NSH 的 `nsh` 固件中执行：
 
 ```text
 cache_test 001

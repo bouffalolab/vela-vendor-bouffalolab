@@ -1,5 +1,7 @@
 # BL616CL Cache 适配与验证
 
+> `nsh` 是当前正式入口；历史三态仅作为验证记录，不再对应独立 board 配置目录。
+
 ## 背景
 
 BL616CL E907 启动路径已经启用 L1 I-cache 和 D-cache，但此前只提供启动阶段的
@@ -79,9 +81,9 @@ OpenVela cache.h caller
 
 ```bash
 python3 vendor/bouffalolab/bl_build.py clean \
-  bl616cl/ai-m64l-32s-kit/configs/st036-cache-off
+  bl616cl/ai-m64l-32s-kit/configs/nsh
 python3 vendor/bouffalolab/bl_build.py build \
-  bl616cl/ai-m64l-32s-kit/configs/st036-cache-off -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 
 python3 vendor/bouffalolab/bl_build.py clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
@@ -89,9 +91,9 @@ python3 vendor/bouffalolab/bl_build.py build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 
 python3 vendor/bouffalolab/bl_build.py clean \
-  bl616cl/ai-m64l-32s-kit/configs/st036-cache-test
+  bl616cl/ai-m64l-32s-kit/configs/nsh
 python3 vendor/bouffalolab/bl_build.py build \
-  bl616cl/ai-m64l-32s-kit/configs/st036-cache-test -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
 关闭态应没有 `up_*cache`、`bl616cl_cache_test_*` 或 `cache_test_main`；产品态应有

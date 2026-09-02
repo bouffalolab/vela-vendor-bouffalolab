@@ -1,5 +1,7 @@
 # BL616CL DMA0 通用适配与验证
 
+> `nsh-dma` 是唯一正式 DMA 配置。测试 hook 使用临时派生配置，不进入长期 board configs。
+
 ## 背景
 
 BL616CL LHAL 已提供 DMA0 CH0..CH7 和丰富的外设 request 表，但此前 OpenVela chip
@@ -49,7 +51,7 @@ adapter 自行映射 OpenVela 与 LHAL 不同的 direction/width 编码，并自
 | `CONFIG_BL_MCU_PERIPHERAL_TESTS_DMA` | n | 编译单一测试命令 `mcu_dma_test` |
 
 `BL616CL_DMA0` 依赖 `DMA && !DMA_LINK`。关闭时 adapter、`bflb_dma.c.o` 和测试 app
-均不进入目标 archive。产品配置 `nsh-dma` 不包含 test hook；只有 `nsh-dma-test`
+均不进入目标 archive。产品配置 `nsh-dma` 不包含 test hook；只有 `nsh`
 包含测试能力。
 
 ## API 合同
@@ -77,14 +79,14 @@ python3 vendor/bouffalolab/bl_build.py build \
 python3 vendor/bouffalolab/bl_build.py build \
   bl616cl/ai-m64l-32s-kit/configs/nsh-dma -j14
 python3 vendor/bouffalolab/bl_build.py build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-dma-test -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
 | 配置 | 结果 | 归档/符号门禁 |
 |---|---:|---|
 | `nsh` | 1224/1224 | 无 adapter、LHAL DMA、test archive/symbol |
 | `nsh-dma` | 1227/1227 | adapter + LHAL DMA；强 `riscv_dma_initialize`；无 test |
-| `nsh-dma-test` | 1229/1229 | 另含独立 test archive 和 test hook |
+| `nsh` | 1229/1229 | 另含独立 test archive 和 test hook |
 
 三态 whole image 都通过 4 MiB 布局和 MFG 擦除区校验。构建 warning 仅有既有的
 critmonitor shadow、cpuload 未使用变量和无 MFG 输入提示，没有 DMA build error。
