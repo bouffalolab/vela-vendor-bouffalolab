@@ -4,9 +4,9 @@ config BL_OS_FEATURE_TESTS_CACHE
 	depends on BUILD_FLAT && BUILTIN
 	depends on ARCH_CHIP_BL616CL && BL616CL_CACHE
 	---help---
-		Enable the BL616CL cache API contract and controlled hardware tests.
-		This selects private tracing and MHCR hooks that are excluded from
-		product configurations.
+		Enable BL616CL cache API hardware behavior tests. Cache maintenance
+		calls use only the public API; all test support stays outside the chip
+		adapter.
 
 if BL_OS_FEATURE_TESTS_CACHE
 
