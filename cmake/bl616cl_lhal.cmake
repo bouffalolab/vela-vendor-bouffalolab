@@ -1,4 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
+#
+# bl_lhal is shipped as a prebuilt library for external users, so every
+# bl616cl-capable source file must be compiled in regardless of the current
+# Kconfig selection. Otherwise a library built with a minimal .config lacks
+# code that external users later enable (the library is never rebuilt with
+# all options turned on). Sources are kept in sync with the upstream
+# bl616cl list in drivers/lhal/CMakeLists.txt.
+#
+# Deliberately excluded (known to break the build or conflict):
+# - src/bflb_irq.c: chips/bl616cl provides all bflb_irq_* via the NuttX
+#   adapter (duplicate symbols).
+# - src/bflb_sec_mutex.c: FreeRTOS-based; chips/bl616cl/bl616cl_sec_mutex.c
+#   provides the same hooks on NuttX (duplicate symbols).
+# - src/bflb_usb_v2.c: requires CherryUSB headers, not part of this SDK.
+# - src/bflb_lhal_romapi_patch.c: ROMAPI path, unused on NuttX.
+# - Files absent from the upstream bl616cl list (bflb_adc.c, bflb_adc_v3.c,
+#   bflb_acomp.c, bflb_dac.c, bflb_pwm_v1.c, bflb_sdio3.c, bflb_kys.c,
+#   bflb_spi_psram.c, bflb_emac_v2.c, bflb_dpi.c, bflb_canfd.c, bflb_ipc.c,
+#   bflb_multi_core_sync.c, bflb_touch.c, bflb_sec_irq.c, bflb_gmac.c):
+#   other chips' IP blocks, not present on bl616cl.
 
 set(BL616CL_LHAL_DIR "${CMAKE_CURRENT_LIST_DIR}/../drivers/lhal")
 
@@ -11,8 +31,16 @@ set_property(TARGET bl_lhal PROPERTY INCLUDE_DIRECTORIES "")
 target_sources(
   bl_lhal
   PRIVATE ${BL616CL_LHAL_DIR}/src/bflb_common.c
+          ${BL616CL_LHAL_DIR}/src/bflb_cks.c
           ${BL616CL_LHAL_DIR}/src/bflb_ef_ctrl.c
           ${BL616CL_LHAL_DIR}/src/bflb_gpio.c
+          ${BL616CL_LHAL_DIR}/src/bflb_i2c.c
+          ${BL616CL_LHAL_DIR}/src/bflb_dma.c
+          ${BL616CL_LHAL_DIR}/src/bflb_rtc.c
+          ${BL616CL_LHAL_DIR}/src/bflb_sec_aes.c
+          ${BL616CL_LHAL_DIR}/src/bflb_sec_sha.c
+          ${BL616CL_LHAL_DIR}/src/bflb_sec_trng.c
+          ${BL616CL_LHAL_DIR}/src/bflb_spi.c
           ${BL616CL_LHAL_DIR}/src/bflb_timer.c
           ${BL616CL_LHAL_DIR}/src/bflb_uart.c
           ${BL616CL_LHAL_DIR}/src/bflb_wdg.c
@@ -21,33 +49,31 @@ target_sources(
           ${BL616CL_LHAL_DIR}/src/flash/bflb_xip_sflash.c
           ${BL616CL_LHAL_DIR}/src/flash/bflb_sflash.c
           ${BL616CL_LHAL_DIR}/src/flash/bflb_sf_ctrl.c
+          ${BL616CL_LHAL_DIR}/src/flash/bflb_flash_secreg_port.c
+          ${BL616CL_LHAL_DIR}/src/flash/bflb_flash_secreg.c
+          ${BL616CL_LHAL_DIR}/src/bflb_clock.c
+          ${BL616CL_LHAL_DIR}/src/bflb_reset.c
+          ${BL616CL_LHAL_DIR}/src/bflb_adc_v2.c
+          ${BL616CL_LHAL_DIR}/src/bflb_emac.c
+          ${BL616CL_LHAL_DIR}/src/bflb_mjpeg.c
+          ${BL616CL_LHAL_DIR}/src/bflb_pwm_v2.c
+          ${BL616CL_LHAL_DIR}/src/bflb_cam.c
+          ${BL616CL_LHAL_DIR}/src/bflb_sdio2.c
+          ${BL616CL_LHAL_DIR}/src/bflb_i2s.c
+          ${BL616CL_LHAL_DIR}/src/bflb_dbi.c
+          ${BL616CL_LHAL_DIR}/src/bflb_audac.c
+          ${BL616CL_LHAL_DIR}/src/bflb_auadc.c
+          ${BL616CL_LHAL_DIR}/src/bflb_wo.c
+          ${BL616CL_LHAL_DIR}/src/bflb_sdh.c
+          ${BL616CL_LHAL_DIR}/src/bflb_ir.c
+          ${BL616CL_LHAL_DIR}/src/bflb_sec_gmac.c
+          ${BL616CL_LHAL_DIR}/src/bflb_touch_v2.c
           ${BL616CL_LHAL_DIR}/src/bflb_l1c.c
           ${BL616CL_LHAL_DIR}/src/bflb_mtimer.c
+          ${BL616CL_LHAL_DIR}/src/bflb_rv_privilege.c
           ${BL616CL_LHAL_DIR}/include/arch/risc-v/t-head/rv_pmp.c
+          ${BL616CL_LHAL_DIR}/include/arch/risc-v/t-head/rv_hart.c
           ${BL616CL_LHAL_DIR}/config/bl616cl/device_table.c)
-
-if(CONFIG_BL616CL_I2C0 OR CONFIG_BL616CL_I2C1 OR CONFIG_BL616CL_SPI0
-   OR CONFIG_BL616CL_SPI1 OR CONFIG_BL616CL_PWM OR CONFIG_BL616CL_DMA0)
-  target_sources(bl_lhal PRIVATE ${BL616CL_LHAL_DIR}/src/bflb_clock.c)
-endif()
-
-if(CONFIG_BL616CL_I2C0 OR CONFIG_BL616CL_I2C1)
-  target_sources(bl_lhal PRIVATE ${BL616CL_LHAL_DIR}/src/bflb_i2c.c)
-endif()
-
-if(CONFIG_BL616CL_SPI0 OR CONFIG_BL616CL_SPI1)
-  target_sources(bl_lhal PRIVATE ${BL616CL_LHAL_DIR}/src/bflb_spi.c)
-endif()
-
-if(CONFIG_BL616CL_PWM)
-  target_sources(
-    bl_lhal
-    PRIVATE ${BL616CL_LHAL_DIR}/src/bflb_pwm_v2.c)
-endif()
-
-if(CONFIG_BL616CL_DMA0)
-  target_sources(bl_lhal PRIVATE ${BL616CL_LHAL_DIR}/src/bflb_dma.c)
-endif()
 
 target_include_directories(
   bl_lhal
