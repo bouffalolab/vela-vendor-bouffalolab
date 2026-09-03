@@ -23,19 +23,19 @@ error 注入和外设 DMA consumer 不属于本轮能力。
 在 SDK 根目录依次执行：
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh-dma
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh-dma -j14
 
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 

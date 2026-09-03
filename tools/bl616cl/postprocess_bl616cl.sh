@@ -197,7 +197,7 @@ compare_segment "$PACKED_IMAGE" $((0x00f000)) "$BUILD_STAGE/partition.bin"
 compare_segment "$PACKED_IMAGE" $((0x010000)) "$BUILD_STAGE/nuttx.bin"
 
 # Persist the partition table and a per-partition flash config next to the
-# firmware, so `bl_build.py flash --config` can run without re-running
+# firmware, so `vela flash --config` can run without re-running
 # bflb_fw_post_proc (which must run only during the build).
 cp "$BUILD_STAGE/partition.bin" "$IMAGE_DIR/partition.bin"
 cat > "$IMAGE_DIR/flash_prog_cfg.ini" <<EOF

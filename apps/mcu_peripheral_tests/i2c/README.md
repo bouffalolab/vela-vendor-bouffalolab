@@ -50,9 +50,9 @@ GPIO4/5，I2C1 实例默认关闭且配置为 GPIO12/13。该 Kconfig 默认值�
 I2C1，或在确认模组资源后另选无冲突 pin。配置和编译使用 SDK 标准入口：
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py menuconfig \
+vendor/bouffalolab/vela menuconfig \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 

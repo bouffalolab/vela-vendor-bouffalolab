@@ -123,9 +123,9 @@ FIFO 和 CS 故障注入，不能宣称完整 controller recovery 已通过。
 `nsh`、`nsh`、`nsh` 分别执行：
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/<config>
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/<config> -j14
 ```
 

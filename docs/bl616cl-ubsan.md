@@ -135,7 +135,7 @@ CONFIG_BL_OS_FEATURE_TESTS_UBSAN
 ### 1. 建立 UBSAN 关闭态对照
 
 ```sh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
@@ -144,9 +144,9 @@ prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
   --disable MM_UBSAN
 cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
 
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
@@ -165,9 +165,9 @@ prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
   --enable BL_OS_FEATURE_TESTS_UBSAN
 cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
 
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
@@ -179,9 +179,9 @@ prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
   --disable BL_OS_FEATURE_TESTS_UBSAN
 cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
 
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 

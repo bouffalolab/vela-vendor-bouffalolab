@@ -56,9 +56,9 @@ CONFIG_BL_MCU_PERIPHERAL_TESTS_SPI_ITERATIONS=32
 在 SDK 根目录执行 fresh build，目标依次替换为下面七项：
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 

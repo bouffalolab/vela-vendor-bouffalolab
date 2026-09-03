@@ -35,16 +35,16 @@ Kconfig、archive、ELF、map 和失败配置。
 
 ```text
 # 关闭态：无 UART1、无 UART test
-python3 vendor/bouffalolab/bl_build.py clean nsh
-python3 vendor/bouffalolab/bl_build.py build nsh -j14
+vendor/bouffalolab/vela clean nsh
+vendor/bouffalolab/vela build nsh -j14
 
 # 产品态：UART1 + termios，无 UART test
-python3 vendor/bouffalolab/bl_build.py clean nsh-uart
-python3 vendor/bouffalolab/bl_build.py build nsh-uart -j14
+vendor/bouffalolab/vela clean nsh-uart
+vendor/bouffalolab/vela build nsh-uart -j14
 
 # 测试态：UART1 + termios + mcu_uart_test
-python3 vendor/bouffalolab/bl_build.py clean nsh
-python3 vendor/bouffalolab/bl_build.py build nsh -j14
+vendor/bouffalolab/vela clean nsh
+vendor/bouffalolab/vela build nsh -j14
 ```
 
 `nsh-uart` 显式开启 `CONFIG_AI_M64L_KIT_UART1=y`、
@@ -249,7 +249,7 @@ lower/board 符号、不含 test main；test 四个符号均存在。UART lower 
 
 从 `nsh/defconfig` 复制临时配置，使用
 `prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak` 改动临时 defconfig，执行 clean
-build。每轮要求“构建失败，并命中指定错误”，随后用 `bl_build.py clean` 清除输出并
+build。每轮要求“构建失败，并命中指定错误”，随后用 `vela clean` 清除输出并
 删除临时配置。
 
 | 负配置 | 预期错误 |

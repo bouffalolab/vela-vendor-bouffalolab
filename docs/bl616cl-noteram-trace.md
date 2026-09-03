@@ -110,9 +110,9 @@ RISC-V MTIMER，并由 `up_perf_convert()` 转为秒和纳秒。时间链已有
 正式产品构建：
 
 ```sh
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
@@ -240,9 +240,9 @@ prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
   --file cmake_out/ai-m64l-32s-kit_nsh/.config \
   --enable BL_OS_FEATURE_TESTS_NOTERAM
 cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 

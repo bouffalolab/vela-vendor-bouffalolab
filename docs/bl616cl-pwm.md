@@ -136,9 +136,9 @@ upper 同步清除 `started`。否则 reopen 后 `PWMIOC_START` 会因旧状态�
 专项配置为 `nsh-pwm` 和 `nsh`；基线关闭态使用 `nsh`。在 SDK 根目录执行：
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/<config>
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/<config> -j14
 ```
 

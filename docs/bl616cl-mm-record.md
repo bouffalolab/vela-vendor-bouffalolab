@@ -78,9 +78,9 @@ sequence 读数是“下一次分配号”。动作前后分别读到 `S0`、`S1
 正式能力已在 board defconfig 中启用。执行 clean build：
 
 ```sh
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
@@ -91,7 +91,7 @@ python3 vendor/bouffalolab/bl_build.py build \
 复现完整回溯合同时使用独立配置：
 
 ```sh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 

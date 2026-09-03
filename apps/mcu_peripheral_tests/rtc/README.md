@@ -65,12 +65,12 @@ CONFIG_BL616CL_RTC_CLOCK_DIG32K=y
 在 SDK 根目录执行：
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py menuconfig \
+vendor/bouffalolab/vela menuconfig \
   bl616cl/ai-m64l-32s-kit/configs/nsh
 cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 

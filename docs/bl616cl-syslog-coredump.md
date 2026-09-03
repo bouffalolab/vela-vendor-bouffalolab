@@ -110,9 +110,9 @@ IRQ 或 RISC-V exception 才进入系统 panic。
 ### 1. 正式产品构建
 
 ```sh
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
@@ -147,9 +147,9 @@ prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
   --file cmake_out/ai-m64l-32s-kit_nsh/.config \
   --enable BL_OS_FEATURE_TESTS_SYSLOG_COREDUMP
 cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
@@ -164,9 +164,9 @@ prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
   --file cmake_out/ai-m64l-32s-kit_nsh/.config \
   --disable BL_OS_FEATURE_TESTS_SYSLOG_COREDUMP
 cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 

@@ -1,0 +1,1228 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+"""Build and flash a BouffaloLab board through openvela's CMake path.
+
+A single data model (COMMANDS) drives the argument parser, the help text
+and the shell completion, so all three stay in sync by construction.
+"""
+
+from __future__ import annotations
+
+import difflib
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import NoReturn, Optional, Sequence
+
+VERSION = "1.0"
+EXTRA_FLAGS = "-Wno-cpp -Wno-deprecated-declarations"
+BOARD_ROOT = "vendor/bouffalolab/boards"
+FLASH_SIZE = 0x400000
+MFG_OFFSET = 0x210000
+MFG_SIZE = 0x1F0000
+WHOLE_IMAGE_MAGICS = {
+    0x000000: bytes.fromhex("42464e50"),
+    0x00E000: bytes.fromhex("42465054"),
+    0x00F000: bytes.fromhex("42465054"),
+    0x010000: bytes.fromhex("42464e50"),
+}
+TOOLCHAIN_ARCHES = (
+    "xtensa",
+    "arm",
+    "aarch64",
+    "riscv",
+    "x86_64",
+    "tc32",
+    "tricore",
+)
+
+
+# ---------------------------------------------------------------------------
+# Terminal styling — restrained on purpose: bold labels, magenta identifiers,
+# cyan placeholders, dim secondary text, green/red results only. Everything
+# degrades to plain text on pipes and terminals that cannot show it.
+# ---------------------------------------------------------------------------
+
+
+def use_color(stream) -> bool:
+    if os.environ.get("NO_COLOR") or os.environ.get("TERM") == "dumb":
+        return False
+    return stream.isatty()
+
+
+def styled(code: int, text: str, stream=sys.stderr) -> str:
+    return f"\033[{code}m{text}\033[0m" if use_color(stream) else text
+
+
+def bold(text: str, stream=sys.stderr) -> str:
+    return styled(1, text, stream)
+
+
+def dim(text: str, stream=sys.stderr) -> str:
+    return styled(2, text, stream)
+
+
+def magenta(text: str, stream=sys.stderr) -> str:
+    return styled(35, text, stream)
+
+
+def cyan(text: str, stream=sys.stderr) -> str:
+    return styled(36, text, stream)
+
+
+def green(text: str, stream=sys.stderr) -> str:
+    return styled(32, text, stream)
+
+
+def red(text: str, stream=sys.stderr) -> str:
+    return styled(31, text, stream)
+
+
+def status(verb: str, detail: str = "") -> None:
+    """Print a progress line (stderr): 'configuring   <detail>'."""
+    suffix = f" {detail}" if detail else ""
+    print(f"{dim(verb.ljust(12), sys.stderr)}{suffix}", file=sys.stderr)
+
+
+def done(verb: str, detail: str, seconds: Optional[float] = None) -> None:
+    """Print a result line (stderr): '✓ built <detail> [38.2s]'."""
+    elapsed = f" {dim(f'[{seconds:.1f}s]', sys.stderr)}" if seconds is not None else ""
+    print(f"{green('✓', sys.stderr)} {verb:<11}{detail}{elapsed}", file=sys.stderr)
+
+
+def fail(message: str, hints: Sequence[str] = (), code: int = 2) -> NoReturn:
+    """Print an error line (stderr) plus indented hints, then exit."""
+    print(f"{red('✗', sys.stderr)} {message}", file=sys.stderr)
+    for hint in hints:
+        print(f"  {hint}", file=sys.stderr)
+    raise SystemExit(code)
+
+
+def note(message: str) -> None:
+    print(f"  {dim(message, sys.stderr)}", file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# Data model — the single source of truth for parsing, help and completion.
+# ---------------------------------------------------------------------------
+
+
+def default_jobs() -> str:
+    """Default parallelism: half of the machine's cores, at least 1."""
+    return str(max(1, (os.cpu_count() or 1) // 2))
+
+
+@dataclass
+class Flag:
+    long: str
+    help: str
+    short: Optional[str] = None
+    takes_value: bool = False
+    value_name: str = ""
+    default: Optional[str] = None
+
+
+@dataclass
+class Command:
+    name: str
+    desc: str  # one line shown in the top-level command list
+    example: str  # sample usage shown next to the command name
+    detail: str  # first paragraph of the per-command help
+    args_help: str  # description of the <board> argument, if any
+    flags: Sequence[Flag]
+
+
+COMMANDS = {
+    "build": Command(
+        name="build",
+        desc="Configure and build a board",
+        example="ai-m64l-32s-kit/nsh",
+        detail="Configure a board with CMake, then compile it with Ninja.",
+        args_help="Board target, e.g. ai-m64l-32s-kit/nsh (see vela build --list)",
+        flags=(
+            Flag("--jobs", "Parallel jobs", short="-j", takes_value=True,
+                 value_name="N", default=default_jobs()),
+            Flag("--use-lib", "Link components from prebuilt libs", takes_value=True,
+                 value_name="a,b"),
+            Flag("--list", "List available board configs and exit"),
+        ),
+    ),
+    "menuconfig": Command(
+        name="menuconfig",
+        desc="Open the Kconfig menu, write back to defconfig",
+        example="ai-m64l-32s-kit/nsh",
+        detail="Open the Kconfig menu for a board. When the configuration "
+               "changes, it is written back to the board's defconfig.",
+        args_help="Board target, e.g. ai-m64l-32s-kit/nsh (see vela menuconfig --list)",
+        flags=(
+            Flag("--no-savedefconfig", "Exit without writing back to the board defconfig"),
+            Flag("--list", "List available board configs and exit"),
+        ),
+    ),
+    "savedefconfig": Command(
+        name="savedefconfig",
+        desc="Write current .config back to the board defconfig",
+        example="ai-m64l-32s-kit/nsh",
+        detail="Expand the build directory's .config and save it as the "
+               "board's minimal defconfig.",
+        args_help="Board target, e.g. ai-m64l-32s-kit/nsh (see vela savedefconfig --list)",
+        flags=(Flag("--list", "List available board configs and exit"),),
+    ),
+    "clean": Command(
+        name="clean",
+        desc="Remove a board's build output (or --all)",
+        example="ai-m64l-32s-kit/nsh",
+        detail="Remove a board's cmake_out directory, or every output "
+               "directory with --all.",
+        args_help="Board target, e.g. ai-m64l-32s-kit/nsh (see vela clean --list)",
+        flags=(
+            Flag("--all", "Remove every build output directory under cmake_out"),
+            Flag("--list", "List available board configs and exit"),
+        ),
+    ),
+    "flash": Command(
+        name="flash",
+        desc="Flash firmware over UART (never builds)",
+        example="--port /dev/ttyUSB2",
+        detail="Flash firmware over UART. Pass a built board, a FlashCube "
+               "config ini, or a single image; with no source, the only "
+               "build output under cmake_out is flashed.",
+        args_help="Built board to flash by its flash_prog_cfg.ini",
+        flags=(
+            Flag("--port", "UART device, e.g. /dev/ttyUSB2", takes_value=True, value_name="tty"),
+            Flag("--baudrate", "UART baudrate", takes_value=True, value_name="rate",
+                 default="2000000"),
+            Flag("--config", "FlashCube config ini describing per-partition firmware",
+                 takes_value=True, value_name="ini"),
+            Flag("--image", "Single binary to burn at --addr", takes_value=True,
+                 value_name="bin"),
+            Flag("--addr", "Flash address for --image (default 0x0)", takes_value=True,
+                 value_name="addr"),
+            Flag("--list", "List built firmware targets and exit"),
+        ),
+    ),
+    "completion": Command(
+        name="completion",
+        desc="Print or install shell completion",
+        example="[zsh]",
+        detail="Print a completion script for bash, zsh or fish, or install "
+               "it into a directory the shell already scans (no rc file "
+               "edits) with 'vela completion install'.",
+        args_help="",
+        flags=(),
+    ),
+}
+
+
+def flag_names(command: Command) -> list:
+    names = [flag.long for flag in command.flags]
+    names += [flag.short for flag in command.flags if flag.short]
+    return [*names, "--help", "-h"]
+
+
+# ---------------------------------------------------------------------------
+# Environment discovery
+# ---------------------------------------------------------------------------
+
+
+def find_root(start: Path) -> Path:
+    for current in (start, *start.parents):
+        if (current / "build.sh").is_file() and (current / "nuttx").is_dir():
+            return current
+    fail("could not find the openvela root (build.sh + nuttx/)", code=1)
+
+
+# ---------------------------------------------------------------------------
+# Board target resolution
+# ---------------------------------------------------------------------------
+
+
+class BoardError(ValueError):
+    """Base for board target resolution failures."""
+
+
+class BoardNotFound(BoardError):
+    def __init__(self, target: str):
+        super().__init__(target)
+        self.target = target
+
+
+class BoardAmbiguous(BoardError):
+    def __init__(self, target: str, matches: list):
+        super().__init__(target)
+        self.target = target
+        self.matches = matches
+
+
+def short_board_names(root: Path) -> list:
+    """(configs_dir, display_name) pairs for every board config.
+
+    The display name is '<board>/<config>' and keeps the chip layer only
+    when the board name exists under more than one chip.
+    """
+    entries = []
+    for d in (root / BOARD_ROOT).glob("*/*/configs/*"):
+        if (d / "defconfig").is_file():
+            entries.append((d, d.parents[2].name, d.parents[1].name, d.name))
+    # A board name is ambiguous only when it exists under more than one
+    # chip, regardless of how many configs it has.
+    counts: dict = {}
+    for _, board in {(e[1], e[2]) for e in entries}:
+        counts[board] = counts.get(board, 0) + 1
+    return [
+        (d, f"{board}/{name}" if counts[board] == 1 else f"{chip}/{board}/configs/{name}")
+        for d, chip, board, name in sorted(entries, key=lambda e: e[1] + "/" + e[3])
+    ]
+
+
+def list_configs(root: Path) -> list:
+    return [name for _, name in short_board_names(root)]
+
+
+def display_name(root: Path, board_dir: Path) -> str:
+    """Canonical short form of a resolved board directory."""
+    for d, name in short_board_names(root):
+        if d == board_dir:
+            return name
+    try:
+        return board_dir.relative_to(root).as_posix()
+    except ValueError:
+        return str(board_dir)
+
+
+def resolve_board(root: Path, target: str) -> Path:
+    """Resolve a board target to its configs directory (absolute path).
+
+    Accepted forms (only the first two carry the full prefix):
+      <absolute path>
+      vendor/bouffalolab/boards/<chip>/<board>/configs/<name>  (legacy full path)
+      <chip>/<board>/configs/<name>                            (prefix omitted)
+      <board>/configs/<name> or <board>/<name>                 (chip omitted)
+      <name>                                                   (config name only)
+
+    The shorter forms are accepted only when they match exactly one board.
+    """
+    path = Path(target)
+    if path.is_absolute():
+        if path.is_dir():
+            return path.resolve()
+        raise BoardNotFound(target)
+
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*", target):
+        raise BoardNotFound(target)
+
+    # Strip a redundant full prefix so all forms match uniformly.
+    if target.startswith(BOARD_ROOT + "/"):
+        path = Path(target[len(BOARD_ROOT) + 1:])
+
+    boards_root = Path(BOARD_ROOT)
+    patterns = [boards_root / path, boards_root / "*" / path]
+    if "/" not in target:
+        patterns.append(boards_root / "*" / "*" / "configs" / target)
+    parts = path.parts
+    if len(parts) == 2 and parts[-1] != "configs":
+        patterns.append(boards_root / "*" / parts[0] / "configs" / parts[1])
+
+    candidates = sorted(
+        {
+            match.resolve()
+            for pattern in patterns
+            for match in root.glob(str(pattern))
+            if match.is_dir()
+        }
+    )
+    if not candidates:
+        raise BoardNotFound(target)
+    if len(candidates) > 1:
+        raise BoardAmbiguous(target, candidates)
+    return candidates[0]
+
+
+def resolve_or_fail(root: Path, target: str, command: str) -> Path:
+    """Resolve a board target, printing a friendly error on failure."""
+    try:
+        return resolve_board(root, target)
+    except BoardNotFound:
+        close = difflib.get_close_matches(target, list_configs(root), n=1, cutoff=0.6)
+        hints = []
+        if close:
+            hints.append(f"did you mean {cyan(close[0], sys.stderr)}?")
+        hints.append(f"hint: vela {command} --list")
+        fail(f"no board matches {cyan(target, sys.stderr)}", hints)
+    except BoardAmbiguous as error:
+        names = sorted(display_name(root, m) for m in error.matches)
+        fail(
+            f"{cyan(target, sys.stderr)} matches multiple boards:",
+            [f"    {cyan(name, sys.stderr)}" for name in names]
+            + [f"hint: use the full '<chip>/<board>/configs/<name>' form"],
+        )
+
+
+# ---------------------------------------------------------------------------
+# Build plumbing (CMake + Ninja, paths and env from the openvela prebuilts)
+# ---------------------------------------------------------------------------
+
+
+def build_dir(root: Path, board_dir: Path) -> Path:
+    config_name = board_dir.name
+    board_name = board_dir.parents[1].name
+    return root / "cmake_out" / f"{board_name}_{config_name}"
+
+
+def cmake_board_config(root: Path, board_dir: Path) -> str:
+    try:
+        return f"../{board_dir.relative_to(root).as_posix()}"
+    except ValueError:
+        return str(board_dir)
+
+
+def build_env(root: Path) -> dict:
+    env = dict(os.environ)
+    system = platform.system().lower()
+    machine = platform.machine().replace("arm64", "aarch64")
+    host = f"{system}-{machine}"
+    paths = [root]
+    kconfig_bin = root / "prebuilts" / "kconfig-frontends" / "bin"
+    python_paths = []
+
+    paths.append(root / "prebuilts" / "tools" / "python" / "bin")
+    paths.append(kconfig_bin)
+
+    for arch in TOOLCHAIN_ARCHES:
+        paths.append(root / "prebuilts" / "gcc" / host / f"{arch}-none-linux-gnu" / "bin")
+        for abi in ("eabi", "elf"):
+            paths.append(root / "prebuilts" / "gcc" / host / f"{arch}-{abi}" / "bin")
+            paths.append(root / "prebuilts" / "gcc" / host / f"{arch}-none-{abi}" / "bin")
+
+    paths.extend(
+        [
+            root / "prebuilts" / "build-tools" / host / "bin",
+            root / "prebuilts" / "tools" / system / machine,
+            root / "prebuilts" / "tools" / "cmake" / "bin",
+            root / "prebuilts" / "tools" / "ninja" / "bin",
+        ]
+    )
+
+    for package in (
+        "pyelftools",
+        "cxxfilt",
+        "Mako",
+        "ply",
+        "jsonpath",
+        "kconfiglib",
+        "construct",
+    ):
+        python_paths.append(root / "prebuilts" / "tools" / "python" / "dist-packages" / package)
+
+    existing_path = env.get("PATH", "")
+    env["PATH"] = os.pathsep.join(str(path) for path in paths if Path(path).is_dir())
+    env["PATH"] = f"{env['PATH']}{os.pathsep}{existing_path}"
+
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = os.pathsep.join(
+        str(path) for path in python_paths if Path(path).exists()
+    )
+    env["PYTHONPATH"] = f"{env['PYTHONPATH']}{os.pathsep}{existing_pythonpath}"
+
+    return env
+
+
+def cmake_configure(root: Path, out_dir: Path, board: Path, use_lib: str) -> int:
+    lib_components = ";".join(
+        component.strip() for component in use_lib.split(",") if component.strip()
+    )
+    cmd = [
+        "cmake",
+        "-B",
+        str(out_dir),
+        "-S",
+        str(root / "nuttx"),
+        f"-DBOARD_CONFIG={cmake_board_config(root, board)}",
+        f"-DCUSTOM_MODULE_PATH={root / 'build' / 'cmake'}",
+        f"-DEXTRA_FLAGS={EXTRA_FLAGS}",
+        f"-DBL_USE_LIB_COMPONENTS={lib_components}",
+        "-GNinja",
+    ]
+    if shutil.which("ccache"):
+        cmd += [
+            "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+            "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
+        ]
+    return subprocess.run(cmd, cwd=root, env=build_env(root), check=False).returncode
+
+
+def cmake_build(root: Path, out_dir: Path, jobs: str) -> int:
+    cmd = ["cmake", "--build", str(out_dir), f"-j{jobs}", "--"]
+    return subprocess.run(cmd, cwd=root, env=build_env(root), check=False).returncode
+
+
+def cmake_savedefconfig(root: Path, out_dir: Path) -> int:
+    cmd = ["cmake", "--build", str(out_dir), "-t", "savedefconfig"]
+    return subprocess.run(cmd, cwd=root, env=build_env(root), check=False).returncode
+
+
+def cmake_menuconfig(root: Path, out_dir: Path) -> int:
+    cmd = ["cmake", "--build", str(out_dir), "-t", "menuconfig"]
+    return subprocess.run(cmd, cwd=root, env=build_env(root), check=False).returncode
+
+
+def config_snapshot(out_dir: Path) -> Optional[bytes]:
+    """Return the current .config contents, or None when absent."""
+    config = out_dir / ".config"
+    return config.read_bytes() if config.is_file() else None
+
+
+def sync_defconfig_copy(out_dir: Path, board_dir: Path) -> None:
+    """Refresh cmake_out's stored defconfig copy after a defconfig write-back."""
+    current = board_dir / "defconfig"
+    if current.is_file():
+        shutil.copy2(current, out_dir / "defconfig")
+
+
+def ensure_fresh_config(root: Path, out_dir: Path, board_dir: Path) -> None:
+    """Drop a stale .config when the board's defconfig changed on disk.
+
+    nuttx/CMakeLists.txt only regenerates .config when it is missing or the
+    defconfig *path* changed (upstream TODO admits content drift). Compare
+    the stored copy against the board defconfig and force regeneration.
+    """
+    stored = out_dir / "defconfig"
+    current = board_dir / "defconfig"
+    if not (stored.is_file() and current.is_file()):
+        return
+    if stored.read_bytes() == current.read_bytes():
+        return
+    for stale in (".config", ".config.orig"):
+        path = out_dir / stale
+        if path.is_file():
+            path.unlink()
+    try:
+        rel = current.relative_to(root).as_posix()
+    except ValueError:
+        rel = str(current)
+    status("regenerating", f".config is stale vs {cyan(rel, sys.stderr)}")
+
+
+def require_configure(root: Path, out_dir: Path, board: Path, use_lib: str) -> None:
+    """Run cmake configure; exit with a clean error when it fails."""
+    status("configuring", cyan(display_name(root, board), sys.stderr))
+    started = time.monotonic()
+    if cmake_configure(root, out_dir, board, use_lib) != 0:
+        fail("configure failed", [f"elapsed {dim(f'{time.monotonic() - started:.1f}s')}"], 1)
+
+
+# ---------------------------------------------------------------------------
+# Flash plumbing (FlashCube over UART)
+# ---------------------------------------------------------------------------
+
+
+def validate_whole_image(image: Path) -> None:
+    if not image.is_file():
+        raise FileNotFoundError(f"whole image does not exist: {image}")
+    if image.stat().st_size != FLASH_SIZE:
+        raise ValueError(f"whole image must be exactly 4 MiB: {image}")
+
+    with image.open("rb") as stream:
+        for offset, expected in WHOLE_IMAGE_MAGICS.items():
+            stream.seek(offset)
+            if stream.read(len(expected)) != expected:
+                raise ValueError(f"whole image layout is invalid: {image}")
+
+        stream.seek(MFG_OFFSET)
+        remaining = MFG_SIZE
+        while remaining:
+            chunk = stream.read(min(remaining, 64 * 1024))
+            if any(byte != 0xFF for byte in chunk):
+                raise ValueError(f"whole image MFG partition is not erased: {image}")
+            remaining -= len(chunk)
+
+
+def flash_tool_name(system: Optional[str] = None, machine: Optional[str] = None) -> str:
+    system = system or platform.system()
+    machine = (machine or platform.machine()).lower()
+    if system.startswith("Linux"):
+        if machine in ("x86_64", "amd64"):
+            return "BLFlashCommand-ubuntu"
+        if machine == "arm" or machine.startswith("armv"):
+            return "BLFlashCommand-arm"
+        raise RuntimeError(f"unsupported Linux architecture: {machine}")
+    if system.startswith("Darwin"):
+        return "BLFlashCommand-macos"
+    if system.startswith(("Windows", "MINGW", "MSYS", "CYGWIN")):
+        return "BLFlashCommand.exe"
+    raise RuntimeError(f"unsupported host platform: {system}")
+
+
+def stage_flash_tool(root: Path, stage: Path) -> Path:
+    """Stage the FlashCube binary and chip assets into the given directory."""
+    flash_tool_dir = root / "vendor" / "bouffalolab" / "tools" / "bouffalo_flash_cube"
+    tool_name = flash_tool_name()
+    flash_tool = flash_tool_dir / tool_name
+    required_files = (
+        flash_tool,
+        flash_tool_dir / "chips" / "bl616cl" / "eflash_loader" / "eflash_loader_cfg.conf",
+        flash_tool_dir / "chips" / "bl616cl" / "efuse_bootheader" / "efuse_bootheader_cfg.conf",
+        flash_tool_dir / "chips" / "bl616cl" / "efuse_bootheader" / "flash_para.bin",
+    )
+    for path in required_files:
+        if not path.is_file():
+            raise FileNotFoundError(f"required flash runtime asset does not exist: {path}")
+
+    staged_tool = stage / tool_name
+    shutil.copy2(flash_tool, staged_tool)
+    shutil.copytree(flash_tool_dir / "chips", stage / "chips")
+    staged_tool.chmod(staged_tool.stat().st_mode | 0o100)
+    return staged_tool
+
+
+def flash_bin_image(root: Path, image: Path, addr: str, port: str, baudrate: int) -> int:
+    """Burn a single binary to a flash address (default 0x0)."""
+    with tempfile.TemporaryDirectory(prefix="vela-flash.") as temp_dir:
+        staged_tool = stage_flash_tool(root, Path(temp_dir))
+        cmd = [
+            str(staged_tool),
+            "--interface=uart",
+            "--chipname=bl616cl",
+            f"--port={port}",
+            f"--baudrate={baudrate}",
+            f"--firmware={image}",
+            f"--addr={addr}",
+            "--reset",
+        ]
+        return subprocess.run(cmd, cwd=root, env=build_env(root), check=False).returncode
+
+
+def flash_config_image(root: Path, config: Path, port: str, baudrate: int) -> int:
+    """Flash per-partition firmware described by a FlashCube config ini."""
+    with tempfile.TemporaryDirectory(prefix="vela-flash.") as temp_dir:
+        staged_tool = stage_flash_tool(root, Path(temp_dir))
+        cmd = [
+            str(staged_tool),
+            "--interface=uart",
+            "--chipname=bl616cl",
+            f"--config={config}",
+            f"--port={port}",
+            f"--baudrate={baudrate}",
+            "--reset",
+        ]
+        return subprocess.run(cmd, cwd=root, env=build_env(root), check=False).returncode
+
+
+def select_flash_config(root: Path) -> Path:
+    """Auto-discover the single flash_prog_cfg.ini under cmake_out."""
+    candidates = sorted(
+        path for path in (root / "cmake_out").glob("*/flash_prog_cfg.ini") if path.is_file()
+    )
+    if not candidates:
+        fail(
+            "no flash config found under cmake_out",
+            ["hint: vela build <board>        # build firmware first",
+             "hint: vela flash <board> --port <tty>"],
+            1,
+        )
+    if len(candidates) > 1:
+        fail(
+            "multiple flash configs found; pass a board",
+            [f"    {cyan(p.parent.name, sys.stderr)}" for p in candidates]
+            + ["hint: vela flash <board> --port <tty>"],
+            1,
+        )
+    return candidates[0]
+
+
+def flash_config_candidates(root: Path) -> list:
+    """Board targets for built flash configs found under cmake_out.
+
+    Each '<board>_<config>' output directory is reduced to '<board>/<config>'
+    when that target resolves to a real board. Names that do not resolve
+    (e.g. stale build outputs) are kept as-is, still flashable via --config.
+    """
+    candidates = []
+    for ini in sorted((root / "cmake_out").glob("*/flash_prog_cfg.ini")):
+        if not ini.is_file():
+            continue
+        name = ini.parent.name
+        board, sep, config = name.rpartition("_")
+        if sep and config:
+            try:
+                resolve_board(root, f"{board}/{config}")
+                candidates.append(f"{board}/{config}")
+                continue
+            except BoardError:
+                pass
+        candidates.append(name)
+    return candidates
+
+
+# ---------------------------------------------------------------------------
+# Shell completion
+# ---------------------------------------------------------------------------
+
+
+def serial_ports() -> list:
+    ports = []
+    for pattern in ("ttyUSB*", "ttyACM*"):
+        ports.extend(str(path) for path in Path("/dev").glob(pattern))
+    return sorted(ports)
+
+
+def complete_candidates(root: Path, words: Sequence[str]) -> list:
+    """Completion candidates for the words typed so far (last word is partial)."""
+    command_names = list(COMMANDS)
+    if not words:
+        return [*command_names, "help", "--help", "-h"]
+
+    first = words[0]
+    if first == "help":
+        return command_names
+    if first not in COMMANDS:
+        return [*command_names, "help", "--help", "-h"] if len(words) == 1 else []
+    if len(words) == 1:
+        return ["--help", "-h"]
+
+    prev = words[-2]
+    if prev == "--addr":
+        return ["0x0"]
+    if prev == "--config":
+        return sorted(str(p) for p in root.glob("cmake_out/*/flash_prog_cfg.ini"))
+    if prev in ("-j", "--jobs"):
+        return [default_jobs()]
+    if prev == "--port":
+        return serial_ports()
+    if prev in ("--baudrate", "--use-lib", "--image"):
+        return []
+    if first == "completion":
+        return ["bash", "zsh", "fish", "install"]
+
+    opts = flag_names(COMMANDS[first])
+    if words[-1].startswith("-") or len(words) >= 3:
+        return opts
+    if first == "flash":
+        return sorted({*flash_config_candidates(root), *list_configs(root)}, key=str) + opts
+    return [*list_configs(root), *opts]
+
+
+def complete_main(root: Path, words: Sequence[str]) -> int:
+    """Internal: print completion candidates, one per line."""
+    candidates = complete_candidates(root, words)
+    prefix = words[-1] if words else ""
+    for candidate in candidates:
+        if candidate.startswith(prefix):
+            print(candidate)
+    return 0
+
+
+def completion_script(shell: str, script: Path) -> str:
+    """Completion shim for one shell. The shim re-runs `vela __complete`, so
+    candidates (including newly added boards) are always generated live."""
+    quoted = str(script)
+    if shell == "zsh":
+        return f"""#compdef vela
+# zsh completion for vela — installed by `vela completion install`
+_vela() {{
+    local -a candidates
+    candidates=( "${{(@f)$( {quoted} __complete "${{(@)words[2,-1]}}" 2>/dev/null )}}" )
+    _describe -t vela 'vela' candidates
+}}
+compdef _vela vela
+"""
+    if shell == "bash":
+        return f"""# bash completion for vela — installed by `vela completion install`
+_vela_complete() {{
+    local IFS=$'\\n'
+    COMPREPLY=( $( {quoted} __complete "${{COMP_WORDS[@]:1}}" 2>/dev/null ) )
+}}
+complete -F _vela_complete vela
+"""
+    return f"""# fish completion for vela — installed by `vela completion install`
+complete -c vela -f -a '( {quoted} __complete (commandline -opc) 2>/dev/null )'
+"""
+
+
+def detect_shell() -> str:
+    return Path(os.environ.get("SHELL", "zsh")).name
+
+
+def install_completion(root: Path, shell: str) -> int:
+    """Install the completion shim into a directory the shell already scans.
+
+    Prefers zero-injection targets: oh-my-zsh's fpath directory for zsh,
+    bash-completion's user directory for bash, fish's completion directory.
+    Falls back to print-mode instructions when none applies.
+    """
+    script = Path(__file__).resolve()
+    if shell == "zsh":
+        omz = Path(os.environ.get("ZSH") or Path.home() / ".oh-my-zsh")
+        target = None
+        if omz.is_dir():
+            custom = Path(os.environ.get("ZSH_CUSTOM") or omz / "custom")
+            target = custom / "completions"
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            # Plain zsh: probe $fpath for an existing, writable directory.
+            try:
+                probe = subprocess.run(
+                    ["zsh", "-ic", "print -l $fpath"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                fpath = probe.stdout.split() if probe.returncode == 0 else []
+            except (OSError, subprocess.SubprocessError):
+                fpath = []
+            for candidate in map(Path, fpath):
+                if candidate.is_dir() and os.access(candidate, os.W_OK):
+                    target = candidate
+                    break
+        if target is None:
+            fail(
+                "no writable completion directory found for zsh",
+                ["hint: vela completion zsh    # print the script and install manually"],
+            )
+        (target / "_vela").write_text(completion_script("zsh", script))
+        done("installed", cyan(str(target / "_vela")))
+        note("run once to refresh zsh's completion cache: rm -f ~/.zcompdump* && exec zsh")
+        return 0
+
+    if shell == "bash":
+        user_dir = Path.home() / ".local" / "share" / "bash-completion" / "completions"
+        has_bash_completion = (
+            Path("/usr/share/bash-completion/bash_completion").is_file()
+            or Path("/etc/bash_completion").exists()
+        )
+        if not (has_bash_completion or user_dir.is_dir()):
+            fail(
+                "bash-completion is not installed",
+                ["hint: install the bash-completion package, or use:",
+                 "hint: vela completion bash > ~/.bash_completion.d/vela  # then source it"],
+            )
+        user_dir.mkdir(parents=True, exist_ok=True)
+        (user_dir / "vela").write_text(completion_script("bash", script))
+        done("installed", cyan(str(user_dir / "vela")))
+        note("effective in new shells (bash-completion lazy-loads it on first TAB)")
+        return 0
+
+    if shell == "fish":
+        target = Path.home() / ".config" / "fish" / "completions"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "vela.fish").write_text(completion_script("fish", script))
+        done("installed", cyan(str(target / "vela.fish")))
+        note("fish picks it up automatically in new shells")
+        return 0
+
+    fail(f"unknown shell '{shell}'", ["hint: vela completion install [bash|zsh|fish]"])
+
+
+# ---------------------------------------------------------------------------
+# Help rendering
+# ---------------------------------------------------------------------------
+
+
+def colorize_usage(usage: str, stream) -> str:
+    """Cyan the placeholder tokens (<board>, [flags], ...) in a usage line."""
+    return re.sub(r"(<[^>]+>|\[[^\]]+\])", lambda m: cyan(m.group(1), stream), usage)
+
+
+def print_top_help() -> None:
+    stream = sys.stdout
+    name_width = max(len(c.name) for c in COMMANDS.values())
+    example_width = max(len(c.example) for c in COMMANDS.values())
+
+    print(f"{bold('vela', stream)} — BL Vela SDK build & flash tool. {dim(f'({VERSION})', stream)}")
+    print()
+    print(f"{bold('Usage:', stream)} vela <command> {cyan('[<board>]', stream)} {cyan('[...flags]', stream)}")
+    print()
+    print(bold("Commands:", stream))
+    for command in COMMANDS.values():
+        print(
+            f"  {magenta(command.name.ljust(name_width), stream)}  "
+            f"{dim(command.example.ljust(example_width), stream)}  {command.desc}"
+        )
+    print()
+    print(f"  {bold('<command> --help', stream)}    Print help for a command.")
+
+
+def print_command_help(command: Command) -> None:
+    stream = sys.stdout
+    print(command.detail)
+    print()
+    usage = f"vela {command.name} " + (
+        "[<board>] [flags]" if command.args_help else "[zsh|bash|fish|install]"
+    )
+    print(f"{bold('Usage:', stream)} {colorize_usage(usage, stream)}")
+    if command.args_help:
+        print()
+        print(bold("Arguments:", stream))
+        print(f"  {cyan('<board>', stream)}    {command.args_help}")
+    print()
+    print(bold("Flags:", stream))
+    rows = []
+    for flag in command.flags:
+        if flag.short:
+            flag_part = f"  {flag.short}, {flag.long}"
+        else:
+            flag_part = f"      {flag.long}"
+        if flag.takes_value:
+            flag_part += f" <{flag.value_name}>"
+        help_text = flag.help
+        if flag.default is not None:
+            help_text += f" {dim(f'(default: {flag.default})', stream)}"
+        rows.append((flag_part, help_text))
+    rows.append(("  -h, --help", "Print this help"))
+    width = max(len(part) for part, _ in rows)
+    for part, help_text in rows:
+        print(f"{colorize_usage(part.ljust(width), stream)}    {help_text}")
+
+
+# ---------------------------------------------------------------------------
+# Argument parsing (hand-rolled so errors match the help's style)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Parsed:
+    command: Command
+    options: dict  # long name -> True (store-true) or str (value)
+    positionals: list
+
+
+def parse_args(words: Sequence[str]) -> Parsed:
+    name = words[0]
+    command = COMMANDS.get(name)
+    if command is None:
+        close = difflib.get_close_matches(name, COMMANDS, n=1, cutoff=0.5)
+        hints = []
+        if close:
+            hints.append(f"did you mean {cyan(close[0], sys.stderr)}?")
+        hints.append(f"hint: vela --help")
+        fail(f"unknown command {cyan(name, sys.stderr)}", hints)
+
+    by_name = {}
+    for flag in command.flags:
+        by_name[flag.long] = flag
+        if flag.short:
+            by_name[flag.short] = flag
+
+    options: dict = {}
+    positionals: list = []
+    tokens = list(words[1:])
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        index += 1
+
+        if token in ("-h", "--help"):
+            print_command_help(command)
+            raise SystemExit(0)
+
+        if token.startswith("--"):
+            flag_name, eq, value = token.partition("=")
+            flag = by_name.get(flag_name)
+            if flag is None:
+                close = difflib.get_close_matches(flag_name, list(by_name), n=1, cutoff=0.6)
+                hints = []
+                if close:
+                    hints.append(f"did you mean {cyan(close[0], sys.stderr)}?")
+                hints.append(f"hint: vela {command.name} --help")
+                fail(f"unknown flag '{flag_name}' for '{command.name}'", hints)
+            if not flag.takes_value:
+                if eq:
+                    fail(f"flag '{flag_name}' takes no value",
+                         [f"hint: vela {command.name} --help"])
+                options[flag.long] = True
+                continue
+            if not eq:
+                if index >= len(tokens):
+                    fail(f"flag '{flag_name}' expects a value",
+                         [f"hint: vela {command.name} --help"])
+                value = tokens[index]
+                index += 1
+            options[flag.long] = value
+            continue
+
+        if token.startswith("-") and len(token) > 1:
+            short = token[:2]
+            flag = by_name.get(short)
+            if flag is None:
+                close = difflib.get_close_matches(short, list(by_name), n=1, cutoff=0.6)
+                hints = []
+                if close:
+                    hints.append(f"did you mean {cyan(close[0], sys.stderr)}?")
+                hints.append(f"hint: vela {command.name} --help")
+                fail(f"unknown flag '{token}' for '{command.name}'", hints)
+            value = token[2:]
+            if not flag.takes_value:
+                options[flag.long] = True
+                continue
+            if not value:
+                if index >= len(tokens):
+                    fail(f"flag '{short}' expects a value",
+                         [f"hint: vela {command.name} --help"])
+                value = tokens[index]
+                index += 1
+            options[flag.long] = value
+            continue
+
+        positionals.append(token)
+
+    return Parsed(command=command, options=options, positionals=positionals)
+
+
+# ---------------------------------------------------------------------------
+# Command implementations
+# ---------------------------------------------------------------------------
+
+
+def cmd_build(root: Path, args: Parsed) -> int:
+    board = resolve_or_fail(root, args.positionals[0], "build")
+    out_dir = build_dir(root, board)
+    name = display_name(root, board)
+
+    ensure_fresh_config(root, out_dir, board)
+    require_configure(root, out_dir, board, args.options.get("--use-lib", ""))
+
+    jobs = args.options.get("--jobs") or default_jobs()
+    status("building", f"{cyan(name, sys.stderr)} ({jobs} jobs)")
+    started = time.monotonic()
+    if cmake_build(root, out_dir, jobs) != 0:
+        fail("build failed", [f"elapsed {dim(f'{time.monotonic() - started:.1f}s')}"], 1)
+
+    artifact = out_dir / "nuttx.bin"
+    detail = cyan(name, sys.stderr)
+    if artifact.is_file():
+        try:
+            detail += f" {dim('→', sys.stderr)} {cyan(artifact.relative_to(root).as_posix(), sys.stderr)}"
+        except ValueError:
+            pass
+    done("built", detail, time.monotonic() - started)
+    return 0
+
+
+def cmd_menuconfig(root: Path, args: Parsed) -> int:
+    board = resolve_or_fail(root, args.positionals[0], "menuconfig")
+    out_dir = build_dir(root, board)
+    name = display_name(root, board)
+
+    ensure_fresh_config(root, out_dir, board)
+    require_configure(root, out_dir, board, "")
+
+    status("menuconfig", f"{cyan(name, sys.stderr)} (save & exit to continue)")
+    before = config_snapshot(out_dir)
+    if cmake_menuconfig(root, out_dir) != 0:
+        fail("menuconfig failed", [], 1)
+
+    after = config_snapshot(out_dir)
+    changed = after is not None and after != before
+    if changed and args.options.get("--no-savedefconfig"):
+        note("configuration changed; --no-savedefconfig set, defconfig untouched")
+    elif changed:
+        status("saving", "configuration changed; writing defconfig")
+        if cmake_savedefconfig(root, out_dir) != 0:
+            fail("savedefconfig failed", [], 1)
+        sync_defconfig_copy(out_dir, board)
+        try:
+            rel = (board / "defconfig").relative_to(root).as_posix()
+        except ValueError:
+            rel = str(board / "defconfig")
+        done("saved", cyan(rel, sys.stderr))
+    else:
+        note("configuration unchanged")
+    return 0
+
+
+def cmd_savedefconfig(root: Path, args: Parsed) -> int:
+    board = resolve_or_fail(root, args.positionals[0], "savedefconfig")
+    out_dir = build_dir(root, board)
+    name = display_name(root, board)
+
+    ensure_fresh_config(root, out_dir, board)
+    require_configure(root, out_dir, board, "")
+
+    status("saving", cyan(name, sys.stderr))
+    started = time.monotonic()
+    if cmake_savedefconfig(root, out_dir) != 0:
+        fail("savedefconfig failed", [], 1)
+    sync_defconfig_copy(out_dir, board)
+    try:
+        rel = (board / "defconfig").relative_to(root).as_posix()
+    except ValueError:
+        rel = str(board / "defconfig")
+    done("saved", cyan(rel, sys.stderr), time.monotonic() - started)
+    return 0
+
+
+def cmd_clean(root: Path, args: Parsed) -> int:
+    board = resolve_or_fail(root, args.positionals[0], "clean")
+    out_dir = build_dir(root, board)
+    try:
+        rel = out_dir.relative_to(root).as_posix()
+    except ValueError:
+        rel = str(out_dir)
+    status("cleaning", cyan(rel, sys.stderr))
+    if out_dir.exists():
+        shutil.rmtree(out_dir)
+        done("removed", cyan(rel, sys.stderr))
+    else:
+        note("nothing to remove")
+    return 0
+
+
+def cmd_clean_all(root: Path) -> int:
+    out_root = root / "cmake_out"
+    if not out_root.is_dir():
+        note(f"nothing to clean: {out_root} does not exist")
+        return 0
+    removed = [child for child in sorted(out_root.iterdir()) if child.is_dir()]
+    if not removed:
+        note("nothing to clean under cmake_out")
+        return 0
+    for child in removed:
+        shutil.rmtree(child)
+    done("removed", f"{len(removed)} output dir(s)")
+    return 0
+
+
+def cmd_flash(root: Path, args: Parsed) -> int:
+    options = args.options
+    if options.get("--list"):
+        for target in flash_config_candidates(root):
+            print(target)
+        return 0
+
+    port = options.get("--port")
+    addr = options.get("--addr")
+    image = options.get("--image")
+    config = options.get("--config")
+
+    try:
+        baudrate = int(options.get("--baudrate") or 2_000_000)
+        if image is not None:
+            if port is None:
+                fail("'flash' requires --port", ["hint: vela flash --port /dev/ttyUSB2"])
+            if addr is None:
+                addr = "0x0"
+            image_path = Path(image).resolve()
+            if not image_path.is_file():
+                fail(f"image does not exist: {image_path}", [], 1)
+            if image_path.stat().st_size == FLASH_SIZE:
+                validate_whole_image(image_path)
+            status("flashing", f"{cyan(str(image_path), sys.stderr)} {dim('→', sys.stderr)} "
+                              f"{cyan(port, sys.stderr)} @ {baudrate}")
+            started = time.monotonic()
+            if flash_bin_image(root, image_path, addr, port, baudrate) != 0:
+                fail("flash failed", [], 1)
+            done("flashed", cyan(port, sys.stderr), time.monotonic() - started)
+            return 0
+
+        if config is not None:
+            if port is None:
+                fail("'flash' requires --port", ["hint: vela flash --port /dev/ttyUSB2"])
+            config_path = Path(config).resolve()
+            if not config_path.is_file():
+                fail(f"flash config does not exist: {config_path}", [], 1)
+            status("flashing", f"{cyan(str(config_path), sys.stderr)} {dim('→', sys.stderr)} "
+                              f"{cyan(port, sys.stderr)} @ {baudrate}")
+            started = time.monotonic()
+            if flash_config_image(root, config_path, port, baudrate) != 0:
+                fail("flash failed", [], 1)
+            done("flashed", cyan(port, sys.stderr), time.monotonic() - started)
+            return 0
+
+        if args.positionals:
+            board = resolve_or_fail(root, args.positionals[0], "flash")
+            name = display_name(root, board)
+            ini = build_dir(root, board) / "flash_prog_cfg.ini"
+            if not ini.is_file():
+                fail(f"no firmware built for {cyan(name, sys.stderr)}",
+                     [f"hint: vela build {name}", f"hint: vela flash {name} --port {port or '<tty>'}"], 1)
+        else:
+            ini = select_flash_config(root)
+            name = ini.parent.name
+
+        if port is None:
+            fail("'flash' requires --port", ["hint: vela flash --port /dev/ttyUSB2"])
+        try:
+            ini_rel = ini.relative_to(root).as_posix()
+        except ValueError:
+            ini_rel = str(ini)
+        status("flashing", f"{cyan(name, sys.stderr)} {dim('via', sys.stderr)} "
+                          f"{cyan(ini_rel, sys.stderr)} {dim('→', sys.stderr)} "
+                          f"{cyan(port, sys.stderr)} @ {baudrate}")
+        started = time.monotonic()
+        if flash_config_image(root, ini, port, baudrate) != 0:
+            fail("flash failed", [], 1)
+        done("flashed", cyan(port, sys.stderr), time.monotonic() - started)
+        return 0
+    except (OSError, RuntimeError, ValueError) as error:
+        fail(str(error), [], 1)
+
+
+def cmd_completion(root: Path, args: Parsed) -> int:
+    positionals = args.positionals
+    if positionals and positionals[0] == "install":
+        shell = positionals[1] if len(positionals) > 1 else detect_shell()
+        return install_completion(root, shell)
+    shell = positionals[0] if positionals else detect_shell()
+    if shell not in ("bash", "zsh", "fish"):
+        fail(f"unknown shell '{shell}'",
+             ["hint: vela completion [bash|zsh|fish]",
+              "hint: vela completion install [bash|zsh|fish]"])
+    sys.stdout.write(completion_script(shell, Path(__file__).resolve()))
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+
+def dispatch(root: Path, args: Parsed) -> int:
+    command = args.command
+    if command.name == "completion":
+        return cmd_completion(root, args)
+    if command.name == "flash":
+        return cmd_flash(root, args)
+
+    if args.options.get("--list"):
+        for name in list_configs(root):
+            print(name)
+        return 0
+    if command.name == "clean" and args.options.get("--all"):
+        return cmd_clean_all(root)
+    if not args.positionals:
+        fail(f"'{command.name}' requires a board target", [f"hint: vela {command.name} --list"])
+    return {
+        "build": cmd_build,
+        "menuconfig": cmd_menuconfig,
+        "savedefconfig": cmd_savedefconfig,
+        "clean": cmd_clean,
+    }[command.name](root, args)
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    root = find_root(Path(__file__).resolve())
+    words = list(sys.argv[1:] if argv is None else argv)
+
+    if not words or words[0] in ("-h", "--help"):
+        print_top_help()
+        return 0
+    if words[0] == "__complete":
+        return complete_main(root, words[1:])
+    if words[0] == "help":
+        if len(words) > 1 and words[1] in COMMANDS:
+            print_command_help(COMMANDS[words[1]])
+        else:
+            print_top_help()
+        return 0
+
+    args = parse_args(words)
+    return dispatch(root, args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

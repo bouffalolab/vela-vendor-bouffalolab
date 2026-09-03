@@ -146,15 +146,15 @@ TWEAK=prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak
 ### 1. 建立 eager 对照
 
 ```sh
-python3 vendor/bouffalolab/bl_build.py build "$TARGET" -j14
+vendor/bouffalolab/vela build "$TARGET" -j14
 
 "$TWEAK" --file "$OUT/.config" \
   --disable ARCH_LAZYFPU \
   --disable BL_OS_FEATURE_TESTS_LAZY_FPU
 cmake --build "$OUT" -t savedefconfig
 
-python3 vendor/bouffalolab/bl_build.py clean "$TARGET"
-python3 vendor/bouffalolab/bl_build.py build "$TARGET" -j14
+vendor/bouffalolab/vela clean "$TARGET"
+vendor/bouffalolab/vela build "$TARGET" -j14
 ```
 
 完成判据：`.config` 中 `ARCH_LAZYFPU` 和测试 app 均关闭；异常入口反汇编分配
@@ -169,8 +169,8 @@ python3 vendor/bouffalolab/bl_build.py build "$TARGET" -j14
   --enable BL_OS_FEATURE_TESTS_SYSLOG_COREDUMP
 cmake --build "$OUT" -t savedefconfig
 
-python3 vendor/bouffalolab/bl_build.py clean "$TARGET"
-python3 vendor/bouffalolab/bl_build.py build "$TARGET" -j14
+vendor/bouffalolab/vela clean "$TARGET"
+vendor/bouffalolab/vela build "$TARGET" -j14
 ```
 
 完成判据：clean build `1224/1224` 成功；异常入口分配 132 B frame；最终 ELF
@@ -185,8 +185,8 @@ python3 vendor/bouffalolab/bl_build.py build "$TARGET" -j14
   --disable BL_OS_FEATURE_TESTS_SYSLOG_COREDUMP
 cmake --build "$OUT" -t savedefconfig
 
-python3 vendor/bouffalolab/bl_build.py clean "$TARGET"
-python3 vendor/bouffalolab/bl_build.py build "$TARGET" -j14
+vendor/bouffalolab/vela clean "$TARGET"
+vendor/bouffalolab/vela build "$TARGET" -j14
 ```
 
 完成判据：clean build `1219/1219` 成功；正式配置保留 lazy FPU，两个测试命令

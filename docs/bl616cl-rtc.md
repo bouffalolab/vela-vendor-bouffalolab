@@ -94,12 +94,12 @@ attach 均不编译。若从 Alarm-on 配置切换到完整 Alarm-off 裁剪态�
 配置和构建命令：
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py menuconfig \
+vendor/bouffalolab/vela menuconfig \
   bl616cl/ai-m64l-32s-kit/configs/nsh
 cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
@@ -348,7 +348,7 @@ ioctl 的固定结果 77，还必须逐项匹配预期 lower 方法、调用顺�
 
 ```bash
 # debug：构建后按板卡流程烧录，再复位确认 NSH
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-debug -j14
 python3 vendor/bouffalolab/.agents/skills/bl-module-reset/scripts/bl_module_reset.py \
   --port /dev/ttyUSB2 --baudrate 2000000 \
@@ -515,14 +515,14 @@ ENOMEM 只通过 `kmm_zalloc()` 失败分支和分配器契约做静态审计，
 RV32 release/debug 使用独立测试配置，先 clean 再 build：
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-release
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-release -j14
 
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-debug
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-debug -j14
 ```
 

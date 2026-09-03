@@ -132,7 +132,7 @@ getrandom(..., GRND_RANDOM)
 ### 1. 关闭态 clean build
 
 ```sh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
@@ -141,9 +141,9 @@ prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
   --disable BL616CL_TRNG
 cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
 
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
@@ -161,9 +161,9 @@ prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
   --enable BL_MCU_PERIPHERAL_TESTS_TRNG
 cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
 
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 
@@ -198,9 +198,9 @@ prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
   --disable BL_MCU_PERIPHERAL_TESTS_TRNG
 cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
 
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
 

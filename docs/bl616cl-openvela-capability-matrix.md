@@ -65,7 +65,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 
 - 配置：`CONFIG_FRAME_POINTER=y`、`CONFIG_SCHED_BACKTRACE=y`、
   `CONFIG_SYSTEM_DUMPSTACK=y`。
-- 构建：`python3 vendor/bouffalolab/bl_build.py build
+- 构建：`vendor/bouffalolab/vela build
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14`，构建目标 `1190/1190` 成功。
 - 编译证据：`compile_commands.json` 和 `build.ninja` 均含
   `-fno-omit-frame-pointer`；关闭态基线含 `-fomit-frame-pointer`。

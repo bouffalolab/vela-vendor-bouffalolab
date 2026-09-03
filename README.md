@@ -40,23 +40,23 @@ Bouffalo Lab 芯片原厂维护的、基于 **openvela** 的适配层：芯片�
 构建走 **cmake + Ninja**（不再用 make，本仓不提供 `Make.defs`/`Makefile`）。
 
 ```bash
-./bl_build.py clean bl616cl/ai-m64l-32s-kit/configs/nsh
-./bl_build.py build bl616cl/ai-m64l-32s-kit/configs/nsh -j8
+./vela clean bl616cl/ai-m64l-32s-kit/configs/nsh
+./vela build bl616cl/ai-m64l-32s-kit/configs/nsh -j8
 ```
 
-SDK 根目录的 `bl_build.py` 是 repo manifest 的 linkfile 软链接（指向本仓
-`vendor/bouffalolab/bl_build.py`），在根目录直接执行即可；也可以显式运行
-`python3 vendor/bouffalolab/bl_build.py`。
+SDK 根目录的 `vela` 是 repo manifest 的 linkfile 软链接（指向本仓
+`vendor/bouffalolab/vela`），在根目录直接执行即可；也可以显式运行
+`vendor/bouffalolab/vela`。
 
 target 指向到 `configs/<name>` 的 board 目录；`vendor/bouffalolab/boards/` 前缀可省略，
 无歧义时 chip、`configs/` 层也可省略（`ai-m64l-32s-kit/nsh`、`nsh` 均可用）。
-`bl_build.py` 补齐 OpenVela 预置工具链和 Python 依赖环境，只走 CMake/Ninja。
+`vela` 补齐 OpenVela 预置工具链和 Python 依赖环境，只走 CMake/Ninja。
 默认并行度 = 物理核数一半，可用 `-j N` / `--jobs N` 覆盖。
 
 配置菜单（任选其一）：
 
 ```bash
-./bl_build.py menuconfig bl616cl/ai-m64l-32s-kit/configs/nsh
+./vela menuconfig bl616cl/ai-m64l-32s-kit/configs/nsh
 ```
 
 菜单中可见 `Bouffalo Lab`（→ Examples / Components）。
@@ -77,16 +77,16 @@ Ai-M64L-32S-Kit 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，�
 
 ```bash
 # 指定 board：按构建时生成的 flash_prog_cfg.ini 分区烧录（推荐）
-./bl_build.py flash bl616cl/ai-m64l-32s-kit/configs/nsh --port /dev/ttyUSB0
-./bl_build.py flash nsh --port /dev/ttyUSB0       # board 可简写
-./bl_build.py flash --port /dev/ttyUSB0           # 唯一输出目录时自动定位
+./vela flash bl616cl/ai-m64l-32s-kit/configs/nsh --port /dev/ttyUSB0
+./vela flash nsh --port /dev/ttyUSB0       # board 可简写
+./vela flash --port /dev/ttyUSB0           # 唯一输出目录时自动定位
 
 # 显式指定 FlashCube 配置 ini（与 board/--image 互斥）
-./bl_build.py flash --config <ini> --port /dev/ttyUSB0
+./vela flash --config <ini> --port /dev/ttyUSB0
 
 # 直接烧单个 bin 到指定地址（--addr 仅与 --image 搭配，默认 0x0）
-./bl_build.py flash --image <boot2>.bin --addr 0x0 --port /dev/ttyUSB0
-./bl_build.py flash --image cmake_out/ai-m64l-32s-kit_nsh/nuttx.bin \
+./vela flash --image <boot2>.bin --addr 0x0 --port /dev/ttyUSB0
+./vela flash --image cmake_out/ai-m64l-32s-kit_nsh/nuttx.bin \
   --addr 0x10000 --port /dev/ttyUSB0
 ```
 
@@ -94,8 +94,9 @@ Ai-M64L-32S-Kit 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，�
 默认 baudrate 为 2000000，可通过 `--baudrate` 覆盖。烧录成功后 FlashCube
 使用 `--reset`，通过板载 DTR/RTS 自动下载电路复位到正常启动状态。
 
-shell 补全（bash/zsh/fish）：`./bl_build.py completion <shell>` 输出补全脚本，
-安装方式见脚本内的注释。
+shell 补全（bash/zsh/fish）：`./vela completion install` 零注入安装到 shell
+已扫描的补全目录（oh-my-zsh fpath / bash-completion 用户目录 / fish）；
+`./vela completion <shell>` 也可打印脚本手动安装。候选动态扫描，新增板级即时生效。
 
 ## 现状
 

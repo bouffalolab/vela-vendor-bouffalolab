@@ -116,9 +116,9 @@ arbitration 或 frame errno 分类。
 在 SDK 根目录分别执行：
 
 ```bash
-python3 vendor/bouffalolab/bl_build.py clean \
+vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
-python3 vendor/bouffalolab/bl_build.py build \
+vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j6
 
 # 将目标依次替换为：
