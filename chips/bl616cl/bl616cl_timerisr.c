@@ -32,7 +32,7 @@
 
 #include "riscv_mtimer.h"
 
-#include "bl616cl_clock.h"
+#include "bl616cl_clockconfig.h"
 #include "hardware/bl616cl_core.h"
 
 /****************************************************************************

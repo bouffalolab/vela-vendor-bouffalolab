@@ -41,7 +41,8 @@
 `bl616cl_sdk.h`，再包含真实 std API 头。前者保存并恢复 NuttX 寄存器访问宏和
 40 个与 newlib 不同的 errno 宏，后者另处理 SDK 的 `ERROR` 枚举冲突。
 调用方直接使用上游 `GLB_*`、`HBN_*` 函数、类型和枚举，不手写函数 ABI 或
-数值副本。芯片自己的 `bl616cl_clock.h` 与 std 同名，调用 std 时使用明确路径。
+数值副本。芯片私有时钟配置使用 `bl616cl_clockconfig.h`，std 的
+`bl616cl_clock.h` 保持普通 include，不使用跨目录路径。
 LHAL 库仍使用自身 errno，I2C/SPI 在返回边界把捕获的 LHAL 超时码转换为
 NuttX `ETIMEDOUT`，不能因为调用方恢复了 errno 就省略此转换。
 `tools/check_bl616cl_errno.sh` 可在构建后检查 errno 定义和调用方包含顺序。
@@ -52,7 +53,7 @@ SoC 上游头文件包含 C 枚举，核心头文件包含 C 类型及内联函�
 
 CORET 的 `MTIME` 地址采用 `offsetof(CORET_Type, MTIME)`；当前工具链下偏移为
 `0x7ff8`。上游字段注释中的 `0x7ffc` 不能代替结构体实际布局。
-MTimer 的目标频率属于时钟配置，定义在 `bl616cl_clock.h`。
+MTimer 的目标频率属于时钟配置，定义在 `bl616cl_clockconfig.h`。
 
 统一外设配置和 QFN48 引脚分配见
 [板级说明](../../boards/bl616cl/ai-m64l-32s-kit/README.md)。

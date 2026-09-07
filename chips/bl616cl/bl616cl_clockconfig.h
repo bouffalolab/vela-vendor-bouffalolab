@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_clock.h
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_clockconfig.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,8 +18,8 @@
  *
  ****************************************************************************/
 
-#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_CLOCK_H
-#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_CLOCK_H
+#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_CLOCKCONFIG_H
+#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_CLOCKCONFIG_H
 
 /****************************************************************************
  * Included Files
@@ -39,4 +39,4 @@ void bl616cl_clock_early_init(void);
 void bl616cl_timer_clock_init(void);
 void bl616cl_pinmux_early_uart(void);
 
-#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_CLOCK_H */
+#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_CLOCKCONFIG_H */

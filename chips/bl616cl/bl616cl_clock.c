@@ -28,9 +28,9 @@
 
 #include "riscv_internal.h"
 
-#include "bl616cl_clock.h"
+#include "bl616cl_clockconfig.h"
 #include "bl616cl_sdk.h"
-#include "../../drivers/soc/bl616cl/std/include/bl616cl_clock.h"
+#include "bl616cl_clock.h"
 
 /****************************************************************************
  * Pre-processor Definitions

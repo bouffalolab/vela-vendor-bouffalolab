@@ -32,7 +32,7 @@
 #include "riscv_internal.h"
 
 #include "bl616cl_cache.h"
-#include "bl616cl_clock.h"
+#include "bl616cl_clockconfig.h"
 #include "bl616cl_cpu.h"
 #include "bl616cl_flash.h"
 #include "bl616cl_memory.h"
