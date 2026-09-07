@@ -54,9 +54,9 @@ void BL616CL_CLOCK_SAFE bl616cl_clock_early_init(void)
    * the WiFi PLL; flash retuning stays out of this early hook.
    */
 
-  (void)GLB_Power_On_XTAL_And_PLL_CLK(GLB_XTAL_40M, GLB_PLL_WIFIPLL);
-  (void)GLB_Set_MCU_System_CLK(GLB_MCU_SYS_CLK_TOP_WIFIPLL_320M);
-  (void)HBN_Set_MCU_XCLK_Sel(HBN_MCU_XCLK_XTAL);
+  GLB_Power_On_XTAL_And_PLL_CLK(GLB_XTAL_40M, GLB_PLL_WIFIPLL);
+  GLB_Set_MCU_System_CLK(GLB_MCU_SYS_CLK_TOP_WIFIPLL_320M);
+  HBN_Set_MCU_XCLK_Sel(HBN_MCU_XCLK_XTAL);
 }
 
 /****************************************************************************
@@ -73,8 +73,8 @@ void bl616cl_timer_clock_init(void)
 
   DEBUGASSERT(div > 0);
 
-  (void)CPU_Set_MTimer_CLK(ENABLE, BL_MTIMER_SOURCE_CLOCK_MCU_XCLK,
-                         div - 1);
+  CPU_Set_MTimer_CLK(ENABLE, BL_MTIMER_SOURCE_CLOCK_MCU_XCLK,
+                    div - 1);
 }
 
 /****************************************************************************

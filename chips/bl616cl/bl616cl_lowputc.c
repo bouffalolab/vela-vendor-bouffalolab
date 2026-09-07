@@ -192,8 +192,8 @@ int bl616cl_lowputc_config(struct bl616cl_uart_s *config)
       return -ENODEV;
     }
 
-  (void)pm_disable_gpio_keep(config->txpin);
-  (void)pm_disable_gpio_keep(config->rxpin);
+  pm_disable_gpio_keep(config->txpin);
+  pm_disable_gpio_keep(config->rxpin);
 
   bflb_gpio_uart_init(gpio, config->txpin,
                       (config->id * 4) + GPIO_UART_FUNC_UART0_TX);
@@ -262,6 +262,6 @@ void bl616cl_lowsetup(void)
 {
 #if defined(HAVE_SERIAL_CONSOLE) && defined(CONFIG_BL616CL_UART0) && \
     !defined(CONFIG_SUPPRESS_UART_CONFIG)
-  (void)bl616cl_lowputc_config(&g_uart0_config);
+  bl616cl_lowputc_config(&g_uart0_config);
 #endif
 }

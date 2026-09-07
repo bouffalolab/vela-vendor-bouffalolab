@@ -142,7 +142,7 @@ static void bl616cl_em_select(void)
         break;
     }
 
-  (void)GLB_Set_EM_Sel(em_sel);
+  GLB_Set_EM_Sel(em_sel);
 }
 
 /****************************************************************************

@@ -293,7 +293,7 @@ int bl616cl_oneshot_initialize(const char *devpath)
   ret = oneshot_register(devpath, &priv->lower);
   if (ret < 0)
     {
-      (void)bflb_irq_detach(priv->dev->irq_num);
+      bflb_irq_detach(priv->dev->irq_num);
     }
 
   return ret;

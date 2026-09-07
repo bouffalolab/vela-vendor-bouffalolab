@@ -442,7 +442,7 @@ static void bl616cl_dma_put_chan(FAR struct dma_dev_s *dev,
 
   if (wait_for_callback)
     {
-      (void)nxsem_wait_uninterruptible(&channel->callback_done);
+      nxsem_wait_uninterruptible(&channel->callback_done);
     }
 
   flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
@@ -771,7 +771,7 @@ errout:
 
   config = getreg32(DMA_BASE + DMA_TOP_CONFIG_OFFSET);
   putreg32(config & ~DMA_E, DMA_BASE + DMA_TOP_CONFIG_OFFSET);
-  (void)bflb_peripheral_clock_control(BFLB_PERIPHERAL_DMA0, false);
+  bflb_peripheral_clock_control(BFLB_PERIPHERAL_DMA0, false);
 }
 
 #ifdef CONFIG_BL616CL_DMA0_TEST

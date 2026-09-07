@@ -308,10 +308,10 @@ void up_irqinitialize(void)
    * must explicitly unmask the pins it configures.
    */
 
-  (void)HBN_Pin_WakeUp_Mask(BL616CL_HBN_GPIO_WAKE_MASK_ALL);
+  HBN_Pin_WakeUp_Mask(BL616CL_HBN_GPIO_WAKE_MASK_ALL);
   for (irq = HBN_INT_GPIO0; irq <= HBN_INT_GPIO5; irq++)
     {
-      (void)HBN_Clear_IRQ(irq);
+      HBN_Clear_IRQ(irq);
     }
 
   clicinfo = getreg32(CLIC_BASE + BL616CL_CLICINFO_OFFSET);

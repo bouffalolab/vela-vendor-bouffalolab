@@ -419,10 +419,10 @@ struct i2c_master_s *bl616cl_i2cbus_initialize(int port, uint8_t scl_pin,
   peripheral = port == 0 ? BFLB_PERIPHERAL_I2C0 : BFLB_PERIPHERAL_I2C1;
   function = port == 0 ? GPIO_FUNC_I2C0 : GPIO_FUNC_I2C1;
 
-  (void)GLB_Set_I2C_CLK(ENABLE, GLB_I2C_CLK_XCLK, 0);
-  (void)bflb_peripheral_clock_control(peripheral, true);
-  (void)pm_disable_gpio_keep(scl_pin);
-  (void)pm_disable_gpio_keep(sda_pin);
+  GLB_Set_I2C_CLK(ENABLE, GLB_I2C_CLK_XCLK, 0);
+  bflb_peripheral_clock_control(peripheral, true);
+  pm_disable_gpio_keep(scl_pin);
+  pm_disable_gpio_keep(sda_pin);
   bflb_gpio_init(gpio, scl_pin, BL616CL_I2C_GPIO_CFG(function));
   bflb_gpio_init(gpio, sda_pin, BL616CL_I2C_GPIO_CFG(function));
   bflb_i2c_init(priv->dev, BL616CL_I2C_DEFAULT_FREQUENCY);
@@ -483,7 +483,7 @@ int bl616cl_i2cbus_uninitialize(struct i2c_master_s *dev)
 
   peripheral = priv->port == 0 ? BFLB_PERIPHERAL_I2C0 :
                                  BFLB_PERIPHERAL_I2C1;
-  (void)bflb_peripheral_clock_control(peripheral, false);
+  bflb_peripheral_clock_control(peripheral, false);
   priv->dev = NULL;
   nxmutex_unlock(&priv->lock);
   return OK;

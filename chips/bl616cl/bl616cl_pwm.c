@@ -345,7 +345,7 @@ static void bl616cl_pwm_release(FAR struct bl616cl_pwm_lowerhalf_s *priv)
   bl616cl_pwm_drive_stopped_pin(priv);
   if (priv->clock_enabled)
     {
-      (void)bflb_peripheral_clock_control(BFLB_PERIPHERAL_PWM0, false);
+      bflb_peripheral_clock_control(BFLB_PERIPHERAL_PWM0, false);
       priv->clock_enabled = false;
     }
 
@@ -583,14 +583,14 @@ static int bl616cl_pwm_start(FAR struct pwm_lowerhalf_s *lower,
   same_divider = priv->started && priv->divider == solution.divider;
   if (same_divider)
     {
-      (void)bflb_pwm_v2_feature_control(priv->dev,
-                                        PWM_CMD_UPDATE_DISABLE, 0);
+      bflb_pwm_v2_feature_control(priv->dev,
+                                PWM_CMD_UPDATE_DISABLE, 0);
       bflb_pwm_v2_set_period(priv->dev, solution.period);
       bl616cl_pwm_channel_configure(priv, info, solution.period);
-      (void)bflb_pwm_v2_feature_control(priv->dev,
-                                        PWM_CMD_UPDATE_GENERATE, 0);
-      (void)bflb_pwm_v2_feature_control(priv->dev,
-                                        PWM_CMD_UPDATE_ENABLE, 0);
+      bflb_pwm_v2_feature_control(priv->dev,
+                                PWM_CMD_UPDATE_GENERATE, 0);
+      bflb_pwm_v2_feature_control(priv->dev,
+                                PWM_CMD_UPDATE_ENABLE, 0);
     }
   else
     {
@@ -619,7 +619,7 @@ static int bl616cl_pwm_start(FAR struct pwm_lowerhalf_s *lower,
       if (!bl616cl_pwm_stopped(priv,
                                BL616CL_PWM_OPERATION_INIT))
         {
-          (void)bl616cl_pwm_force_stop(
+          bl616cl_pwm_force_stop(
             priv, BL616CL_PWM_OPERATION_NONE);
       bl616cl_pwm_record_error(priv, -ETIMEDOUT);
           pwmerr("ERROR: PWM initialization timed out\n");
@@ -633,7 +633,7 @@ static int bl616cl_pwm_start(FAR struct pwm_lowerhalf_s *lower,
       if (bl616cl_pwm_stopped(priv,
                               BL616CL_PWM_OPERATION_START))
         {
-          (void)bl616cl_pwm_force_stop(
+          bl616cl_pwm_force_stop(
             priv, BL616CL_PWM_OPERATION_NONE);
       bl616cl_pwm_record_error(priv, -ETIMEDOUT);
           pwmerr("ERROR: PWM start timed out\n");
@@ -644,7 +644,7 @@ static int bl616cl_pwm_start(FAR struct pwm_lowerhalf_s *lower,
   ret = bl616cl_pwm_readback(priv, info, &solution);
   if (ret < 0)
     {
-      (void)bl616cl_pwm_force_stop(priv, BL616CL_PWM_OPERATION_NONE);
+      bl616cl_pwm_force_stop(priv, BL616CL_PWM_OPERATION_NONE);
       bl616cl_pwm_record_error(priv, ret);
       pwmerr("ERROR: PWM configuration readback failed\n");
       return ret;
