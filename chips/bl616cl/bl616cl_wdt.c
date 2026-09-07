@@ -56,7 +56,6 @@
 #define BL616CL_WDT_MAXTICKS  0xffff
 #define BL616CL_WDT_MAXTIMEOUT ((BL616CL_WDT_MAXTICKS * 1000) / \
                                 BL616CL_WDT_HZ)
-#define BL616CL_WDT_RAW_IRQ  (BL616CL_IRQ_WDG - BL616CL_RISCV_IRQ_ASYNC)
 
 /****************************************************************************
  * Private Types
@@ -188,7 +187,7 @@ static void bl616cl_wdt_clear_irq(
 {
   bflb_wdg_compint_clear(priv->wdg);
 #ifdef CONFIG_BL616CL_WDT_CAPTURE
-  bflb_irq_clear_pending(BL616CL_WDT_RAW_IRQ);
+  bflb_irq_clear_pending(priv->wdg->irq_num);
 #endif
 }
 
@@ -234,7 +233,7 @@ static int bl616cl_wdt_start(struct watchdog_lowerhalf_s *lower)
 #ifdef CONFIG_BL616CL_WDT_CAPTURE
   if (priv->handler != NULL)
     {
-      up_enable_irq(BL616CL_IRQ_WDG);
+      up_enable_irq(BL616CL_IRQ_NUM_WDG);
     }
 #endif
 
@@ -271,7 +270,7 @@ static int bl616cl_wdt_stop(struct watchdog_lowerhalf_s *lower)
   flags = enter_critical_section();
 
 #ifdef CONFIG_BL616CL_WDT_CAPTURE
-  up_disable_irq(BL616CL_IRQ_WDG);
+  up_disable_irq(BL616CL_IRQ_NUM_WDG);
 #endif
   bflb_wdg_stop(priv->wdg);
   bl616cl_wdt_clear_irq(priv);
@@ -438,7 +437,7 @@ static int bl616cl_wdt_settimeout(struct watchdog_lowerhalf_s *lower,
   if (priv->started)
     {
 #ifdef CONFIG_BL616CL_WDT_CAPTURE
-      up_disable_irq(BL616CL_IRQ_WDG);
+      up_disable_irq(BL616CL_IRQ_NUM_WDG);
 #endif
       bflb_wdg_stop(priv->wdg);
       priv->timeout = timeout;
@@ -450,7 +449,7 @@ static int bl616cl_wdt_settimeout(struct watchdog_lowerhalf_s *lower,
 #ifdef CONFIG_BL616CL_WDT_CAPTURE
       if (priv->handler != NULL)
         {
-          up_enable_irq(BL616CL_IRQ_WDG);
+          up_enable_irq(BL616CL_IRQ_NUM_WDG);
         }
 
 #endif
@@ -473,7 +472,7 @@ static int bl616cl_wdt_handler(int irq, void *context, void *arg)
   void *upper;
 
   bflb_wdg_compint_clear(priv->wdg);
-  bflb_irq_clear_pending(BL616CL_WDT_RAW_IRQ);
+  bflb_irq_clear_pending(priv->wdg->irq_num);
   handler = priv->handler;
   upper = priv->upper;
   if (handler != NULL)
@@ -497,7 +496,7 @@ static xcpt_t bl616cl_wdt_capture(struct watchdog_lowerhalf_s *lower,
   priv->handler = handler;
   if (priv->started)
     {
-      up_disable_irq(BL616CL_IRQ_WDG);
+      up_disable_irq(BL616CL_IRQ_NUM_WDG);
       if ((oldhandler == NULL) != (handler == NULL))
         {
           bl616cl_wdt_clear_irq(priv);
@@ -506,7 +505,7 @@ static xcpt_t bl616cl_wdt_capture(struct watchdog_lowerhalf_s *lower,
 
       if (handler != NULL)
         {
-          up_enable_irq(BL616CL_IRQ_WDG);
+          up_enable_irq(BL616CL_IRQ_NUM_WDG);
         }
     }
 
@@ -552,12 +551,12 @@ int bl616cl_wdt_initialize(FAR const char *devpath)
   bflb_wdg_stop(priv->wdg);
   bl616cl_wdt_clear_irq(priv);
 #ifdef CONFIG_BL616CL_WDT_CAPTURE
-  if (irq_attach(BL616CL_IRQ_WDG, bl616cl_wdt_handler, priv) < 0)
+  if (irq_attach(BL616CL_IRQ_NUM_WDG, bl616cl_wdt_handler, priv) < 0)
     {
       return -EIO;
     }
 
-  up_disable_irq(BL616CL_IRQ_WDG);
+  up_disable_irq(BL616CL_IRQ_NUM_WDG);
 #endif
 
   handle = watchdog_register(devpath,
@@ -565,7 +564,7 @@ int bl616cl_wdt_initialize(FAR const char *devpath)
   if (handle == NULL)
     {
 #ifdef CONFIG_BL616CL_WDT_CAPTURE
-      irq_detach(BL616CL_IRQ_WDG);
+      irq_detach(BL616CL_IRQ_NUM_WDG);
 #endif
       return -ENODEV;
     }

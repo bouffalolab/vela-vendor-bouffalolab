@@ -751,13 +751,13 @@ void riscv_dma_initialize(void)
       bl616cl_dma_mask_stop_clear(channel);
     }
 
-  ret = irq_attach(BL616CL_IRQ_DMA0_ALL, bl616cl_dma_interrupt, NULL);
+  ret = irq_attach(BL616CL_IRQ_NUM_DMA0_ALL, bl616cl_dma_interrupt, NULL);
   if (ret < 0)
     {
       goto errout;
     }
 
-  up_enable_irq(BL616CL_IRQ_DMA0_ALL);
+  up_enable_irq(BL616CL_IRQ_NUM_DMA0_ALL);
   g_bl616cl_dma_initialized = true;
   return;
 

@@ -34,7 +34,7 @@
 
 #include "bl616cl_lhal.h"
 #include "bflb_irq.h"
-#include "bl616cl_irq.h"
+#include "bl616cl_irq_internal.h"
 
 /****************************************************************************
  * Private Types
