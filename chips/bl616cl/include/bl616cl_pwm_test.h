@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/chips/bl616cl/include/bl616cl_pwm_test.h
+ * vendor/bouffalolab/chips/bl616cl/include/bl616cl_pwm_test.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -23,6 +23,11 @@
  ****************************************************************************/
 
 #ifdef CONFIG_BL616CL_PWM_TEST
+/* The PWM test application uses this public, configuration-gated extension
+ * because the standard PWM API cannot inject setup faults or expose lower-half
+ * diagnostics.
+ */
+
 enum bl616cl_pwm_test_fault_e
 {
   BL616CL_PWM_TEST_FAULT_NONE = 0,

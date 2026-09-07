@@ -38,20 +38,15 @@ Kconfig、archive、ELF、map 和失败配置。
 vendor/bouffalolab/vela clean nsh
 vendor/bouffalolab/vela build nsh -j14
 
-# 产品态：UART1 + termios，无 UART test
-vendor/bouffalolab/vela clean nsh-uart
-vendor/bouffalolab/vela build nsh-uart -j14
-
-# 测试态：UART1 + termios + mcu_uart_test
-vendor/bouffalolab/vela clean nsh
-vendor/bouffalolab/vela build nsh -j14
+# 统一测试态：UART1 + termios + mcu_uart_test
+vendor/bouffalolab/vela clean nsh-peripherals
+vendor/bouffalolab/vela build nsh-peripherals -j14
 ```
 
-`nsh-uart` 显式开启 `CONFIG_AI_M64L_KIT_UART1=y`、
+`nsh-peripherals` 显式开启 `CONFIG_AI_M64L_KIT_UART1=y`、
 `CONFIG_SERIAL_TERMIOS=y` 和 `CONFIG_UART1_RXBUFSIZE=1024`。1024 字节 RX ring
 用于吸收 UART0 console 长输出调度期间的 UART1 无流控突发，不改变 UART1 TX ring
-默认值。`nsh` 另开启
-`CONFIG_BL_MCU_PERIPHERAL_TESTS_UART=y`。产品配置不依赖测试 app。
+默认值，并开启 `CONFIG_BL_MCU_PERIPHERAL_TESTS_UART=y`。
 
 ## 实物准备与总流程
 
@@ -225,7 +220,8 @@ console 隔离结论。
 
 ### UART-011：三态构建和裁剪
 
-执行“配置与构建”中的三组 clean build，然后在 SDK 根目录检查：
+以下命令和数字是旧三态裁剪证据；其中 `nsh-uart` 已删除，当前功能回归使用
+`nsh-peripherals`：
 
 ```text
 NM=prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf-nm
@@ -274,7 +270,7 @@ GPIO14/15 是 board 固定映射，因此不再提供任意 UART1 pin Kconfig；
 | 配置 | clean build | final_nuttx text/data/bss | final_nuttx 字节数 | nuttx.bin 字节数 |
 | --- | --- | --- | --- | --- |
 | `nsh` | `1224/1224` | `467772/15744/20396` | 868452 | 489168 |
-| `nsh-uart` | `1225/1225` | `471772/16000/21676` | 873436 | 493424 |
+| `nsh-uart`（历史，已删除） | `1225/1225` | `471772/16000/21676` | 873436 | 493424 |
 | `nsh` | `1227/1227` | `484024/16192/21676` | 887424 | 505856 |
 
 最终产物校验值：
@@ -282,13 +278,13 @@ GPIO14/15 是 board 固定映射，因此不再提供任意 UART1 pin Kconfig；
 | 配置 | `final_nuttx` SHA256 | `nuttx.bin` SHA256 |
 | --- | --- | --- |
 | `nsh` | `18347196db1b1198ec5f03ea0f3ca40e186b43385f2509495280f58cf6e8b86f` | `60a72a5e99a0499cb28f837b1ba785ac11d29ba02de4abcc7879f9c21f70fb21` |
-| `nsh-uart` | `ddf1e655470ab8a3d55920d6d59280e1d924c7df42a07fe5b0d1202d6aecd9e0` | `1b8c4c496ad3ac29d6c40683a81e18619c680ede7742598e0f098e58e165c570` |
+| `nsh-uart`（历史，已删除） | `ddf1e655470ab8a3d55920d6d59280e1d924c7df42a07fe5b0d1202d6aecd9e0` | `1b8c4c496ad3ac29d6c40683a81e18619c680ede7742598e0f098e58e165c570` |
 | `nsh` | `102d70e76dee84edd63b5acca019435fa7ac96b1dce9459b226d5cdd4330db76` | `5bb5efdb124ef8eac9ba67c66466bdbe5512771464158cb2ed739a7627f90eb7` |
 
 裁剪实测：
 
 - `nsh`：无 UART1 lower、board 注册和 UART test 符号。
-- `nsh-uart`：存在 `bl616cl_uart1_register`、`g_uart1port`、
+- `nsh-uart`（历史，已删除）：存在 `bl616cl_uart1_register`、`g_uart1port`、
   `ai_m64l_kit_uart_initialize`；无 `mcu_uart_test_main`。
 - `nsh`：存在上述 UART1 符号和 `mcu_uart_test_main`；生成独立
   `libapps_mcu_uart_test.a`。

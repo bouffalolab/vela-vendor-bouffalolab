@@ -21,6 +21,8 @@
 #include <nuttx/mutex.h>
 #include <nuttx/spi/spi.h>
 
+#include "bl616cl_sdk.h"
+#include "bl616cl_glb.h"
 #include "bflb_clock.h"
 #include "bflb_name.h"
 #include "bflb_peri.h"
@@ -32,12 +34,6 @@
  ****************************************************************************/
 
 #define BL616CL_SPI_DEFAULT_FREQUENCY 400000
-
-#define BL616CL_SDK_DISABLE           0
-#define BL616CL_SDK_ENABLE            1
-#define BL616CL_SDK_SPI_CLK_XCLK      1
-#define BL616CL_SDK_ETIMEDOUT         116
-#define BL616CL_OPENVELA_ETIMEDOUT    110
 
 #define BL616CL_SPI_CONFIG_FREQUENCY  (1 << 0)
 #define BL616CL_SPI_CONFIG_MODE       (1 << 1)
@@ -142,21 +138,6 @@ static const struct spi_ops_s g_bl616cl_spi_ops =
 
 static mutex_t g_bl616cl_spi_init_lock = NXMUTEX_INITIALIZER;
 
-extern int bl616cl_sdk_glb_set_spi0_clk(uint8_t enable, uint8_t clk_sel,
-                                        uint8_t div)
-  __asm__("GLB_Set_SPI0_CLK");
-extern int bl616cl_sdk_glb_set_spi1_clk(uint8_t enable, uint8_t clk_sel,
-                                        uint8_t div)
-  __asm__("GLB_Set_SPI1_CLK");
-extern int bl616cl_sdk_glb_spi0_sig_swap_set(uint8_t group, uint8_t swap)
-  __asm__("GLB_SPI0_Sig_Swap_Set");
-extern int bl616cl_sdk_glb_spi1_sig_swap_set(uint8_t group, uint8_t swap)
-  __asm__("GLB_SPI1_Sig_Swap_Set");
-extern int bl616cl_sdk_glb_spi0_global_swap(uint8_t enable)
-  __asm__("GLB_Swap_MCU_SPI_0_MOSI_With_MISO");
-extern int bl616cl_sdk_glb_spi1_global_swap(uint8_t enable)
-  __asm__("GLB_Swap_MCU_SPI_1_MOSI_With_MISO");
-
 #ifdef CONFIG_BL616CL_SPI0
 static struct bl616cl_spi_priv_s g_bl616cl_spi0 =
 {
@@ -236,9 +217,7 @@ static void bl616cl_spi_failed(struct bl616cl_spi_priv_s *priv, int error)
 
 static int bl616cl_spi_normalize_error(int error)
 {
-  return error == -BL616CL_SDK_ETIMEDOUT ?
-           -BL616CL_OPENVELA_ETIMEDOUT :
-           error;
+  return error == -BL616CL_LHAL_ETIMEDOUT ? -ETIMEDOUT : error;
 }
 
 static int bl616cl_spi_clock_configure(struct bl616cl_spi_priv_s *priv,
@@ -249,13 +228,9 @@ static int bl616cl_spi_clock_configure(struct bl616cl_spi_priv_s *priv,
   int ret;
 
   ret = priv->port == 0 ?
-          bl616cl_sdk_glb_set_spi0_clk(enable ? BL616CL_SDK_ENABLE :
-                                                BL616CL_SDK_DISABLE,
-                                       BL616CL_SDK_SPI_CLK_XCLK, 0) :
-          bl616cl_sdk_glb_set_spi1_clk(enable ? BL616CL_SDK_ENABLE :
-                                                BL616CL_SDK_DISABLE,
-                                       BL616CL_SDK_SPI_CLK_XCLK, 0);
-  if (ret != 0)
+          GLB_Set_SPI0_CLK(enable ? ENABLE : DISABLE, GLB_SPI_CLK_XCLK, 0) :
+          GLB_Set_SPI1_CLK(enable ? ENABLE : DISABLE, GLB_SPI_CLK_XCLK, 0);
+  if (ret != SUCCESS)
     {
       return -EIO;
     }
@@ -264,10 +239,8 @@ static int bl616cl_spi_clock_configure(struct bl616cl_spi_priv_s *priv,
   if (ret < 0 && enable)
     {
       (void)(priv->port == 0 ?
-               bl616cl_sdk_glb_set_spi0_clk(BL616CL_SDK_DISABLE,
-                                            BL616CL_SDK_SPI_CLK_XCLK, 0) :
-               bl616cl_sdk_glb_set_spi1_clk(BL616CL_SDK_DISABLE,
-                                            BL616CL_SDK_SPI_CLK_XCLK, 0));
+               GLB_Set_SPI0_CLK(DISABLE, GLB_SPI_CLK_XCLK, 0) :
+               GLB_Set_SPI1_CLK(DISABLE, GLB_SPI_CLK_XCLK, 0));
     }
 
   return ret;
@@ -864,29 +837,26 @@ int bl616cl_spi_configure_pins(int port, uint8_t miso_pin,
     }
 
   nxmutex_lock(&g_bl616cl_spi_init_lock);
-  ret = port == 0 ?
-          bl616cl_sdk_glb_spi0_global_swap(BL616CL_SDK_DISABLE) :
-          bl616cl_sdk_glb_spi1_global_swap(BL616CL_SDK_DISABLE);
-  if (ret != 0)
+  ret = port == 0 ? GLB_Swap_MCU_SPI_0_MOSI_With_MISO(DISABLE) :
+                    GLB_Swap_MCU_SPI_1_MOSI_With_MISO(DISABLE);
+  if (ret != SUCCESS)
     {
       nxmutex_unlock(&g_bl616cl_spi_init_lock);
       return -EIO;
     }
 
   swap = miso_pin % 4 == 3;
-  ret = port == 0 ?
-          bl616cl_sdk_glb_spi0_sig_swap_set(miso_group, swap) :
-          bl616cl_sdk_glb_spi1_sig_swap_set(miso_group, swap);
-  if (ret == 0 && mosi_group != miso_group)
+  ret = port == 0 ? GLB_SPI0_Sig_Swap_Set(miso_group, swap) :
+                    GLB_SPI1_Sig_Swap_Set(miso_group, swap);
+  if (ret == SUCCESS && mosi_group != miso_group)
     {
       swap = mosi_pin % 4 == 2;
-      ret = port == 0 ?
-              bl616cl_sdk_glb_spi0_sig_swap_set(mosi_group, swap) :
-              bl616cl_sdk_glb_spi1_sig_swap_set(mosi_group, swap);
+      ret = port == 0 ? GLB_SPI0_Sig_Swap_Set(mosi_group, swap) :
+                        GLB_SPI1_Sig_Swap_Set(mosi_group, swap);
     }
 
   nxmutex_unlock(&g_bl616cl_spi_init_lock);
-  return ret == 0 ? OK : -EIO;
+  return ret == SUCCESS ? OK : -EIO;
 }
 
 #ifdef CONFIG_BL616CL_SPI_TEST

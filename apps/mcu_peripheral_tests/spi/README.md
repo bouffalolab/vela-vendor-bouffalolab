@@ -53,13 +53,13 @@ CONFIG_BL_MCU_PERIPHERAL_TESTS_SPI_ITERATIONS=32
 `CONFIG_BL_MCU_PERIPHERAL_TESTS_SPI` 会选择 test-only transport/diagnostic hook 和
 `SPI_BITORDER`。正式产品配置应关闭该 app；关闭后不会保留 fake 注入入口和测试命令。
 
-在 SDK 根目录执行 fresh build，目标依次替换为下面七项：
+以下是历史七态裁剪矩阵；当前 fresh build 使用 `nsh-peripherals`：
 
 ```bash
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals -j14
 ```
 
 ```text
@@ -77,7 +77,7 @@ nsh
 | 配置 | 构建 | arch SPI | board SPI0 | LHAL SPI | test app | ELF SPI0/SPI1 | `nuttx.bin` |
 |---|---:|---:|---:|---:|---:|---|---:|
 | `nsh` | 1224/1224 | 0 | 0 | 0 | 0 | 0/0 | 479632 B |
-| `nsh-spi` | 1234/1234 | 1 | 1 | 1 | 0 | 1/0 | 493312 B |
+| `nsh-spi`（历史，已删除） | 1234/1234 | 1 | 1 | 1 | 0 | 1/0 | 493312 B |
 | `nsh` | 1236/1236 | 1 | 1 | 1 | 1 | 1/0 | 514448 B |
 | `nsh` | 1232/1232 | 1 | 0 | 1 | 0 | 0/0 | 479632 B |
 | `nsh` | 1234/1234 | 1 | 0 | 1 | 1 | 0/1 | 510624 B |

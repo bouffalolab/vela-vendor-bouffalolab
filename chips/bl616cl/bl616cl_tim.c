@@ -34,6 +34,7 @@
 #include <nuttx/spinlock.h>
 #include <nuttx/timers/timer.h>
 
+#include "bl616cl_lhal.h"
 #include "bflb_clock.h"
 #include "bflb_irq.h"
 #include "bflb_name.h"

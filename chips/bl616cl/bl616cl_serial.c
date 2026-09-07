@@ -41,6 +41,7 @@
 
 #include "riscv_internal.h"
 
+#include "bl616cl_lhal.h"
 #include "bflb_clock.h"
 #include "bflb_uart.h"
 #include "bl616cl_uart.h"

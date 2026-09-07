@@ -32,9 +32,9 @@
 
 #include <arch/irq.h>
 
+#include "bl616cl_lhal.h"
 #include "bflb_irq.h"
 #include "bl616cl_irq.h"
-#include "chip.h"
 
 /****************************************************************************
  * Private Types

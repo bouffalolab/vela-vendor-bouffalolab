@@ -27,6 +27,10 @@
 
 #include <nuttx/config.h>
 
+/* Target frequency programmed by bl616cl_timer_clock_init(). */
+
+#define BL616CL_MTIMER_FREQ 1000000
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/

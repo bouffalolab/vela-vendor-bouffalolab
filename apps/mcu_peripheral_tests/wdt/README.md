@@ -39,7 +39,7 @@ upper-half 仍可能被用户替换 handler 而不停止 monitor，因此本轮�
 | `nsh` | n | n | n | 1219/1219 |
 | `nsh` | y | n | n | 1224/1224 |
 | `nsh` | y | y | n | 1224/1224 |
-| `nsh-wdt` | y | n | BY_WDOG | 1224/1224 |
+| `nsh-wdt`（历史，已删除） | y | n | BY_WDOG | 1224/1224 |
 
 在 SDK 根目录执行：
 
@@ -60,9 +60,9 @@ vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-wdt
+  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-wdt -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals -j14
 ```
 
 裁剪检查结果：
@@ -85,8 +85,7 @@ vendor/bouffalolab/vela build \
    在同一 fd 内完成命令和复位后的确认。
 2. 启动必须出现 `NuttShell (NSH)` 和 `nsh>`。
 3. `ls /dev` 必须存在 `watchdog0`。
-4. WDT-004 必须使用 `nsh`；WDT-005 必须使用
-   `nsh-wdt`。
+4. 当前 WDT 用例使用 `nsh-peripherals`；会复位的 WDT-005 必须单独执行。
 5. 非复位用例必须显式 STOP；WDT-001 和 WDT-005 的后半段故意不喂狗，正常
    结果是设备复位而不是命令返回。
 
@@ -276,7 +275,7 @@ mcu_wdt_test -c 005 -s
 
 流程：
 
-1. 使用 `nsh-wdt` 启动；OpenVela 在注册 watchdog 时设置 3 秒
+1. 使用 `nsh-peripherals` 启动；OpenVela 在注册 watchdog 时设置 3 秒
    timeout、START，并由 BY_WDOG 每 1 秒 KEEPALIVE。
 2. 打开设备并 GETSTATUS；必须为 ACTIVE|RESET。
 3. 静置 5000 ms，跨过至少五个 ping 周期和一个完整硬件 timeout；系统必须存活，

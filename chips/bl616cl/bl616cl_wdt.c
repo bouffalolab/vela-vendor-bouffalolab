@@ -35,6 +35,7 @@
 #include <nuttx/spinlock.h>
 #include <nuttx/timers/watchdog.h>
 
+#include "bl616cl_lhal.h"
 #include "bflb_clock.h"
 #include "bflb_irq.h"
 #include "bflb_wdg.h"

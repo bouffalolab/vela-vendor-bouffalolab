@@ -81,7 +81,6 @@ if AI_M64L_KIT_SPI
 config AI_M64L_KIT_SPI0
 	bool "Register SPI0"
 	default y
-	depends on !AI_M64L_KIT_I2C1
 	select BL616CL_SPI0
 	select SPI_DRIVER
 	---help---

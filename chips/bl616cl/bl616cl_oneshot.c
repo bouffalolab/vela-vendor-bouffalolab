@@ -32,12 +32,15 @@
 #include <nuttx/spinlock.h>
 #include <nuttx/timers/oneshot.h>
 
+#include "bl616cl_lhal.h"
 #include "bflb_clock.h"
 #include "bflb_irq.h"
 #include "bflb_name.h"
 #include "bflb_timer.h"
 #include "bl616cl_oneshot.h"
-#include "chip.h"
+#include "hardware/bl616cl_core.h"
+#include "hardware/bl616cl_memorymap.h"
+#include "hardware/timer_reg.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -47,8 +50,6 @@
 #define BL616CL_ONESHOT_CLOCK_DIV       39
 #define BL616CL_ONESHOT_MIN_DELAY       2
 #define BL616CL_ONESHOT_MAX_DELAY       UINT32_MAX
-#define BL616CL_TIMER_TCER_OFFSET        0x84
-#define BL616CL_TIMER1_COUNTER_CLEAR     (1 << 6)
 
 /****************************************************************************
  * Private Types
@@ -132,11 +133,11 @@ static uint64_t bl616cl_oneshot_mtime(void)
 static void bl616cl_oneshot_clear_counter(
   struct bl616cl_oneshot_lowerhalf_s *priv)
 {
-  uintptr_t regaddr = priv->dev->reg_base + BL616CL_TIMER_TCER_OFFSET;
+  uintptr_t regaddr = priv->dev->reg_base + TIMER_TCER_OFFSET;
   uint32_t regval = getreg32(regaddr);
 
-  putreg32(regval | BL616CL_TIMER1_COUNTER_CLEAR, regaddr);
-  putreg32(regval & ~BL616CL_TIMER1_COUNTER_CLEAR, regaddr);
+  putreg32(regval | TIMER_TCR1_CNT_CLR, regaddr);
+  putreg32(regval & ~TIMER_TCR1_CNT_CLR, regaddr);
 }
 
 static void bl616cl_oneshot_configure(

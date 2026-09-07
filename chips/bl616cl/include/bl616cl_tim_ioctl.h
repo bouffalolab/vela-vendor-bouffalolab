@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/chips/bl616cl/include/bl616cl_tim_ioctl.h
+ * vendor/bouffalolab/chips/bl616cl/include/bl616cl_tim_ioctl.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -31,7 +31,9 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* Set the timer clock divider (0..255). */
+/* Public chip-specific extension: the standard timer API has no operation for
+ * setting the hardware clock divider (0..255).
+ */
 
 #define BL616CL_TCIOC_SETCLOCKDIV _TCIOC(0x0040)
 

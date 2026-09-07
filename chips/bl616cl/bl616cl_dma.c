@@ -25,11 +25,6 @@
 
 #include <arch/irq.h>
 
-enum
-{
-  BL616CL_DMA_ENOTSUP = ENOTSUP
-};
-
 /* Keep the generic weak hook declaration from weakening this
  * implementation.
  */
@@ -39,9 +34,12 @@ enum
 #include "riscv_internal.h"
 #undef riscv_dma_initialize
 
+#include "bl616cl_lhal.h"
 #include "bflb_clock.h"
 #include "bflb_peri.h"
 #include "bl616cl_dma.h"
+#include "hardware/dma_reg.h"
+#include "hardware/bl616cl_memorymap.h"
 
 #ifdef CONFIG_BL616CL_DMA0_TEST
 #include "bl616cl_dma_test.h"
@@ -51,35 +49,12 @@ enum
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define BL616CL_DMA0_BASE             0x2000c000
+/* DMA base address comes from hardware/bl616cl_memorymap.h. */
+
 #define BL616CL_DMA_CHANNEL_OFFSET    0x100
 #define BL616CL_DMA_CHANNEL_COUNT     8
-#define BL616CL_DMA_TRANSFER_MAX      4095
-
-#define BL616CL_DMA_INTTCSTATUS       0x004
-#define BL616CL_DMA_INTTCCLEAR        0x008
-#define BL616CL_DMA_INTERRORSTATUS    0x00c
-#define BL616CL_DMA_INTERRCLR         0x010
-#define BL616CL_DMA_TOP_CONFIG        0x040
-
-#define BL616CL_DMA_SRCADDR           0x000
-#define BL616CL_DMA_DSTADDR           0x004
-#define BL616CL_DMA_CONTROL           0x00c
-#define BL616CL_DMA_CONFIG            0x010
-
-#define BL616CL_DMA_TOP_ENABLE        (1 << 0)
-#define BL616CL_DMA_CHANNEL_ENABLE    (1 << 0)
-#define BL616CL_DMA_CONFIG_IE         (1 << 16)
-#define BL616CL_DMA_CONFIG_ITC        (1 << 17)
-
-#define BL616CL_DMA_CONTROL_SIZE_MASK 0x0fff
-#define BL616CL_DMA_CONTROL_SBSIZE    12
-#define BL616CL_DMA_CONTROL_DBSIZE    15
-#define BL616CL_DMA_CONTROL_SWIDTH    18
-#define BL616CL_DMA_CONTROL_DWIDTH    21
-#define BL616CL_DMA_CONTROL_SI        (1 << 26)
-#define BL616CL_DMA_CONTROL_DI        (1 << 27)
-#define BL616CL_DMA_CONTROL_I         (1u << 31)
+#define BL616CL_DMA_TRANSFER_MAX \
+  (DMA_TRANSFERSIZE_MASK >> DMA_TRANSFERSIZE_SHIFT)
 
 /****************************************************************************
  * Private Types
@@ -185,7 +160,7 @@ static struct bl616cl_dma_test_status_s g_bl616cl_dma_test_status;
 static uintptr_t bl616cl_dma_channel_base(
   FAR const struct bl616cl_dma_chan_s *channel)
 {
-  return BL616CL_DMA0_BASE +
+  return DMA_BASE +
          ((uintptr_t)channel->index + 1) * BL616CL_DMA_CHANNEL_OFFSET;
 }
 
@@ -193,14 +168,14 @@ static void bl616cl_dma_mask_stop_clear(
   FAR const struct bl616cl_dma_chan_s *channel)
 {
   uintptr_t base = bl616cl_dma_channel_base(channel);
-  uint32_t config = getreg32(base + BL616CL_DMA_CONFIG);
+  uint32_t config = getreg32(base + DMA_CxCONFIG_OFFSET);
   uint32_t bit = 1u << channel->index;
 
-  config |= BL616CL_DMA_CONFIG_ITC | BL616CL_DMA_CONFIG_IE;
-  config &= ~BL616CL_DMA_CHANNEL_ENABLE;
-  putreg32(config, base + BL616CL_DMA_CONFIG);
-  putreg32(bit, BL616CL_DMA0_BASE + BL616CL_DMA_INTTCCLEAR);
-  putreg32(bit, BL616CL_DMA0_BASE + BL616CL_DMA_INTERRCLR);
+  config |= DMA_ITC | DMA_IE;
+  config &= ~DMA_E;
+  putreg32(config, base + DMA_CxCONFIG_OFFSET);
+  putreg32(bit, DMA_BASE + DMA_INTTCCLEAR_OFFSET);
+  putreg32(bit, DMA_BASE + DMA_INTERRCLR_OFFSET);
 }
 
 static size_t bl616cl_dma_pending_bytes(
@@ -209,8 +184,7 @@ static size_t bl616cl_dma_pending_bytes(
   uintptr_t base = bl616cl_dma_channel_base(channel);
   size_t pending;
 
-  pending = getreg32(base + BL616CL_DMA_CONTROL) &
-            BL616CL_DMA_CONTROL_SIZE_MASK;
+  pending = getreg32(base + DMA_CxCONTROL_OFFSET) & DMA_TRANSFERSIZE_MASK;
   pending *= channel->width;
 
   return pending > channel->request_bytes ? channel->request_bytes : pending;
@@ -342,11 +316,11 @@ static int bl616cl_dma_interrupt(int irq, FAR void *context, FAR void *arg)
   UNUSED(context);
   UNUSED(arg);
 
-  tc_status = getreg32(BL616CL_DMA0_BASE + BL616CL_DMA_INTTCSTATUS);
-  error_status = getreg32(BL616CL_DMA0_BASE + BL616CL_DMA_INTERRORSTATUS);
+  tc_status = getreg32(DMA_BASE + DMA_INTTCSTATUS_OFFSET);
+  error_status = getreg32(DMA_BASE + DMA_INTERRORSTATUS_OFFSET);
 
-  putreg32(tc_status, BL616CL_DMA0_BASE + BL616CL_DMA_INTTCCLEAR);
-  putreg32(error_status, BL616CL_DMA0_BASE + BL616CL_DMA_INTERRCLR);
+  putreg32(tc_status, DMA_BASE + DMA_INTTCCLEAR_OFFSET);
+  putreg32(error_status, DMA_BASE + DMA_INTERRCLR_OFFSET);
   bl616cl_dma_process_irq(tc_status, error_status, true);
   return OK;
 }
@@ -514,7 +488,7 @@ static int bl616cl_dma_config(FAR struct dma_chan_s *chan,
 
   if (config->priority != 0 || config->timeout != 0 || config->option != 0)
     {
-      return -BL616CL_DMA_ENOTSUP;
+      return -ENOTSUP;
     }
 
   ret = bl616cl_dma_width_encode(config->src_width, &width);
@@ -602,31 +576,31 @@ static int bl616cl_dma_start(FAR struct dma_chan_s *chan,
   base = bl616cl_dma_channel_base(channel);
   bl616cl_dma_mask_stop_clear(channel);
   control = units |
-            (1u << BL616CL_DMA_CONTROL_SBSIZE) |
-            (1u << BL616CL_DMA_CONTROL_DBSIZE) |
-            ((uint32_t)encoded_width << BL616CL_DMA_CONTROL_SWIDTH) |
-            ((uint32_t)encoded_width << BL616CL_DMA_CONTROL_DWIDTH) |
-            BL616CL_DMA_CONTROL_I;
+            (1u << DMA_SBSIZE_SHIFT) |
+            (1u << DMA_DBSIZE_SHIFT) |
+            ((uint32_t)encoded_width << DMA_SWIDTH_SHIFT) |
+            ((uint32_t)encoded_width << DMA_DWIDTH_SHIFT) |
+            DMA_I;
   if (channel->config.src_step != 0)
     {
-      control |= BL616CL_DMA_CONTROL_SI;
+      control |= DMA_SI;
     }
 
   if (channel->config.dst_step != 0)
     {
-      control |= BL616CL_DMA_CONTROL_DI;
+      control |= DMA_DI;
     }
 
-  putreg32(src, base + BL616CL_DMA_SRCADDR);
-  putreg32(dst, base + BL616CL_DMA_DSTADDR);
-  putreg32(control, base + BL616CL_DMA_CONTROL);
+  putreg32(src, base + DMA_CxSRCADDR_OFFSET);
+  putreg32(dst, base + DMA_CxDSTADDR_OFFSET);
+  putreg32(control, base + DMA_CxCONTROL_OFFSET);
   putreg32(1u << channel->index,
-           BL616CL_DMA0_BASE + BL616CL_DMA_INTTCCLEAR);
+           DMA_BASE + DMA_INTTCCLEAR_OFFSET);
   putreg32(1u << channel->index,
-           BL616CL_DMA0_BASE + BL616CL_DMA_INTERRCLR);
+           DMA_BASE + DMA_INTERRCLR_OFFSET);
 
   config = 0;
-  putreg32(config, base + BL616CL_DMA_CONFIG);
+  putreg32(config, base + DMA_CxCONFIG_OFFSET);
   channel->callback = callback;
   channel->arg = arg;
   channel->request_bytes = len;
@@ -641,8 +615,7 @@ static int bl616cl_dma_start(FAR struct dma_chan_s *chan,
 
   if (!channel->held)
     {
-      putreg32(config | BL616CL_DMA_CHANNEL_ENABLE,
-               base + BL616CL_DMA_CONFIG);
+      putreg32(config | DMA_E, base + DMA_CxCONFIG_OFFSET);
     }
 
   spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
@@ -661,7 +634,7 @@ static int bl616cl_dma_start_cyclic(FAR struct dma_chan_s *chan,
   UNUSED(src);
   UNUSED(len);
   UNUSED(period_len);
-  return -BL616CL_DMA_ENOTSUP;
+  return -ENOTSUP;
 }
 
 static int bl616cl_dma_stop(FAR struct dma_chan_s *chan)
@@ -696,13 +669,13 @@ static int bl616cl_dma_stop(FAR struct dma_chan_s *chan)
 static int bl616cl_dma_pause(FAR struct dma_chan_s *chan)
 {
   UNUSED(chan);
-  return -BL616CL_DMA_ENOTSUP;
+  return -ENOTSUP;
 }
 
 static int bl616cl_dma_resume(FAR struct dma_chan_s *chan)
 {
   UNUSED(chan);
-  return -BL616CL_DMA_ENOTSUP;
+  return -ENOTSUP;
 }
 
 static size_t bl616cl_dma_residual(FAR struct dma_chan_s *chan)
@@ -754,9 +727,8 @@ void riscv_dma_initialize(void)
       return;
     }
 
-  config = getreg32(BL616CL_DMA0_BASE + BL616CL_DMA_TOP_CONFIG);
-  putreg32(config | BL616CL_DMA_TOP_ENABLE,
-           BL616CL_DMA0_BASE + BL616CL_DMA_TOP_CONFIG);
+  config = getreg32(DMA_BASE + DMA_TOP_CONFIG_OFFSET);
+  putreg32(config | DMA_E, DMA_BASE + DMA_TOP_CONFIG_OFFSET);
 
   for (index = 0; index < BL616CL_DMA_CHANNEL_COUNT; index++)
     {
@@ -801,9 +773,8 @@ errout:
       nxsem_destroy(&g_bl616cl_dma_channels[initialized].available);
     }
 
-  config = getreg32(BL616CL_DMA0_BASE + BL616CL_DMA_TOP_CONFIG);
-  putreg32(config & ~BL616CL_DMA_TOP_ENABLE,
-           BL616CL_DMA0_BASE + BL616CL_DMA_TOP_CONFIG);
+  config = getreg32(DMA_BASE + DMA_TOP_CONFIG_OFFSET);
+  putreg32(config & ~DMA_E, DMA_BASE + DMA_TOP_CONFIG_OFFSET);
   (void)bflb_peripheral_clock_control(BFLB_PERIPHERAL_DMA0, false);
 }
 
@@ -851,11 +822,10 @@ void bl616cl_dma_test_release_hold(void)
       if (channel->state == BL616CL_DMA_RUNNING && channel->held)
         {
           uintptr_t base = bl616cl_dma_channel_base(channel);
-          uint32_t config = getreg32(base + BL616CL_DMA_CONFIG);
+          uint32_t config = getreg32(base + DMA_CxCONFIG_OFFSET);
 
           channel->held = false;
-          putreg32(config | BL616CL_DMA_CHANNEL_ENABLE,
-                   base + BL616CL_DMA_CONFIG);
+          putreg32(config | DMA_E, base + DMA_CxCONFIG_OFFSET);
         }
     }
 

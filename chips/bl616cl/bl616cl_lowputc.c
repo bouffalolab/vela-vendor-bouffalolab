@@ -32,28 +32,16 @@
 #include <nuttx/irq.h>
 #include <nuttx/spinlock.h>
 
+#include "riscv_internal.h"
+
+#include "bl616cl_sdk.h"
+#include "bl616cl_glb.h"
+#include "bl616cl_hbn.h"
+#include "bl616cl_pm.h"
 #include "bflb_clock.h"
 #include "bflb_gpio.h"
 #include "bflb_uart.h"
 #include "bl616cl_lowputc.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-#define BL616CL_SDK_ENABLE         1
-#define BL616CL_SDK_UART_CLK_XCLK  2
-#define BL616CL_SDK_UART_CLK_DIV   0
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-extern int bl616cl_sdk_glb_set_uart_clk(uint8_t enable, uint8_t clk_sel,
-                                        uint8_t div)
-  __asm__("GLB_Set_UART_CLK");
-extern int bl616cl_sdk_pm_disable_gpio_keep(uint32_t pin)
-  __asm__("pm_disable_gpio_keep");
 
 /****************************************************************************
  * Private Functions
@@ -102,9 +90,7 @@ static int bl616cl_uart_clock_enable(uint8_t id)
   flags = enter_critical_section();
   if (!g_uart_clock_configured)
     {
-      if (bl616cl_sdk_glb_set_uart_clk(BL616CL_SDK_ENABLE,
-                                      BL616CL_SDK_UART_CLK_XCLK,
-                                      BL616CL_SDK_UART_CLK_DIV) == 0)
+      if (GLB_Set_UART_CLK(ENABLE, HBN_UART_CLK_XCLK, 0) == SUCCESS)
         {
           g_uart_clock_configured = true;
         }
@@ -206,8 +192,8 @@ int bl616cl_lowputc_config(struct bl616cl_uart_s *config)
       return -ENODEV;
     }
 
-  (void)bl616cl_sdk_pm_disable_gpio_keep(config->txpin);
-  (void)bl616cl_sdk_pm_disable_gpio_keep(config->rxpin);
+  (void)pm_disable_gpio_keep(config->txpin);
+  (void)pm_disable_gpio_keep(config->rxpin);
 
   bflb_gpio_uart_init(gpio, config->txpin,
                       (config->id * 4) + GPIO_UART_FUNC_UART0_TX);

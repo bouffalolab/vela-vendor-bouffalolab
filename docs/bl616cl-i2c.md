@@ -111,7 +111,8 @@ arbitration 或 frame errno 分类。
 
 ## 构建与裁剪验证
 
-以下历史矩阵来自已删除的一次性临时配置；复测时从 `nsh-i2c` 派生，验证后删除临时目录。
+以下矩阵是历史裁剪证据；当前复测使用 `nsh-peripherals`，不再从已删除的
+`nsh-i2c` 派生。
 
 在 SDK 根目录分别执行：
 
@@ -123,7 +124,7 @@ vendor/bouffalolab/vela build \
 
 # 将目标依次替换为：
 # nsh
-# nsh-i2c
+# nsh-peripherals
 # nsh
 ```
 

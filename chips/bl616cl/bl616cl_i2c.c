@@ -20,6 +20,9 @@
 #include <nuttx/i2c/i2c_master.h>
 #include <nuttx/mutex.h>
 
+#include "bl616cl_sdk.h"
+#include "bl616cl_glb.h"
+#include "bl616cl_pm.h"
 #include "bflb_clock.h"
 #include "bflb_gpio.h"
 #include "bflb_i2c.h"
@@ -36,16 +39,8 @@
 #define BL616CL_I2C_MAX_LENGTH        1024
 #define BL616CL_I2C_MAX_PREFIX        16
 
-/* LHAL and OpenVela use different values for ETIMEDOUT. */
-
-#define BL616CL_LHAL_ETIMEDOUT     116
-#define BL616CL_OPENVELA_ETIMEDOUT 110
-
 #define BL616CL_I2C_GPIO_CFG(function) \
   ((function) | GPIO_ALTERNATE | GPIO_PULLUP | GPIO_SMT_EN | GPIO_DRV_1)
-
-#define BL616CL_SDK_ENABLE       1
-#define BL616CL_SDK_I2C_CLK_XCLK 1
 
 /****************************************************************************
  * Private Types
@@ -113,12 +108,6 @@ static struct bl616cl_i2c_priv_s g_bl616cl_i2c1 =
   .port = 1,
 };
 #endif
-
-extern int bl616cl_sdk_glb_set_i2c_clk(uint8_t enable, uint8_t clk_sel,
-                                       uint8_t div)
-  __asm__("GLB_Set_I2C_CLK");
-extern int bl616cl_sdk_pm_disable_gpio_keep(uint32_t pin)
-  __asm__("pm_disable_gpio_keep");
 
 /****************************************************************************
  * Private Functions
@@ -248,7 +237,7 @@ static int bl616cl_i2c_transport_transfer(
   ret = bflb_i2c_transfer(priv->dev, msgs, count);
   if (ret == -BL616CL_LHAL_ETIMEDOUT)
     {
-      return -BL616CL_OPENVELA_ETIMEDOUT;
+      return -ETIMEDOUT;
     }
 
   return ret;
@@ -430,11 +419,10 @@ struct i2c_master_s *bl616cl_i2cbus_initialize(int port, uint8_t scl_pin,
   peripheral = port == 0 ? BFLB_PERIPHERAL_I2C0 : BFLB_PERIPHERAL_I2C1;
   function = port == 0 ? GPIO_FUNC_I2C0 : GPIO_FUNC_I2C1;
 
-  (void)bl616cl_sdk_glb_set_i2c_clk(BL616CL_SDK_ENABLE,
-                                    BL616CL_SDK_I2C_CLK_XCLK, 0);
+  (void)GLB_Set_I2C_CLK(ENABLE, GLB_I2C_CLK_XCLK, 0);
   (void)bflb_peripheral_clock_control(peripheral, true);
-  (void)bl616cl_sdk_pm_disable_gpio_keep(scl_pin);
-  (void)bl616cl_sdk_pm_disable_gpio_keep(sda_pin);
+  (void)pm_disable_gpio_keep(scl_pin);
+  (void)pm_disable_gpio_keep(sda_pin);
   bflb_gpio_init(gpio, scl_pin, BL616CL_I2C_GPIO_CFG(function));
   bflb_gpio_init(gpio, sda_pin, BL616CL_I2C_GPIO_CFG(function));
   bflb_i2c_init(priv->dev, BL616CL_I2C_DEFAULT_FREQUENCY);

@@ -117,9 +117,10 @@ FIFO 和 CS 故障注入，不能宣称完整 controller recovery 已通过。
 
 ## 构建和裁剪实测
 
-以下历史矩阵来自已删除的一次性临时配置；复测时从 `nsh-spi` 派生，验证后删除临时目录。
+以下矩阵是历史裁剪证据；当前复测使用 `nsh-peripherals`，不再从已删除的
+`nsh-spi` 派生。
 
-在 SDK 根目录对 `nsh`、`nsh-spi`、`nsh`、`nsh`、
+历史上在 SDK 根目录对 `nsh`、`nsh-spi`、`nsh`、`nsh`、
 `nsh`、`nsh`、`nsh` 分别执行：
 
 ```bash
@@ -134,7 +135,7 @@ vendor/bouffalolab/vela build \
 | 配置 | 构建 | chip/board/LHAL/test 对象 | ELF SPI0/SPI1 | 大小 | SHA256 |
 |---|---:|---|---|---:|---|
 | `nsh` | 1224/1224 | 0/0/0/0 | 0/0 | 479632 | `8fa89db568cff6dc13e0b4c325ee4eb929eeacff4496936fe4630fc5403e7eb7` |
-| `nsh-spi` | 1234/1234 | 1/1/1/0 | 1/0 | 493312 | `5533d0417dd5a529190ece9b9d177f95da96fbda2db88966dd7e310cc7749e04` |
+| `nsh-spi`（历史，已删除） | 1234/1234 | 1/1/1/0 | 1/0 | 493312 | `5533d0417dd5a529190ece9b9d177f95da96fbda2db88966dd7e310cc7749e04` |
 | `nsh` | 1236/1236 | 1/1/1/1 | 1/0 | 514448 | `53729fa86c06dc139574481418d4ee4820b69ff337b48088345b422b50b18428` |
 | `nsh` | 1232/1232 | 1/0/1/0 | 0/0 | 479632 | `5067b5024900bfc9fffffe9a04dc2e35428f54ed191b7f2571b3321270a9f072` |
 | `nsh` | 1234/1234 | 1/0/1/1 | 0/1 | 510624 | `b252dad6312ac3c0a1bb0317ff67f73c9b5ae1878fafc07283e325664f1366ba` |

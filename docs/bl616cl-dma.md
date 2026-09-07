@@ -1,6 +1,7 @@
 # BL616CL DMA0 通用适配与验证
 
-> `nsh-dma` 是唯一正式 DMA 配置。测试 hook 使用临时派生配置，不进入长期 board configs。
+> 当前统一验证配置为 `nsh-peripherals`，其中 DMA adapter、测试 app 和 test hook
+> 同时启用。下文 `nsh-dma` 构建数字仅保留为历史裁剪证据。
 
 ## 背景
 
@@ -51,8 +52,7 @@ adapter 自行映射 OpenVela 与 LHAL 不同的 direction/width 编码，并自
 | `CONFIG_BL_MCU_PERIPHERAL_TESTS_DMA` | n | 编译单一测试命令 `mcu_dma_test` |
 
 `BL616CL_DMA0` 依赖 `DMA && !DMA_LINK`。关闭时 adapter、`bflb_dma.c.o` 和测试 app
-均不进入目标 archive。产品配置 `nsh-dma` 不包含 test hook；只有 `nsh`
-包含测试能力。
+均不进入目标 archive。当前 `nsh-peripherals` 同时包含 adapter、test hook 和测试能力。
 
 ## API 合同
 
@@ -77,7 +77,7 @@ adapter 自行映射 OpenVela 与 LHAL 不同的 direction/width 编码，并自
 vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-dma -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals -j14
 vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 ```
@@ -85,7 +85,7 @@ vendor/bouffalolab/vela build \
 | 配置 | 结果 | 归档/符号门禁 |
 |---|---:|---|
 | `nsh` | 1224/1224 | 无 adapter、LHAL DMA、test archive/symbol |
-| `nsh-dma` | 1227/1227 | adapter + LHAL DMA；强 `riscv_dma_initialize`；无 test |
+| `nsh-dma`（历史，已删除） | 1227/1227 | adapter + LHAL DMA；强 `riscv_dma_initialize`；无 test |
 | `nsh` | 1229/1229 | 另含独立 test archive 和 test hook |
 
 三态 whole image 都通过 4 MiB 布局和 MFG 擦除区校验。构建 warning 仅有既有的

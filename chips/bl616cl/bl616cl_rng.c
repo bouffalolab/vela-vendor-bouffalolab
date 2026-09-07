@@ -21,6 +21,7 @@
 #include <nuttx/fs/fs.h>
 #include <nuttx/mutex.h>
 
+#include "bl616cl_lhal.h"
 #include "bflb_clock.h"
 #include "bflb_core.h"
 #include "hardware/sec_eng_reg.h"

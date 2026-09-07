@@ -35,6 +35,10 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
+/* Number of raw CLIC slots, excluding NuttX's exception-number prefix. */
+
+#define BL616CL_IRQ_CLIC_COUNT (NR_IRQS - BL616CL_RISCV_IRQ_ASYNC)
+
 #ifndef __ASSEMBLY__
 
 #undef EXTERN
@@ -49,6 +53,10 @@ extern "C"
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
+
+/* LHAL uses raw CLIC indices. NuttX reserves RISCV_IRQ_ASYNC entries
+ * before asynchronous interrupts. Convert only at the adapter boundary.
+ */
 
 int bl616cl_irq_raw_to_nuttx(int irq);
 int bl616cl_irq_nuttx_to_raw(int irq);

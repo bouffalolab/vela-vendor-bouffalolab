@@ -1,12 +1,12 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/chips/bl616cl/include/bl616cl_uart.h
+ * vendor/bouffalolab/chips/bl616cl/bl616cl_uart.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *
  ****************************************************************************/
 
-#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_UART_H
-#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_UART_H
+#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_UART_H
+#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_UART_H
 
 /****************************************************************************
  * Included Files
@@ -24,4 +24,4 @@
 int bl616cl_uart1_register(uint8_t txpin, uint8_t rxpin);
 #endif
 
-#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_UART_H */
+#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_UART_H */

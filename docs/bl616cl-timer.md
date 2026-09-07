@@ -43,7 +43,8 @@ USB-UART 只能证明固件启动、节点、callback、状态和软件计时。
 
 ## 构建命令与裁剪门禁
 
-以下历史矩阵来自已删除的一次性临时配置；复测时从 `nsh-timer` 派生，验证后删除临时目录。
+以下矩阵是历史裁剪证据；当前复测使用 `nsh-peripherals`，其中 TIMER0 和
+TIMER1 同时启用并关闭 one-shot。`nsh-timer` 已删除。
 
 在 SDK 根目录逐个执行 clean/build：
 
@@ -64,9 +65,9 @@ vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-timer
+  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-timer -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals -j14
 
 vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh
@@ -81,7 +82,7 @@ vendor/bouffalolab/vela build \
 | `nsh` | 1223/1223 | `libarch.a` 无 `bl616cl_tim.c.o`，只有 oneshot；无 timer0/1 |
 | `nsh` | 1223/1223 | `bl616cl_tim.c.o` 仅有 TIMER0，节点为 timer0 |
 | `nsh` | 1223/1223 | 仅有 TIMER1，含 test hook，节点为 timer1 |
-| `nsh-timer` | 1223/1223 | TIMER0/TIMER1 均存在，含 test hook |
+| `nsh-timer`（历史，已删除） | 1223/1223 | TIMER0/TIMER1 均存在，含 test hook |
 | `nsh` | 1224/1224 | TIMER0 与 oneshot 存在，无 TIMER1 普通实例 |
 
 测试 main 的归档路径为 `apps/vendor/bouffalolab/apps/mcu_peripheral_tests/timer/`

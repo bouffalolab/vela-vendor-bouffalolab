@@ -25,37 +25,12 @@
  * Included Files
  ****************************************************************************/
 
-#include <arch/chip/chip.h>
 #include <nuttx/config.h>
+#include <arch/chip/chip.h>
 
-#include <stdint.h>
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-#define BL616CL_FLASH_XIP_BASE 0x80000000
-#define BL616CL_OCRAM_BASE 0x20fc0000
-#define BL616CL_OCRAM_SIZE (224 * 1024)
-#define BL616CL_WRAM_BASE 0x20ff8000
-#define BL616CL_WRAM_SIZE (160 * 1024)
-#define BL616CL_RAM_BASE BL616CL_OCRAM_BASE
-#define BL616CL_RAM_SIZE (BL616CL_OCRAM_SIZE + BL616CL_WRAM_SIZE)
-
-#define BL616CL_UART0_BASE 0x2000a000
-#define BL616CL_CLIC_BASE 0xe0800000
-#define BL616CL_GLB_BASE 0x20000000
-#define BL616CL_TZC_SEC_BASE 0x20005000
-#define BL616CL_MCU_MISC_BASE 0x20009000
-#define BL616CL_SF_CTRL_BASE 0x2000b000
-#define BL616CL_CORET_BASE 0xe0004000
-#define BL616CL_CORET_MTIMECMP (BL616CL_CORET_BASE + 0x0000)
-#define BL616CL_CORET_MTIME (BL616CL_CORET_BASE + 0x7ff8)
-
-#define BL616CL_UART_TXFIFO_SIZE 32
-#define BL616CL_UART_CLOCK 40000000
-#define BL616CL_MTIMER_FREQ 1000000
-
-#define BL616CL_IRQ_CLIC_COUNT 83
+/* Common entry point for architecture code, including assembly. Drivers
+ * include their private module and hardware headers explicitly; SDK C
+ * types and register definitions must not leak through this header.
+ */
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_CHIP_H */

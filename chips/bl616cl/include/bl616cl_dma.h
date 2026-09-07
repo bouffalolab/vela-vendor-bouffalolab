@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/chips/bl616cl/include/bl616cl_dma.h
+ * vendor/bouffalolab/chips/bl616cl/include/bl616cl_dma.h
  *
  * SPDX-License-Identifier: Apache-2.0
  ****************************************************************************/
@@ -20,6 +20,10 @@
  ****************************************************************************/
 
 #ifdef CONFIG_BL616CL_DMA0
+/* This public accessor is the chip discovery contract for generic DMA
+ * clients; the standard DMA API does not provide device discovery.
+ */
+
 /* DMA0 currently supports one-shot memory-to-memory transfers with equal
  * 1, 2, or 4-byte widths and source/destination steps of zero or one width.
  * Clients own all cache clean and invalidate operations for their buffers.
