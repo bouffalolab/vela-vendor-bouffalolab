@@ -10,6 +10,15 @@
 
 #include "bl616cl_lhal.h"
 
+/* bflb_sf_ctrl.h has one legacy non-prototype declaration. Import it once
+ * under a narrow diagnostic guard before std headers include it transitively.
+ */
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-prototypes"
+#include "bflb_sf_ctrl.h"
+#pragma GCC diagnostic pop
+
 /* Import the upstream types once, before including any std API header.
  * Rename its ERROR enumerator without changing BL_Err_Type or its ABI,
  * after the LHAL compatibility header has imported bflb_core.h.

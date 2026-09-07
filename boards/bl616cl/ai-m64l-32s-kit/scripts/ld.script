@@ -42,6 +42,7 @@ PHDRS
   ram_code    PT_LOAD FLAGS(5); /* RX */
   ram_rodata  PT_LOAD FLAGS(4); /* R  */
   ram_data    PT_LOAD FLAGS(6); /* RW */
+  ram_bss     PT_LOAD FLAGS(6); /* RW */
 }
 
 SECTIONS
@@ -226,13 +227,17 @@ SECTIONS
     _edata = ABSOLUTE(.);
   } > ram AT > flash :ram_data
 
-  .noinit (NOLOAD) :
+  /* Give NOLOAD sections an explicit RAM LMA so they do not inherit the
+   * preceding flash-backed data mapping.
+   */
+
+  .noinit (NOLOAD) : AT(ADDR(.noinit))
   {
     *(.noinit .noinit.*)
     . = ALIGN(16);
-  } > ram :ram_data
+  } > ram :ram_bss
 
-  .bss (NOLOAD) :
+  .bss (NOLOAD) : AT(ADDR(.bss))
   {
     _sbss = ABSOLUTE(.);
     *(.bss .bss.*)
@@ -240,7 +245,7 @@ SECTIONS
     *(COMMON)
     . = ALIGN(16);
     _ebss = ABSOLUTE(.);
-  } > ram :ram_data
+  } > ram :ram_bss
 
   . = ALIGN(16);
   __StackBase = ABSOLUTE(.);
