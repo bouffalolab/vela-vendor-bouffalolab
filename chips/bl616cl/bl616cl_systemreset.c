@@ -112,19 +112,19 @@ enum bl616cl_reset_reason_e bl616cl_reset_reason_get(void)
 
 void up_systemreset(void)
 {
-  (void)HBN_32K_Sel(HBN_32K_RC);
-  (void)HBN_Power_Off_Xtal_32K();
+  HBN_32K_Sel(HBN_32K_RC);
+  HBN_Power_Off_Xtal_32K();
 
   __asm__ volatile("csrc mstatus, 8");
   __asm__ volatile("li a0, 0x800");
   __asm__ volatile("csrc mie, a0");
 
-  (void)GLB_AHB_MCU_Software_Reset(GLB_AHB_MCU_SW_WIFI);
-  (void)GLB_AHB_MCU_Software_Reset(GLB_AHB_MCU_SW_BTDM);
-  (void)GLB_AHB_MCU_Software_Reset(GLB_AHB_MCU_SW_BLE2);
+  GLB_AHB_MCU_Software_Reset(GLB_AHB_MCU_SW_WIFI);
+  GLB_AHB_MCU_Software_Reset(GLB_AHB_MCU_SW_BTDM);
+  GLB_AHB_MCU_Software_Reset(GLB_AHB_MCU_SW_BLE2);
 
   up_mdelay(10);
-  (void)GLB_SW_POR_Reset();
+  GLB_SW_POR_Reset();
 
   for (; ; )
     {

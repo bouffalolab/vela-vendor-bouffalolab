@@ -238,9 +238,9 @@ static int bl616cl_spi_clock_configure(struct bl616cl_spi_priv_s *priv,
   ret = bflb_peripheral_clock_control(peripheral, enable);
   if (ret < 0 && enable)
     {
-      (void)(priv->port == 0 ?
-               GLB_Set_SPI0_CLK(DISABLE, GLB_SPI_CLK_XCLK, 0) :
-               GLB_Set_SPI1_CLK(DISABLE, GLB_SPI_CLK_XCLK, 0));
+      priv->port == 0 ?
+        GLB_Set_SPI0_CLK(DISABLE, GLB_SPI_CLK_XCLK, 0) :
+        GLB_Set_SPI1_CLK(DISABLE, GLB_SPI_CLK_XCLK, 0);
     }
 
   return ret;
@@ -337,8 +337,8 @@ static void bl616cl_spi_recover(struct bl616cl_spi_priv_s *priv)
     }
 #endif
 
-  (void)bflb_spi_feature_control(priv->dev, SPI_CMD_CLEAR_TX_FIFO, 0);
-  (void)bflb_spi_feature_control(priv->dev, SPI_CMD_CLEAR_RX_FIFO, 0);
+  bflb_spi_feature_control(priv->dev, SPI_CMD_CLEAR_TX_FIFO, 0);
+  bflb_spi_feature_control(priv->dev, SPI_CMD_CLEAR_RX_FIFO, 0);
   bflb_spi_deinit(priv->dev);
 
   config.freq = priv->actual;
@@ -800,7 +800,7 @@ int bl616cl_spibus_uninitialize(struct spi_dev_s *dev)
     }
 
   bflb_spi_deinit(priv->dev);
-  (void)bl616cl_spi_clock_configure(priv, false);
+  bl616cl_spi_clock_configure(priv, false);
   priv->dev = NULL;
   priv->board_ops = NULL;
   priv->board_arg = NULL;

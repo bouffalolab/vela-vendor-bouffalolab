@@ -162,7 +162,7 @@ static void bl616cl_timer_stop_locked(
   struct bl616cl_timer_lowerhalf_s *priv)
 {
   bl616cl_timer_disable_irq(priv);
-  (void)bflb_irq_detach(priv->dev->irq_num);
+  bflb_irq_detach(priv->dev->irq_num);
   bflb_timer_stop(priv->dev);
   priv->started = false;
   priv->generation++;
@@ -392,7 +392,7 @@ static void bl616cl_timer_setcallback(struct timer_lowerhalf_s *lower,
           priv->arg = NULL;
           priv->generation++;
           bl616cl_timer_disable_irq(priv);
-          (void)bflb_irq_detach(priv->dev->irq_num);
+          bflb_irq_detach(priv->dev->irq_num);
         }
     }
   else
