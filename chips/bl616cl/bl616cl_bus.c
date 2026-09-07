@@ -33,24 +33,15 @@
 #include "riscv_internal.h"
 
 #include "bl616cl_bus.h"
-#include "chip.h"
+#include "bl616cl_sdk.h"
+#include "bl616cl_glb.h"
+#include "mcu_misc_reg.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define BL616CL_MCU_MISC_MCU_BUS_CFG0_OFFSET 0x0000
-#define BL616CL_MCU_MISC_TIMEOUT_EN          (1u << 0)
-
-#define BL616CL_MCU_BUS_CFG0 \
-  (BL616CL_MCU_MISC_BASE + BL616CL_MCU_MISC_MCU_BUS_CFG0_OFFSET)
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-extern void bl616cl_sdk_glb_bus_decoder_err_disable(void)
-  __asm__("GLB_Bus_Decoder_Err_Disable");
+/* Register offsets and bitfields come directly from mcu_misc_reg.h. */
 
 /****************************************************************************
  * Private Functions
@@ -78,11 +69,13 @@ static void bl616cl_bus_error_enable(void)
 {
   uint32_t regval;
 
-  bl616cl_sdk_glb_bus_decoder_err_disable();
+  GLB_Bus_Decoder_Err_Disable();
 
-  regval = getreg32(BL616CL_MCU_BUS_CFG0);
-  regval |= BL616CL_MCU_MISC_TIMEOUT_EN;
-  putreg32(regval, BL616CL_MCU_BUS_CFG0);
+  regval = getreg32(MCU_MISC_BASE +
+                    MCU_MISC_MCU_BUS_CFG0_OFFSET);
+  regval |= MCU_MISC_REG_MCU_INFRA_TIMEOUT_EN_MSK;
+  putreg32(regval, MCU_MISC_BASE +
+                   MCU_MISC_MCU_BUS_CFG0_OFFSET);
 }
 
 /****************************************************************************

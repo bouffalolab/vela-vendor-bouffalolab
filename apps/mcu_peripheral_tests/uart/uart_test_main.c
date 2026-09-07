@@ -27,8 +27,6 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "chip.h"
-
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -38,6 +36,10 @@
 #define UART_MAX_PAYLOAD      1024
 #define UART_TEST_SKIP        2
 #define UART_WRITE_MAX_STALLS 10
+
+/* Keep the invalid-baud fixtures independent from private chip headers. */
+
+#define UART_TEST_CLOCK_HZ 40000000
 
 /****************************************************************************
  * Private Types
@@ -540,7 +542,7 @@ static int uart_case_004(void)
 {
   struct termios old;
   int fd = uart_open(false);
-  speed_t half = BL616CL_UART_CLOCK / 2;
+  speed_t half = UART_TEST_CLOCK_HZ / 2;
   int ret = 0;
 
   memset(&old, 0, sizeof(old));

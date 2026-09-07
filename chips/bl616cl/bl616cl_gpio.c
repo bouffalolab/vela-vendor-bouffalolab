@@ -36,6 +36,7 @@
 #include <nuttx/wqueue.h>
 #include <nuttx/ioexpander/ioexpander.h>
 
+#include "bl616cl_lhal.h"
 #include "bflb_gpio.h"
 #include "bflb_irq.h"
 
@@ -64,11 +65,6 @@
   (GPIO_INPUT | GPIO_PULLDOWN | GPIO_DRV_1 | GPIO_SMT_EN)
 #define GPIO_CFGSET_INT_PULLUP \
   (GPIO_INPUT | GPIO_PULLUP | GPIO_DRV_1 | GPIO_SMT_EN)
-
-/* Short alias: the full trig-mode macro name exceeds 80 columns */
-
-#define GPIO_TRIG_BOTH_EDGE \
-  GPIO_INT_TRIG_MODE_SYNC_FALLING_RISING_EDGE
 
 /****************************************************************************
  * Private Types
@@ -315,7 +311,7 @@ static int bl616cl_gpio_option(FAR struct ioexpander_dev_s *dev,
               case IOEXPANDER_VAL_BOTH:
                 bflb_gpio_init(priv->gpio, pin, GPIO_CFGSET_INT_PULLUP);
                 bflb_gpio_int_init(priv->gpio, pin,
-                                   GPIO_TRIG_BOTH_EDGE);
+                                   GPIO_INT_TRIG_MODE_SYNC_FALLING_RISING_EDGE);
                 break;
 
               case IOEXPANDER_VAL_DISABLE:

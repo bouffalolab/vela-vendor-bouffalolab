@@ -19,15 +19,7 @@
 
 #include <nuttx/timers/pwm.h>
 
-/* bflb_core.h includes newlib's sys/errno.h.  Preserve the NuttX ABI value
- * before including LHAL headers.
- */
-
-enum
-{
-  BL616CL_PWM_NUTTX_ETIMEDOUT = ETIMEDOUT,
-};
-
+#include "bl616cl_lhal.h"
 #include "bflb_clock.h"
 #include "bflb_gpio.h"
 #include "bflb_name.h"
@@ -379,10 +371,10 @@ static int bl616cl_pwm_force_stop(FAR struct bl616cl_pwm_lowerhalf_s *priv,
       bl616cl_pwm_release(priv);
       if (!stop_stopped || !deinit_stopped)
         {
-          bl616cl_pwm_record_error(priv, -BL616CL_PWM_NUTTX_ETIMEDOUT);
+          bl616cl_pwm_record_error(priv, -ETIMEDOUT);
           pwmerr("ERROR: PWM stop timed out: stop=%u deinit=%u\n",
                  stop_stopped, deinit_stopped);
-          return -BL616CL_PWM_NUTTX_ETIMEDOUT;
+          return -ETIMEDOUT;
         }
     }
   else
@@ -629,9 +621,9 @@ static int bl616cl_pwm_start(FAR struct pwm_lowerhalf_s *lower,
         {
           (void)bl616cl_pwm_force_stop(
             priv, BL616CL_PWM_OPERATION_NONE);
-          bl616cl_pwm_record_error(priv, -BL616CL_PWM_NUTTX_ETIMEDOUT);
+      bl616cl_pwm_record_error(priv, -ETIMEDOUT);
           pwmerr("ERROR: PWM initialization timed out\n");
-          return -BL616CL_PWM_NUTTX_ETIMEDOUT;
+      return -ETIMEDOUT;
         }
 
       bl616cl_pwm_channel_configure(priv, info, solution.period);
@@ -643,9 +635,9 @@ static int bl616cl_pwm_start(FAR struct pwm_lowerhalf_s *lower,
         {
           (void)bl616cl_pwm_force_stop(
             priv, BL616CL_PWM_OPERATION_NONE);
-          bl616cl_pwm_record_error(priv, -BL616CL_PWM_NUTTX_ETIMEDOUT);
+      bl616cl_pwm_record_error(priv, -ETIMEDOUT);
           pwmerr("ERROR: PWM start timed out\n");
-          return -BL616CL_PWM_NUTTX_ETIMEDOUT;
+      return -ETIMEDOUT;
         }
     }
 

@@ -33,8 +33,6 @@
  * Public Function Prototypes
  ****************************************************************************/
 
-uint32_t bl616cl_csr_read(unsigned int csr);
-void bl616cl_csr_write(unsigned int csr, uint32_t value);
 void bl616cl_thead_cpu_init(void);
 void bl616cl_pmp_init(void);
 

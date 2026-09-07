@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/chips/bl616cl/include/bl616cl_timer_test.h
+ * vendor/bouffalolab/chips/bl616cl/include/bl616cl_timer_test.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -34,6 +34,11 @@
  ****************************************************************************/
 
 #ifdef CONFIG_BL616CL_TIMER_TEST
+/* The timer test application uses this public, configuration-gated extension
+ * because the standard timer API cannot exercise the lower-half callback
+ * contract directly.
+ */
+
 struct timer_lowerhalf_s *bl616cl_timer_test_lower(uint8_t timer);
 #endif
 

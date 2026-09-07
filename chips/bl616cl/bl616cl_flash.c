@@ -24,6 +24,7 @@
 
 #include <nuttx/config.h>
 
+#include "bl616cl_lhal.h"
 #include "bflb_flash.h"
 
 #include "bl616cl_flash.h"

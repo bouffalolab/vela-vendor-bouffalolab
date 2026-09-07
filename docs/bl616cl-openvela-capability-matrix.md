@@ -582,7 +582,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 - 配置互斥：`BL616CL_TIMER1` 依赖 `!BL616CL_ONESHOT`；`nsh`
   仅保留 TIMER0 普通 timer 和 TIMER1 oneshot，`ls /dev` 没有 `timer1`。TIMER0
   与 TIMER1 dual 配置同时注册两个节点。
-- 构建与裁剪：`nsh`、`nsh`、`nsh`、`nsh-timer`
+- 历史构建与裁剪：`nsh`、`nsh`、`nsh`、已删除的 `nsh-timer`
   分别为 `1223/1223`，`nsh` 为 `1224/1224`；off 的 `libarch.a`
   无 `bl616cl_tim.c.o`，TIMER1-only 无 TIMER0 实例，oneshot 配置无 TIMER1
   普通实例。测试入口始终是独立的 `libapps_mcu_timer_test.a`。

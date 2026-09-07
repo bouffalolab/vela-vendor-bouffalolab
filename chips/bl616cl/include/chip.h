@@ -25,8 +25,9 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* Public chip capabilities consumed by architecture common code.  Keep
- * private peripheral register addresses in chips/bl616cl/chip.h.
+/* Public chip capabilities consumed by architecture common code. Keep
+ * private register definitions in hardware/ and driver APIs in their
+ * module headers; this file must not include private chip headers.
  */
 
 #define HAVE_UART_DEVICE 1

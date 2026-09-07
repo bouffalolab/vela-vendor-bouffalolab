@@ -133,7 +133,8 @@ upper 同步清除 `started`。否则 reopen 后 `PWMIOC_START` 会因旧状态�
 
 ## 构建与裁剪门禁
 
-专项配置为 `nsh-pwm` 和 `nsh`；基线关闭态使用 `nsh`。在 SDK 根目录执行：
+当前专项验证使用 `nsh-peripherals`；下表的 `nsh-pwm` 是已删除配置的历史
+裁剪证据。基线关闭态仍使用 `nsh`。在 SDK 根目录执行：
 
 ```bash
 vendor/bouffalolab/vela clean \
@@ -147,7 +148,7 @@ vendor/bouffalolab/vela build \
 | 配置 | 预期 lower/LHAL/board | 预期 app/hook | 当前结果 |
 |---|---|---|---|
 | `nsh` | 无 | 无 | clean build 通过，1224/1224 |
-| `nsh-pwm` | 有 | 无 | clean build 通过，1229/1229 |
+| `nsh-pwm`（历史，已删除） | 有 | 无 | clean build 通过，1229/1229 |
 | `nsh` | 有 | 有 | clean build 通过，1231/1231；栈 6144 |
 
 defconfig 通过 Kconfig 工具和 `savedefconfig` 生成，不手工追加选项。

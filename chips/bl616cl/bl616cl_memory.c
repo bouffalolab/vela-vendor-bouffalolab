@@ -30,25 +30,14 @@
 #include "riscv_internal.h"
 
 #include "bl616cl_memory.h"
-#include "chip.h"
+#include "bl616cl_sdk.h"
+#include "bl616cl_glb.h"
+#include "tzc_sec_reg.h"
+#include "hardware/sf_ctrl_reg.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-
-#define BL616CL_PSRAM_GPIO46_REG_BASE      0x2000097c
-#define BL616CL_PSRAM_GPIO_IE_MASK         0x01
-
-#define BL616CL_TZC_PSRAMB_CTRL_OFFSET     0x3a0
-#define BL616CL_TZC_PSRAMB_R0_OFFSET       0x3a8
-
-#define BL616CL_SF_CTRL_2_OFFSET           0x70
-#define BL616CL_SF_CTRL_SF_IF_BK2_MODE     (1u << 29)
-#define BL616CL_SF_CTRL_SF_IF_BK2_EN       (1u << 30)
-
-#define BL616CL_SDK_GLB_WRAM160KB_EM0KB    0
-#define BL616CL_SDK_GLB_WRAM144KB_EM16KB   1
-#define BL616CL_SDK_GLB_WRAM128KB_EM32KB   2
 
 #define BL616CL_SECTION_SENTINEL           0xffffffff
 
@@ -78,13 +67,6 @@ extern struct bl616cl_mem_section_s __mem_setz_sections[];
 extern uint8_t __LD_CONFIG_EM_SEL;
 
 /****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-extern int bl616cl_sdk_glb_set_em_sel(uint8_t em_sel)
-  __asm__("GLB_Set_EM_Sel");
-
-/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
@@ -94,8 +76,8 @@ static bool bl616cl_psram_init_done(void)
 
   for (i = 0; i < 12; i++)
     {
-      if ((getreg32(BL616CL_PSRAM_GPIO46_REG_BASE + (i * 4)) &
-           BL616CL_PSRAM_GPIO_IE_MASK) == 0)
+      if ((getreg32(GLB_BASE + GLB_GPIO_CFG46_OFFSET + (i * 4)) &
+           GLB_REG_GPIO_0_IE_MSK) == 0)
         {
           return false;
         }
@@ -112,19 +94,31 @@ static void bl616cl_psramb_tzc_access_not_lock(uint8_t region,
   uint32_t regval;
   uint32_t offset;
 
-  offset = BL616CL_TZC_PSRAMB_R0_OFFSET + (region * sizeof(uint32_t));
+  offset = TZC_SEC_TZC_PSRAMB_TZSRG_R0_OFFSET +
+           (region * sizeof(uint32_t));
 
-  regval = getreg32(BL616CL_TZC_SEC_BASE + BL616CL_TZC_PSRAMB_CTRL_OFFSET);
+  regval = getreg32(TZC_SEC_BASE +
+                   TZC_SEC_TZC_PSRAMB_TZSRG_CTRL_OFFSET);
+
+  /* Preserve the upstream startup's two-bit group encoding. The generated
+   * ID_EN field describes four bits and is not an equivalent replacement.
+   */
+
   regval &= ~(3u << (region * 2));
   regval |= (uint32_t)group << (region * 2);
-  putreg32(regval, BL616CL_TZC_SEC_BASE + BL616CL_TZC_PSRAMB_CTRL_OFFSET);
+  putreg32(regval, TZC_SEC_BASE +
+           TZC_SEC_TZC_PSRAMB_TZSRG_CTRL_OFFSET);
 
-  regval = (((end >> 10) - 1) & 0xffff) | ((start >> 10) << 16);
-  putreg32(regval, BL616CL_TZC_SEC_BASE + offset);
+  regval = ((((end >> 10) - 1) << TZC_SEC_TZC_PSRAMB_TZSRG_R0_END_POS) &
+            TZC_SEC_TZC_PSRAMB_TZSRG_R0_END_MSK) |
+           ((start >> 10) << TZC_SEC_TZC_PSRAMB_TZSRG_R0_START_POS);
+  putreg32(regval, TZC_SEC_BASE + offset);
 
-  regval = getreg32(BL616CL_TZC_SEC_BASE + BL616CL_TZC_PSRAMB_CTRL_OFFSET);
-  regval |= 1u << (region + 16);
-  putreg32(regval, BL616CL_TZC_SEC_BASE + BL616CL_TZC_PSRAMB_CTRL_OFFSET);
+  regval = getreg32(TZC_SEC_BASE +
+                   TZC_SEC_TZC_PSRAMB_TZSRG_CTRL_OFFSET);
+  regval |= TZC_SEC_TZC_PSRAMB_TZSRG_R0_EN_MSK << region;
+  putreg32(regval, TZC_SEC_BASE +
+           TZC_SEC_TZC_PSRAMB_TZSRG_CTRL_OFFSET);
 }
 
 static void bl616cl_em_select(void)
@@ -136,19 +130,19 @@ static void bl616cl_em_select(void)
   switch (em_size)
     {
       case 16 * 1024:
-        em_sel = BL616CL_SDK_GLB_WRAM144KB_EM16KB;
+        em_sel = GLB_WRAM144KB_EM16KB;
         break;
 
       case 32 * 1024:
-        em_sel = BL616CL_SDK_GLB_WRAM128KB_EM32KB;
+        em_sel = GLB_WRAM128KB_EM32KB;
         break;
 
       default:
-        em_sel = BL616CL_SDK_GLB_WRAM160KB_EM0KB;
+        em_sel = GLB_WRAM160KB_EM0KB;
         break;
     }
 
-  (void)bl616cl_sdk_glb_set_em_sel(em_sel);
+  (void)GLB_Set_EM_Sel(em_sel);
 }
 
 /****************************************************************************
@@ -177,9 +171,9 @@ void bl616cl_flash_early_init(void)
 {
   uint32_t regval;
 
-  regval = getreg32(BL616CL_SF_CTRL_BASE + BL616CL_SF_CTRL_2_OFFSET);
-  regval |= BL616CL_SF_CTRL_SF_IF_BK2_EN | BL616CL_SF_CTRL_SF_IF_BK2_MODE;
-  putreg32(regval, BL616CL_SF_CTRL_BASE + BL616CL_SF_CTRL_2_OFFSET);
+  regval = getreg32(SF_CTRL_BASE + SF_CTRL_2_OFFSET);
+  regval |= SF_CTRL_SF_IF_BK2_EN | SF_CTRL_SF_IF_BK2_MODE;
+  putreg32(regval, SF_CTRL_BASE + SF_CTRL_2_OFFSET);
 }
 
 /****************************************************************************

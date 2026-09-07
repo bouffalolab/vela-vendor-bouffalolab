@@ -17,7 +17,7 @@ error 注入和外设 DMA consumer 不属于本轮能力。
 | 配置 | DMA0 adapter | test hook/app | clean build |
 |---|---:|---:|---:|
 | `nsh` | n | n | 1224/1224 |
-| `nsh-dma` | y | n | 1227/1227 |
+| `nsh-dma`（历史，已删除） | y | n | 1227/1227 |
 | `nsh` | y | y | 1229/1229 |
 
 在 SDK 根目录依次执行：
@@ -29,9 +29,9 @@ vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/nsh -j14
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-dma
+  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-dma -j14
+  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals -j14
 
 vendor/bouffalolab/vela clean \
   bl616cl/ai-m64l-32s-kit/configs/nsh

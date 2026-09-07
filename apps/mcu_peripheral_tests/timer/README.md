@@ -290,7 +290,7 @@ nsh>
 nsh      1223/1223  无普通 timer lower
 nsh         1223/1223  仅 TIMER0
 nsh         1223/1223  仅 TIMER1，含 test-only raw hook
-nsh-timer     1223/1223  TIMER0 + TIMER1
+nsh-timer（历史，已删除）  1223/1223  TIMER0 + TIMER1
 nsh  1224/1224  TIMER0 + oneshot，无 TIMER1 普通实例
 ```
 

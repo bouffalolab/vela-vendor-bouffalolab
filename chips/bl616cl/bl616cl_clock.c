@@ -29,42 +29,15 @@
 #include "riscv_internal.h"
 
 #include "bl616cl_clock.h"
-#include "chip.h"
+#include "bl616cl_sdk.h"
+#include "../../drivers/soc/bl616cl/std/include/bl616cl_clock.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define BL616CL_GLB_UART_CFG1_OFFSET      0x154
-#define BL616CL_GLB_UART_CFG2_OFFSET      0x158
-#define BL616CL_HBN_GPIO5_FIXUP_REG       0x2000f014
-#define BL616CL_HBN_GPIO5_UNCOMMON_BIT    (1u << 16)
-#define BL616CL_SDK_GLB_XTAL_40M          4
-#define BL616CL_SDK_GLB_PLL_WIFIPLL       1
-#define BL616CL_SDK_GLB_SYS_CLK_WIFIPLL   5
-#define BL616CL_SDK_HBN_MCU_XCLK_XTAL     1
-#define BL616CL_SDK_SYSTEM_CLOCK_XCLK     5
-#define BL616CL_SDK_MTIMER_SOURCE_XCLK    0
-#define BL616CL_SDK_ENABLE                1
 #define BL616CL_CLOCK_SAFE                \
   __attribute__((section(".sclock_rlt_code.bl616cl_clock_early_init")))
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-extern uint32_t bl616cl_sdk_clock_system_clock_get(int type)
-  __asm__("Clock_System_Clock_Get");
-extern int bl616cl_sdk_glb_power_on_xtal_and_pll_clk(uint8_t xtal_type,
-                                                     uint8_t pll_type)
-  __asm__("GLB_Power_On_XTAL_And_PLL_CLK");
-extern int bl616cl_sdk_glb_set_mcu_system_clk(uint8_t clk_freq)
-  __asm__("GLB_Set_MCU_System_CLK");
-extern int bl616cl_sdk_hbn_set_mcu_xclk_sel(uint8_t xclk)
-  __asm__("HBN_Set_MCU_XCLK_Sel");
-extern int bl616cl_sdk_cpu_set_mtimer_clk(uint8_t enable, int source,
-                                          uint16_t div)
-  __asm__("CPU_Set_MTimer_CLK");
 
 /****************************************************************************
  * Public Functions
@@ -81,12 +54,9 @@ void BL616CL_CLOCK_SAFE bl616cl_clock_early_init(void)
    * the WiFi PLL; flash retuning stays out of this early hook.
    */
 
-  (void)bl616cl_sdk_glb_power_on_xtal_and_pll_clk(
-    BL616CL_SDK_GLB_XTAL_40M,
-    BL616CL_SDK_GLB_PLL_WIFIPLL);
-  (void)bl616cl_sdk_glb_set_mcu_system_clk(
-    BL616CL_SDK_GLB_SYS_CLK_WIFIPLL);
-  (void)bl616cl_sdk_hbn_set_mcu_xclk_sel(BL616CL_SDK_HBN_MCU_XCLK_XTAL);
+  (void)GLB_Power_On_XTAL_And_PLL_CLK(GLB_XTAL_40M, GLB_PLL_WIFIPLL);
+  (void)GLB_Set_MCU_System_CLK(GLB_MCU_SYS_CLK_TOP_WIFIPLL_320M);
+  (void)HBN_Set_MCU_XCLK_Sel(HBN_MCU_XCLK_XTAL);
 }
 
 /****************************************************************************
@@ -98,14 +68,13 @@ void bl616cl_timer_clock_init(void)
   uint32_t div;
   uint32_t xclk;
 
-  xclk = bl616cl_sdk_clock_system_clock_get(BL616CL_SDK_SYSTEM_CLOCK_XCLK);
+  xclk = Clock_System_Clock_Get(BL_SYSTEM_CLOCK_XCLK);
   div = xclk / BL616CL_MTIMER_FREQ;
 
   DEBUGASSERT(div > 0);
 
-  (void)bl616cl_sdk_cpu_set_mtimer_clk(BL616CL_SDK_ENABLE,
-                                       BL616CL_SDK_MTIMER_SOURCE_XCLK,
-                                       div - 1);
+  (void)CPU_Set_MTimer_CLK(ENABLE, BL_MTIMER_SOURCE_CLOCK_MCU_XCLK,
+                         div - 1);
 }
 
 /****************************************************************************
@@ -116,10 +85,10 @@ void bl616cl_pinmux_early_uart(void)
 {
   uint32_t regval;
 
-  putreg32(0xffffffff, BL616CL_GLB_BASE + BL616CL_GLB_UART_CFG1_OFFSET);
-  putreg32(0x0000ffff, BL616CL_GLB_BASE + BL616CL_GLB_UART_CFG2_OFFSET);
+  putreg32(0xffffffff, GLB_BASE + GLB_UART_CFG1_OFFSET);
+  putreg32(0x0000ffff, GLB_BASE + GLB_UART_CFG2_OFFSET);
 
-  regval = getreg32(BL616CL_HBN_GPIO5_FIXUP_REG);
-  regval &= ~BL616CL_HBN_GPIO5_UNCOMMON_BIT;
-  putreg32(regval, BL616CL_HBN_GPIO5_FIXUP_REG);
+  regval = getreg32(HBN_BASE + HBN_IRQ_MODE_OFFSET);
+  regval &= ~HBN_REG_EN_HW_PU_PD_MSK;
+  putreg32(regval, HBN_BASE + HBN_IRQ_MODE_OFFSET);
 }

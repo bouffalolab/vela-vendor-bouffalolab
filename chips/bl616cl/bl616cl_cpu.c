@@ -29,18 +29,14 @@
 #include "rv_pmp.h"
 
 #include "bl616cl_cpu.h"
+#include "hardware/bl616cl_core.h"
 
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define BL616CL_CSR_MXSTATUS          0x7c0
-#define BL616CL_CSR_MHCR              0x7c1
-#define BL616CL_CSR_MEXSTATUS         0x7e1
-
 #define BL616CL_MXSTATUS_MM           (1u << 15)
 #define BL616CL_MXSTATUS_THEADISAEE   (1u << 22)
-#define BL616CL_MHCR_RAS              (1u << 4)
 #define BL616CL_MEXSTATUS_SPUSHEN     (1u << 16)
 #define BL616CL_MEXSTATUS_SPSWAPEN    (1u << 17)
 
@@ -107,61 +103,6 @@ static const pmp_config_entry_t g_bl616cl_pmp_entry[] =
  ****************************************************************************/
 
 /****************************************************************************
- * Name: bl616cl_csr_read
- ****************************************************************************/
-
-uint32_t bl616cl_csr_read(unsigned int csr)
-{
-  uint32_t value;
-
-  switch (csr)
-    {
-      case BL616CL_CSR_MXSTATUS:
-        __asm__ __volatile__("csrr %0, 0x7c0" : "=r"(value));
-        break;
-
-      case BL616CL_CSR_MHCR:
-        __asm__ __volatile__("csrr %0, 0x7c1" : "=r"(value));
-        break;
-
-      case BL616CL_CSR_MEXSTATUS:
-        __asm__ __volatile__("csrr %0, 0x7e1" : "=r"(value));
-        break;
-
-      default:
-        value = 0;
-        break;
-    }
-
-  return value;
-}
-
-/****************************************************************************
- * Name: bl616cl_csr_write
- ****************************************************************************/
-
-void bl616cl_csr_write(unsigned int csr, uint32_t value)
-{
-  switch (csr)
-    {
-      case BL616CL_CSR_MXSTATUS:
-        __asm__ __volatile__("csrw 0x7c0, %0" : : "r"(value) : "memory");
-        break;
-
-      case BL616CL_CSR_MHCR:
-        __asm__ __volatile__("csrw 0x7c1, %0" : : "r"(value) : "memory");
-        break;
-
-      case BL616CL_CSR_MEXSTATUS:
-        __asm__ __volatile__("csrw 0x7e1, %0" : : "r"(value) : "memory");
-        break;
-
-      default:
-        break;
-    }
-}
-
-/****************************************************************************
  * Name: bl616cl_thead_cpu_init
  ****************************************************************************/
 
@@ -169,17 +110,17 @@ void bl616cl_thead_cpu_init(void)
 {
   uint32_t value;
 
-  value = bl616cl_csr_read(BL616CL_CSR_MXSTATUS);
+  value = __get_MXSTATUS();
   value |= BL616CL_MXSTATUS_THEADISAEE | BL616CL_MXSTATUS_MM;
-  bl616cl_csr_write(BL616CL_CSR_MXSTATUS, value);
+  __set_MXSTATUS(value);
 
-  value = bl616cl_csr_read(BL616CL_CSR_MHCR);
-  value |= BL616CL_MHCR_RAS;
-  bl616cl_csr_write(BL616CL_CSR_MHCR, value);
+  value = __get_MHCR();
+  value |= CACHE_MHCR_RS_Msk;
+  __set_MHCR(value);
 
-  value = bl616cl_csr_read(BL616CL_CSR_MEXSTATUS);
+  value = __get_MEXSTATUS();
   value &= ~(BL616CL_MEXSTATUS_SPUSHEN | BL616CL_MEXSTATUS_SPSWAPEN);
-  bl616cl_csr_write(BL616CL_CSR_MEXSTATUS, value);
+  __set_MEXSTATUS(value);
 }
 
 /****************************************************************************

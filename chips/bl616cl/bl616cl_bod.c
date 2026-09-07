@@ -31,35 +31,9 @@
 #include <nuttx/arch.h>
 #include <nuttx/irq.h>
 
+#include "bl616cl_sdk.h"
+#include "bl616cl_hbn.h"
 #include "bl616cl_bod.h"
-
-/****************************************************************************
- * Pre-processor Definitions
- ****************************************************************************/
-
-#define BL616CL_BOD_ENABLE          1
-#define BL616CL_BOD_IRQ_ENABLE      1
-#define BL616CL_BOD_THRESHOLD_2P4   2
-#define BL616CL_BOD_POR_INDEPENDENT 0
-
-/****************************************************************************
- * Private Types
- ****************************************************************************/
-
-struct bl616cl_sdk_hbn_bod_cfg_s
-{
-  uint8_t enable_bod;
-  uint8_t enable_bod_int;
-  uint8_t bod_threshold;
-  uint8_t enable_por_in_bod;
-};
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-extern int bl616cl_sdk_hbn_set_bod_cfg(
-  struct bl616cl_sdk_hbn_bod_cfg_s *cfg) __asm__("HBN_Set_BOD_Cfg");
 
 /****************************************************************************
  * Private Functions
@@ -93,12 +67,12 @@ static int bl616cl_bod_interrupt(int irq, void *context, void *arg)
 
 int bl616cl_bod_initialize(void)
 {
-  struct bl616cl_sdk_hbn_bod_cfg_s cfg =
+  HBN_BOD_CFG_Type cfg =
   {
-    .enable_bod = BL616CL_BOD_ENABLE,
-    .enable_bod_int = BL616CL_BOD_IRQ_ENABLE,
-    .bod_threshold = BL616CL_BOD_THRESHOLD_2P4,
-    .enable_por_in_bod = BL616CL_BOD_POR_INDEPENDENT,
+    .enableBod = ENABLE,
+    .enableBodInt = ENABLE,
+    .bodThreshold = HBN_BOD_THRES_2P4,
+    .enablePorInBod = HBN_BOD_MODE_POR_INDEPENDENT,
   };
 
   int ret;
@@ -109,8 +83,8 @@ int bl616cl_bod_initialize(void)
       return ret;
     }
 
-  ret = bl616cl_sdk_hbn_set_bod_cfg(&cfg);
-  if (ret != OK)
+  ret = HBN_Set_BOD_Cfg(&cfg);
+  if (ret != SUCCESS)
     {
       return -EIO;
     }

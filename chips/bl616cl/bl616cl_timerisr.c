@@ -33,7 +33,7 @@
 #include "riscv_mtimer.h"
 
 #include "bl616cl_clock.h"
-#include "chip.h"
+#include "hardware/bl616cl_core.h"
 
 /****************************************************************************
  * Public Functions

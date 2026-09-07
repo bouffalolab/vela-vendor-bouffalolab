@@ -28,6 +28,7 @@
 
 #include "bl616cl_sec_mutex.h"
 
+#include "bl616cl_lhal.h"
 #include "bflb_sec_mutex.h"
 
 /****************************************************************************
