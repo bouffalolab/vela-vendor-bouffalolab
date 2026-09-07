@@ -28,7 +28,7 @@
 #include "hardware/pwm_v2_reg.h"
 #include "bl616cl_pwm.h"
 #ifdef CONFIG_BL616CL_PWM_TEST
-#include "bl616cl_pwm_test.h"
+#include <arch/chip/bl616cl_pwm.h>
 #endif
 
 /****************************************************************************

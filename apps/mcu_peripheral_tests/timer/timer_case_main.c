@@ -38,10 +38,7 @@
 #include <nuttx/timers/pwm.h>
 #include <nuttx/ioexpander/gpio.h>
 
-#include <arch/chip/bl616cl_tim_ioctl.h>
-#ifdef CONFIG_BL616CL_TIMER_TEST
-#  include <arch/chip/bl616cl_timer_test.h>
-#endif
+#include <arch/chip/bl616cl_timer.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -90,7 +87,7 @@
 #define CASE005_TIMEOUT_US       50000
 
 /* The custom timer ioctl BL616CL_TCIOC_SETCLOCKDIV (used by TIMER-002) is
- * defined once in <arch/chip/bl616cl_tim_ioctl.h>, included above, and
+ * defined once in <arch/chip/bl616cl_timer.h>, included above, and
  * shared with the chip lower-half driver so the two never drift out of sync.
  */
 

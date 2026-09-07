@@ -25,7 +25,7 @@
 #include <fixedmath.h>
 #include <nuttx/timers/pwm.h>
 
-#include <arch/chip/bl616cl_pwm_test.h>
+#include <arch/chip/bl616cl_pwm.h>
 
 /****************************************************************************
  * Pre-processor Definitions

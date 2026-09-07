@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/chips/bl616cl/include/bl616cl_timer_test.h
+ * vendor/bouffalolab/chips/bl616cl/include/bl616cl_timer.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,16 +18,28 @@
  *
  ****************************************************************************/
 
-#ifndef __VENDOR_BOUFFALOLAB_CHIP_BL616CL_INCLUDE_BL616CL_TIMER_TEST_H
-#define __VENDOR_BOUFFALOLAB_CHIP_BL616CL_INCLUDE_BL616CL_TIMER_TEST_H
+#ifndef __VENDOR_BOUFFALOLAB_CHIP_BL616CL_INCLUDE_BL616CL_TIMER_H
+#define __VENDOR_BOUFFALOLAB_CHIP_BL616CL_INCLUDE_BL616CL_TIMER_H
 
 /****************************************************************************
  * Included Files
  ****************************************************************************/
 
+#include <nuttx/config.h>
+
 #include <stdint.h>
 
 #include <nuttx/timers/timer.h>
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+/* Public chip-specific extension: the standard timer API has no operation for
+ * setting the hardware clock divider (0..255).
+ */
+
+#define BL616CL_TCIOC_SETCLOCKDIV _TCIOC(0x0040)
 
 /****************************************************************************
  * Public Function Prototypes
@@ -42,4 +54,4 @@
 struct timer_lowerhalf_s *bl616cl_timer_test_lower(uint8_t timer);
 #endif
 
-#endif /* __VENDOR_BOUFFALOLAB_CHIP_BL616CL_INCLUDE_BL616CL_TIMER_TEST_H */
+#endif /* __VENDOR_BOUFFALOLAB_CHIP_BL616CL_INCLUDE_BL616CL_TIMER_H */

@@ -24,9 +24,9 @@
 ## 已保留的扩展
 
 - `bl616cl_dma.h` 提供 BL616CL DMA 设备获取入口；传输使用 NuttX DMA 接口。
-- `bl616cl_tim_ioctl.h` 定义应用与驱动共同使用的分频 ioctl，保持现有命令值。
-- `bl616cl_dma_test.h`、`bl616cl_pwm_test.h`、`bl616cl_timer_test.h` 是标准接口
-  不足以覆盖的测试契约，保留现有配置门控及数据结构，不混入公共 `chip.h`。
+- `bl616cl_timer.h` 定义应用与驱动共同使用的分频 ioctl，保持现有命令值。
+- `bl616cl_dma.h`、`bl616cl_pwm.h`、`bl616cl_timer.h` 中的测试扩展是标准接口
+  不足以覆盖的契约，保留现有配置门控及数据结构，不混入公共 `chip.h`。
 - `bl616cl_uart.h` 是板级注册接口，放在芯片局部目录。UART 应用测试通过
   termios 操作设备，不再通过私有头文件获取测试边界值。
 
