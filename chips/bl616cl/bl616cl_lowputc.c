@@ -134,7 +134,7 @@ static const char *bl616cl_uart_name(uint8_t id)
 struct bl616cl_uart_s g_uart0_config =
 {
   .id         = 0,
-  .irq        = BL616CL_IRQ_UART0,
+  .irq        = BL616CL_IRQ_NUM_UART0,
   .txpin      = CONFIG_BL616CL_UART0_TXPIN,
   .rxpin      = CONFIG_BL616CL_UART0_RXPIN,
   .baud       = CONFIG_UART0_BAUD,
@@ -150,7 +150,7 @@ struct bl616cl_uart_s g_uart0_config =
 struct bl616cl_uart_s g_uart1_config =
 {
   .id         = 1,
-  .irq        = BL616CL_IRQ_UART1,
+  .irq        = BL616CL_IRQ_NUM_UART1,
   .baud       = CONFIG_UART1_BAUD,
   .data_bits  = CONFIG_UART1_BITS,
   .stop_b2    = CONFIG_UART1_2STOP,

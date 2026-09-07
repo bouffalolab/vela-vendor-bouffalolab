@@ -624,8 +624,8 @@ static int bl616cl_rtc_destroy(FAR struct rtc_lowerhalf_s *lower)
   spin_unlock_irqrestore(&priv->lock, flags);
 
 #ifdef CONFIG_BL616CL_RTC_ALARM
-  up_disable_irq(BL616CL_IRQ_HBN_OUT0);
-  irq_detach(BL616CL_IRQ_HBN_OUT0);
+  up_disable_irq(BL616CL_IRQ_NUM_HBN_OUT0);
+  irq_detach(BL616CL_IRQ_NUM_HBN_OUT0);
 #endif
   return OK;
 }
@@ -838,7 +838,7 @@ int up_rtc_initialize(void)
   spin_unlock_irqrestore(&priv->lock, flags);
 
 #ifdef CONFIG_BL616CL_RTC_ALARM
-  ret = irq_attach(BL616CL_IRQ_HBN_OUT0, bl616cl_rtc_interrupt, priv);
+  ret = irq_attach(BL616CL_IRQ_NUM_HBN_OUT0, bl616cl_rtc_interrupt, priv);
   if (ret < 0)
     {
       rtcerr("ERROR: Failed to attach HBN_OUT0 RTC IRQ: %d\n", ret);
@@ -848,7 +848,7 @@ int up_rtc_initialize(void)
   flags = spin_lock_irqsave(&priv->lock);
   priv->alarm_irq_ready = true;
   spin_unlock_irqrestore(&priv->lock, flags);
-  up_enable_irq(BL616CL_IRQ_HBN_OUT0);
+  up_enable_irq(BL616CL_IRQ_NUM_HBN_OUT0);
 #endif
 
   up_rtc_set_lowerhalf((FAR struct rtc_lowerhalf_s *)priv, false);

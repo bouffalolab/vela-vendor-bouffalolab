@@ -77,7 +77,7 @@ int bl616cl_bod_initialize(void)
 
   int ret;
 
-  ret = irq_attach(BL616CL_IRQ_BOD, bl616cl_bod_interrupt, NULL);
+  ret = irq_attach(BL616CL_IRQ_NUM_BOD, bl616cl_bod_interrupt, NULL);
   if (ret < 0)
     {
       return ret;
@@ -89,6 +89,6 @@ int bl616cl_bod_initialize(void)
       return -EIO;
     }
 
-  up_enable_irq(BL616CL_IRQ_BOD);
+  up_enable_irq(BL616CL_IRQ_NUM_BOD);
   return OK;
 }

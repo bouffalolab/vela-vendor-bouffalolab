@@ -94,7 +94,7 @@ int bl616cl_bus_error_initialize(void)
 {
   int ret;
 
-  ret = irq_attach(BL616CL_IRQ_BMX_MCU_BUS_ERR,
+  ret = irq_attach(BL616CL_IRQ_NUM_BMX_MCU_BUS_ERR,
                    bl616cl_bus_error_interrupt,
                    NULL);
   if (ret < 0)
@@ -102,7 +102,7 @@ int bl616cl_bus_error_initialize(void)
       return ret;
     }
 
-  ret = irq_attach(BL616CL_IRQ_BMX_MCU_TIMEOUT,
+  ret = irq_attach(BL616CL_IRQ_NUM_BMX_MCU_TO,
                    bl616cl_bus_error_interrupt,
                    NULL);
   if (ret < 0)
@@ -112,8 +112,8 @@ int bl616cl_bus_error_initialize(void)
 
   bl616cl_bus_error_enable();
 
-  up_enable_irq(BL616CL_IRQ_BMX_MCU_BUS_ERR);
-  up_enable_irq(BL616CL_IRQ_BMX_MCU_TIMEOUT);
+  up_enable_irq(BL616CL_IRQ_NUM_BMX_MCU_BUS_ERR);
+  up_enable_irq(BL616CL_IRQ_NUM_BMX_MCU_TO);
 
   return OK;
 }

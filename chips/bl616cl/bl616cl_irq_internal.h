@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_irq.h
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_irq_internal.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,8 +18,8 @@
  *
  ****************************************************************************/
 
-#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_IRQ_H
-#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_IRQ_H
+#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_IRQ_INTERNAL_H
+#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_IRQ_INTERNAL_H
 
 /****************************************************************************
  * Included Files
@@ -74,4 +74,4 @@ void bl616cl_clic_set_priority_raw(int irq, uint8_t preemptprio,
 #endif
 
 #endif /* __ASSEMBLY__ */
-#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_IRQ_H */
+#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_IRQ_INTERNAL_H */
