@@ -56,6 +56,26 @@ if(COMMAND nuttx_add_kernel_library AND "${CHIP}" STREQUAL "bl616cl")
     bl_lhal PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wno-strict-prototypes>)
   target_compile_options(
     bl_std PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wno-strict-prototypes>)
+
+  # The upstream critical-section monitor shadows its caller parameter. Keep
+  # the exemption on that source instead of weakening the sched target.
+  if(TARGET sched AND CONFIG_SCHED_CRITMONITOR)
+    set_property(
+      SOURCE ${NUTTX_DIR}/sched/sched/sched_critmonitor.c
+      TARGET_DIRECTORY sched
+      APPEND
+      PROPERTY COMPILE_OPTIONS -Wno-shadow)
+  endif()
+
+  # The upstream cpuload command keeps its CPU selector unused in a UP build.
+  # Keep the exemption on that source instead of weakening the app target.
+  if(TARGET apps_cpuload)
+    set_property(
+      SOURCE ${NUTTX_APPS_DIR}/system/cpuload/cpuload_main.c
+      TARGET_DIRECTORY apps_cpuload
+      APPEND
+      PROPERTY COMPILE_OPTIONS -Wno-unused-but-set-variable)
+  endif()
 endif()
 
 nuttx_add_subdirectory()
