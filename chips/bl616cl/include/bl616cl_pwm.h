@@ -1,12 +1,12 @@
 /****************************************************************************
- * vendor/bouffalolab/chips/bl616cl/include/bl616cl_pwm_test.h
+ * vendor/bouffalolab/chips/bl616cl/include/bl616cl_pwm.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *
  ****************************************************************************/
 
-#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_PWM_TEST_H
-#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_PWM_TEST_H
+#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_PWM_H
+#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_PWM_H
 
 /****************************************************************************
  * Included Files
@@ -70,4 +70,4 @@ int bl616cl_pwm_test_set_fault(enum bl616cl_pwm_test_fault_e fault);
 int bl616cl_pwm_test_get_diag(FAR struct bl616cl_pwm_test_diag_s *diag);
 #endif
 
-#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_PWM_TEST_H */
+#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_PWM_H */

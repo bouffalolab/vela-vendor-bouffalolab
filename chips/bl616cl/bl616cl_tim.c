@@ -40,7 +40,7 @@
 #include "bflb_name.h"
 #include "bflb_timer.h"
 #include "bl616cl_tim.h"
-#include "bl616cl_tim_ioctl.h"
+#include <arch/chip/bl616cl_timer.h>
 
 /****************************************************************************
  * Pre-processor Definitions

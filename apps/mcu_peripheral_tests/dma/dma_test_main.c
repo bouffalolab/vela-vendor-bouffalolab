@@ -24,7 +24,6 @@
 #include <nuttx/dma/dma.h>
 
 #include <arch/chip/bl616cl_dma.h>
-#include <arch/chip/bl616cl_dma_test.h>
 
 /****************************************************************************
  * Pre-processor Definitions

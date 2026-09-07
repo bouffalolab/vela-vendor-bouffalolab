@@ -41,10 +41,6 @@
 #include "hardware/dma_reg.h"
 #include "hardware/bl616cl_memorymap.h"
 
-#ifdef CONFIG_BL616CL_DMA0_TEST
-#include "bl616cl_dma_test.h"
-#endif
-
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
