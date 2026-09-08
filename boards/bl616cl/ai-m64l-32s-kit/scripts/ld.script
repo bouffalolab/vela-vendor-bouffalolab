@@ -288,7 +288,13 @@ SECTIONS
     LONG(0xffffffff);
   } > flash :flash_rodata
 
-  __rom_end__ = LOADADDR(.zero.table) + SIZEOF(.zero.table);
+  /* Keep all flash-backed output sections above this final marker. */
+
+  .image_end :
+  {
+    . = ALIGN(4);
+    __rom_end__ = ABSOLUTE(.);
+  } > flash :flash_rodata
 
   /* Startup copies and clears complete 32-bit words. */
 
