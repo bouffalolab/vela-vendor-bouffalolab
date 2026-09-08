@@ -192,8 +192,8 @@ mcu_wdt_test -c 003 -t 1000
 1. `SETTIMEOUT=0` 和 `64000` 必须返回 `ERANGE`，状态不能被污染。
 2. `SETTIMEOUT=1` 和 `63999` 必须成功，覆盖完整可表达边界。
 3. 恢复 1000 ms 并 START；重复 START 必须返回 `EBUSY`。
-4. active 状态把 timeout 改为 1001 ms，必须成功并原子重装，而不是沿用旧
-   compare。
+4. 先运行 50 ms 建立非零旧计数，再在 active 状态把 timeout 改为 1001 ms，
+   必须成功并重装，不能让跨时钟同步期间的旧计数污染状态读数。
 5. GETSTATUS 必须同时满足 ACTIVE、timeout=1001、timeleft<=1001；等待 20 ms
    后 timeleft 必须下降。
 6. active 状态恢复 1000 ms，然后打开第二个 fd；第二个 fd 必须看到同一 ACTIVE
@@ -206,6 +206,10 @@ mcu_wdt_test -c 003 -t 1000
 
 本 case 的 lifecycle timeout 必须至少 100 ms；1 ms 和 63999 ms 边界只在停止态
 验证可接受性，避免 1 ms 参数在用户态调度期间造成预期外复位。
+
+`timeleft` 是基于系统 tick 和最近一次计数复位时间戳的近似剩余毫秒；
+START、KEEPALIVE、运行中 SETTIMEOUT 均会更新该基准。硬件超时与复位仍由
+WDT 执行，状态查询不等待 WVR 的跨时钟同步，也不改变硬件计数。
 
 实测输出：
 

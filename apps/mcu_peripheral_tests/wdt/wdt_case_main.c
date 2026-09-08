@@ -484,6 +484,12 @@ static int run_case_003(const struct app_config_s *cfg)
       goto stop_fail;
     }
 
+  /* Seed a nonzero counter before the live reset. A stale hardware read
+   * below the new compare value must not make timeleft jump upward later.
+   */
+
+  usleep(50000);
+
   alternate_timeout = cfg->timeout == BL616CL_WDT_MAXTIMEOUT ?
                       cfg->timeout - 1 : cfg->timeout + 1;
   ret = ioctl(fd, WDIOC_SETTIMEOUT, alternate_timeout);
