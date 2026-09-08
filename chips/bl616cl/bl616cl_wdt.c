@@ -71,7 +71,7 @@ struct bl616cl_wdt_lowerhalf_s
   const struct watchdog_ops_s *ops; /* Lower half operations */
   struct bflb_device_s *wdg;        /* LHAL WDT device */
   uint16_t timeout;                 /* Current timeout in milliseconds */
-  uint32_t lastreset;               /* System ticks at last counter reset */
+  clock_t lastreset;                /* System ticks at last counter reset */
   bool started;                     /* True: timer has been started */
 #ifdef CONFIG_BL616CL_WDT_CAPTURE
   xcpt_t handler;                   /* Capture callback */
@@ -152,11 +152,6 @@ static uint16_t bl616cl_wdt_ms_to_ticks(uint32_t timeout)
   uint32_t ticks = (timeout * BL616CL_WDT_HZ + 999) / 1000;
 
   return (uint16_t)ticks;
-}
-
-static uint32_t bl616cl_wdt_ticks_to_ms(uint32_t ticks)
-{
-  return (ticks * 1000 + BL616CL_WDT_HZ - 1) / BL616CL_WDT_HZ;
 }
 
 #ifdef CONFIG_BL616CL_WDT_CAPTURE
@@ -338,9 +333,7 @@ static int bl616cl_wdt_getstatus(struct watchdog_lowerhalf_s *lower,
   struct bl616cl_wdt_lowerhalf_s *priv =
     (struct bl616cl_wdt_lowerhalf_s *)lower;
   irqstate_t flags;
-  uint32_t compare;
-  uint32_t counter;
-  uint32_t elapsed;
+  clock_t elapsed;
 
   DEBUGASSERT(priv != NULL && status != NULL);
 
@@ -360,27 +353,14 @@ static int bl616cl_wdt_getstatus(struct watchdog_lowerhalf_s *lower,
 
   if (priv->started)
     {
-      compare = bl616cl_wdt_ms_to_ticks(priv->timeout);
-      counter = bflb_wdg_get_countervalue(priv->wdg);
-      if (counter < compare)
-        {
-          status->timeleft = bl616cl_wdt_ticks_to_ms(compare - counter);
-          if (status->timeleft > priv->timeout)
-            {
-              status->timeleft = priv->timeout;
-            }
-        }
-      else
-        {
-          /* WVR can briefly expose the previous value after WCR is
-           * written. Use the software timestamp until the new count is
-           * visible instead of reporting an immediate timeout.
-           */
+      /* WVR may still expose the old count after WCR resets it, even when
+       * that count is below the new compare value. Use the reset timestamp
+       * consistently so status cannot jump as the hardware read synchronizes.
+       */
 
-          elapsed = TICK2MSEC(clock_systime_ticks() - priv->lastreset);
-          status->timeleft = elapsed < priv->timeout ?
-                             priv->timeout - elapsed : 0;
-        }
+      elapsed = clock_systime_ticks() - priv->lastreset;
+      status->timeleft = elapsed < MSEC2TICK(priv->timeout) ?
+                         priv->timeout - TICK2MSEC(elapsed) : 0;
     }
   else
     {
