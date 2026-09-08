@@ -17,7 +17,7 @@
 #include "bl616cl_aon.h"
 #include "bl616cl_glb.h"
 #include "bl616cl_tzc_sec.h"
-#include "../../drivers/soc/bl616cl/std/include/bl616cl_psram.h"
+#include "bl616cl_psram.h"
 #include "bl616cl_psram_internal.h"
 
 static size_t g_psram_size;

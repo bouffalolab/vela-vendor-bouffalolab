@@ -37,7 +37,7 @@
 #include "bl616cl_lhal.h"
 #include "bflb_clock.h"
 #include "bflb_peri.h"
-#include "bl616cl_dma.h"
+#include <arch/chip/bl616cl_dma.h>
 #include "hardware/dma_reg.h"
 #include "hardware/bl616cl_memorymap.h"
 
