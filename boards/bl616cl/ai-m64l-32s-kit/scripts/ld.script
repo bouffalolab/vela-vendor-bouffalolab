@@ -52,6 +52,7 @@ PHDRS
   ram_rodata  PT_LOAD FLAGS(4); /* R  */
   ram_data    PT_LOAD FLAGS(6); /* RW */
   flash       PT_LOAD FLAGS(5); /* RX */
+  flash_rodata PT_LOAD FLAGS(4); /* R  */
   ram_bss     PT_LOAD FLAGS(6); /* RW */
 }
 
@@ -235,13 +236,20 @@ SECTIONS
   {
     _stext = ABSOLUTE(.);
     *(.text .text.*)
+    *(.gnu.linkonce.t.*)
+    . = ALIGN(4);
+  } > flash :flash
+
+  .rodata :
+  {
     *(.rodata .rodata.*)
     *(.srodata .srodata.*)
-    *(.gnu.linkonce.t.*)
     *(.gnu.linkonce.r.*)
     . = ALIGN(4);
+    /* NuttX defines _etext as the end of text plus rodata. */
+
     _etext = ABSOLUTE(.);
-  } > flash :flash
+  } > flash :flash_rodata
 
   .init_section :
   {
@@ -249,7 +257,7 @@ SECTIONS
     KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
     KEEP(*(.init_array))
     _einit = ABSOLUTE(.);
-  } > flash :flash
+  } > flash :flash_rodata
 
   .copy.table :
   {
@@ -269,7 +277,7 @@ SECTIONS
     LONG(0xffffffff);
     LONG(0xffffffff);
     LONG(0xffffffff);
-  } > flash :flash
+  } > flash :flash_rodata
 
   .zero.table :
   {
@@ -278,7 +286,7 @@ SECTIONS
     LONG(ADDR(.bss) + SIZEOF(.bss));
     LONG(0xffffffff);
     LONG(0xffffffff);
-  } > flash :flash
+  } > flash :flash_rodata
 
   __rom_end__ = LOADADDR(.zero.table) + SIZEOF(.zero.table);
 
