@@ -24,15 +24,7 @@ from typing import NoReturn, Optional, Sequence
 VERSION = "1.0"
 EXTRA_FLAGS = "-Wno-cpp -Wno-deprecated-declarations"
 BOARD_ROOT = "vendor/bouffalolab/boards"
-FLASH_SIZE = 0x400000
-MFG_OFFSET = 0x210000
-MFG_SIZE = 0x1F0000
-WHOLE_IMAGE_MAGICS = {
-    0x000000: bytes.fromhex("42464e50"),
-    0x00E000: bytes.fromhex("42465054"),
-    0x00F000: bytes.fromhex("42465054"),
-    0x010000: bytes.fromhex("42464e50"),
-}
+DEFAULT_FLASH_CHIP = "bl616cl"
 TOOLCHAIN_ARCHES = (
     "xtensa",
     "arm",
@@ -205,6 +197,8 @@ COMMANDS = {
                  value_name="bin"),
             Flag("--addr", "Flash address for --image (default 0x0)", takes_value=True,
                  value_name="addr"),
+            Flag("--chip", "FlashCube chip name (default bl616cl)", takes_value=True,
+                 value_name="chip"),
             Flag("--list", "List built firmware targets and exit"),
         ),
     ),
@@ -523,27 +517,6 @@ def require_configure(root: Path, out_dir: Path, board: Path, use_lib: str) -> N
 # ---------------------------------------------------------------------------
 
 
-def validate_whole_image(image: Path) -> None:
-    if not image.is_file():
-        raise FileNotFoundError(f"whole image does not exist: {image}")
-    if image.stat().st_size != FLASH_SIZE:
-        raise ValueError(f"whole image must be exactly 4 MiB: {image}")
-
-    with image.open("rb") as stream:
-        for offset, expected in WHOLE_IMAGE_MAGICS.items():
-            stream.seek(offset)
-            if stream.read(len(expected)) != expected:
-                raise ValueError(f"whole image layout is invalid: {image}")
-
-        stream.seek(MFG_OFFSET)
-        remaining = MFG_SIZE
-        while remaining:
-            chunk = stream.read(min(remaining, 64 * 1024))
-            if any(byte != 0xFF for byte in chunk):
-                raise ValueError(f"whole image MFG partition is not erased: {image}")
-            remaining -= len(chunk)
-
-
 def flash_tool_name(system: Optional[str] = None, machine: Optional[str] = None) -> str:
     system = system or platform.system()
     machine = (machine or platform.machine()).lower()
@@ -560,16 +533,24 @@ def flash_tool_name(system: Optional[str] = None, machine: Optional[str] = None)
     raise RuntimeError(f"unsupported host platform: {system}")
 
 
-def stage_flash_tool(root: Path, stage: Path) -> Path:
+def flash_chips(root: Path) -> list:
+    """List chip names supported by the bundled FlashCube tool."""
+    chips_dir = root / "vendor" / "bouffalolab" / "tools" / "bouffalo_flash_cube" / "chips"
+    if not chips_dir.is_dir():
+        return []
+    return sorted(entry.name for entry in chips_dir.iterdir() if entry.is_dir())
+
+
+def stage_flash_tool(root: Path, stage: Path, chip: str) -> Path:
     """Stage the FlashCube binary and chip assets into the given directory."""
     flash_tool_dir = root / "vendor" / "bouffalolab" / "tools" / "bouffalo_flash_cube"
     tool_name = flash_tool_name()
     flash_tool = flash_tool_dir / tool_name
+    chip_dir = flash_tool_dir / "chips" / chip
     required_files = (
         flash_tool,
-        flash_tool_dir / "chips" / "bl616cl" / "eflash_loader" / "eflash_loader_cfg.conf",
-        flash_tool_dir / "chips" / "bl616cl" / "efuse_bootheader" / "efuse_bootheader_cfg.conf",
-        flash_tool_dir / "chips" / "bl616cl" / "efuse_bootheader" / "flash_para.bin",
+        chip_dir / "eflash_loader" / "eflash_loader_cfg.conf",
+        chip_dir / "efuse_bootheader" / "efuse_bootheader_cfg.conf",
     )
     for path in required_files:
         if not path.is_file():
@@ -582,14 +563,15 @@ def stage_flash_tool(root: Path, stage: Path) -> Path:
     return staged_tool
 
 
-def flash_bin_image(root: Path, image: Path, addr: str, port: str, baudrate: int) -> int:
+def flash_bin_image(root: Path, image: Path, addr: str, port: str,
+                    baudrate: int, chip: str) -> int:
     """Burn a single binary to a flash address (default 0x0)."""
     with tempfile.TemporaryDirectory(prefix="vela-flash.") as temp_dir:
-        staged_tool = stage_flash_tool(root, Path(temp_dir))
+        staged_tool = stage_flash_tool(root, Path(temp_dir), chip)
         cmd = [
             str(staged_tool),
             "--interface=uart",
-            "--chipname=bl616cl",
+            f"--chipname={chip}",
             f"--port={port}",
             f"--baudrate={baudrate}",
             f"--firmware={image}",
@@ -599,14 +581,15 @@ def flash_bin_image(root: Path, image: Path, addr: str, port: str, baudrate: int
         return subprocess.run(cmd, cwd=root, env=build_env(root), check=False).returncode
 
 
-def flash_config_image(root: Path, config: Path, port: str, baudrate: int) -> int:
+def flash_config_image(root: Path, config: Path, port: str,
+                       baudrate: int, chip: str) -> int:
     """Flash per-partition firmware described by a FlashCube config ini."""
     with tempfile.TemporaryDirectory(prefix="vela-flash.") as temp_dir:
-        staged_tool = stage_flash_tool(root, Path(temp_dir))
+        staged_tool = stage_flash_tool(root, Path(temp_dir), chip)
         cmd = [
             str(staged_tool),
             "--interface=uart",
-            "--chipname=bl616cl",
+            f"--chipname={chip}",
             f"--config={config}",
             f"--port={port}",
             f"--baudrate={baudrate}",
@@ -690,6 +673,8 @@ def complete_candidates(root: Path, words: Sequence[str]) -> list:
     prev = words[-2]
     if prev == "--addr":
         return ["0x0"]
+    if prev == "--chip":
+        return flash_chips(root)
     if prev == "--config":
         return sorted(str(p) for p in root.glob("cmake_out/*/flash_prog_cfg.ini"))
     if prev in ("-j", "--jobs"):
@@ -1100,6 +1085,10 @@ def cmd_flash(root: Path, args: Parsed) -> int:
     config = options.get("--config")
 
     try:
+        chip = options.get("--chip") or DEFAULT_FLASH_CHIP
+        chips = flash_chips(root)
+        if chip not in chips:
+            fail(f"unknown flash chip '{chip}'", [f"available: {', '.join(chips)}"], 1)
         baudrate = int(options.get("--baudrate") or 2_000_000)
         if image is not None:
             if port is None:
@@ -1109,12 +1098,10 @@ def cmd_flash(root: Path, args: Parsed) -> int:
             image_path = Path(image).resolve()
             if not image_path.is_file():
                 fail(f"image does not exist: {image_path}", [], 1)
-            if image_path.stat().st_size == FLASH_SIZE:
-                validate_whole_image(image_path)
             status("flashing", f"{cyan(str(image_path), sys.stderr)} {dim('→', sys.stderr)} "
                               f"{cyan(port, sys.stderr)} @ {baudrate}")
             started = time.monotonic()
-            if flash_bin_image(root, image_path, addr, port, baudrate) != 0:
+            if flash_bin_image(root, image_path, addr, port, baudrate, chip) != 0:
                 fail("flash failed", [], 1)
             done("flashed", cyan(port, sys.stderr), time.monotonic() - started)
             return 0
@@ -1128,7 +1115,7 @@ def cmd_flash(root: Path, args: Parsed) -> int:
             status("flashing", f"{cyan(str(config_path), sys.stderr)} {dim('→', sys.stderr)} "
                               f"{cyan(port, sys.stderr)} @ {baudrate}")
             started = time.monotonic()
-            if flash_config_image(root, config_path, port, baudrate) != 0:
+            if flash_config_image(root, config_path, port, baudrate, chip) != 0:
                 fail("flash failed", [], 1)
             done("flashed", cyan(port, sys.stderr), time.monotonic() - started)
             return 0
@@ -1154,7 +1141,7 @@ def cmd_flash(root: Path, args: Parsed) -> int:
                           f"{cyan(ini_rel, sys.stderr)} {dim('→', sys.stderr)} "
                           f"{cyan(port, sys.stderr)} @ {baudrate}")
         started = time.monotonic()
-        if flash_config_image(root, ini, port, baudrate) != 0:
+        if flash_config_image(root, ini, port, baudrate, chip) != 0:
             fail("flash failed", [], 1)
         done("flashed", cyan(port, sys.stderr), time.monotonic() - started)
         return 0
