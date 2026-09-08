@@ -200,6 +200,9 @@ SECTIONS
   .noinit (NOLOAD) : AT(ADDR(.noinit))
   {
     *(.noinit .noinit.*)
+    /* Preserve the SDK no-init convention for reused objects. */
+
+    *(.noinit_data*)
     . = ALIGN(16);
   } > ram :ram_bss
 
