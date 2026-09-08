@@ -36,6 +36,9 @@
 #include "bl616cl_cpu.h"
 #include "bl616cl_flash.h"
 #include "bl616cl_memory.h"
+#ifdef CONFIG_BL616CL_PSRAM
+#include "bl616cl_psram_internal.h"
+#endif
 
 /****************************************************************************
  * Private Functions
@@ -64,6 +67,11 @@ void __bl616cl_start(void)
   bl616cl_clock_early_init();
   bl616cl_pinmux_early_uart();
   riscv_earlyserialinit();
+#ifdef CONFIG_BL616CL_PSRAM
+  /* Failures are reported before continuing with the internal SRAM heap. */
+
+  bl616cl_psram_initialize();
+#endif
   nx_start();
 
   for (; ; )
