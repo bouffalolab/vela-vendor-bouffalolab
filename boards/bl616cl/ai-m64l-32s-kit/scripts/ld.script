@@ -290,6 +290,25 @@ SECTIONS
 
   __rom_end__ = LOADADDR(.zero.table) + SIZEOF(.zero.table);
 
+  /* Startup copies and clears complete 32-bit words. */
+
+  ASSERT(((ADDR(.nocache_data) | LOADADDR(.nocache_data) |
+           SIZEOF(.nocache_data)) & 3) == 0,
+         "BL616CL .nocache_data copy must be word aligned")
+  ASSERT(((ADDR(.ram_code) | LOADADDR(.ram_code) |
+           SIZEOF(.ram_code)) & 3) == 0,
+         "BL616CL .ram_code copy must be word aligned")
+  ASSERT(((ADDR(.ram_rodata) | LOADADDR(.ram_rodata) |
+           SIZEOF(.ram_rodata)) & 3) == 0,
+         "BL616CL .ram_rodata copy must be word aligned")
+  ASSERT(((ADDR(.data) | LOADADDR(.data) |
+           SIZEOF(.data)) & 3) == 0,
+         "BL616CL .data copy must be word aligned")
+  ASSERT(((ADDR(.bss) | SIZEOF(.bss)) & 3) == 0,
+         "BL616CL .bss clear must be word aligned")
+  ASSERT(((ADDR(.copy.table) | ADDR(.zero.table)) & 3) == 0,
+         "BL616CL startup tables must be word aligned")
+
   ASSERT(SIZEOF(.fw_header) == 256,
          "BL616CL firmware header must be 256 bytes")
   ASSERT(SIZEOF(.init) <= 512, "BL616CL reset entry exceeds ROM header")
