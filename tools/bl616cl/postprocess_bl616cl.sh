@@ -10,7 +10,6 @@ POST_TOOL_DIR="$TOOLS_DIR/bflb_fw_post_proc"
 FLASH_TOOL_DIR="$TOOLS_DIR/bouffalo_flash_cube"
 FLASH_CONFIG="$SCRIPT_DIR/flash_factory_cfg.ini"
 FLASH_SIZE=$((0x400000))
-APP_SIZE=$((0x200000))
 IMAGE=
 RAW_IMAGE=
 BOARD_CONFIG=
@@ -126,6 +125,8 @@ IMAGE="$IMAGE_DIR/$(basename "$IMAGE")"
 RAW_IMAGE_DIR=$(cd "$(dirname "$RAW_IMAGE")" && pwd -P)
 RAW_IMAGE="$RAW_IMAGE_DIR/$(basename "$RAW_IMAGE")"
 BOARD_CONFIG=$(cd "$BOARD_CONFIG" && pwd -P)
+APP_SIZE=$(python3 "$SCRIPT_DIR/app_partition_size.py" \
+  "$BOARD_CONFIG/partition_cfg_4M.toml")
 WHOLE_IMAGE="$IMAGE_DIR/nuttx.whole.bin"
 
 select_tools
@@ -168,7 +169,7 @@ do
 done
 
 if [ "$(file_size "$BUILD_STAGE/nuttx.bin")" -gt "$APP_SIZE" ]; then
-  fail "application image exceeds the 0x200000-byte partition"
+  fail "application image exceeds the $APP_SIZE-byte partition"
 fi
 
 cp "$FLASH_TOOL" "$FLASH_STAGE/$FLASH_TOOL_NAME"

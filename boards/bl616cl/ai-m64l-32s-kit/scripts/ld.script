@@ -23,14 +23,24 @@
 OUTPUT_ARCH(riscv)
 ENTRY(__start)
 
+/* WRAM and EM share the upper 160 KiB. Keep the current non-wireless
+ * allocation here until wireless configuration is integrated.
+ */
+
+__bl616cl_wram_size = 64K;
+__LD_CONFIG_EM_SEL = 0;
+__bl616cl_ram_size = 224K - 1K + 160K - __bl616cl_wram_size;
+
 MEMORY
 {
   fw_header (rx)  : ORIGIN = 0x7ffff000, LENGTH = 4K
   rom_header (rx)  : ORIGIN = 0x80000000, LENGTH = 6K
-  flash (rx)  : ORIGIN = 0x80001800, LENGTH = 4M - 6K
-  ram_nocache (!rx) : ORIGIN = 0x20fc0400, LENGTH = 319K
-  ram (!rx) : ORIGIN = 0x60fc0400, LENGTH = 319K
-  ram_wifi (wxa) : ORIGIN = 0x21010000, LENGTH = 64K
+  flash (rx) : ORIGIN = 0x80001800,
+               LENGTH = __bl616cl_app_size - 4K - 6K
+  ram_nocache (!rx) : ORIGIN = 0x20fc0400, LENGTH = __bl616cl_ram_size
+  ram (!rx) : ORIGIN = 0x60fc0400, LENGTH = __bl616cl_ram_size
+  ram_wifi (wxa) : ORIGIN = 0x21020000 - __bl616cl_wram_size,
+                   LENGTH = __bl616cl_wram_size - __LD_CONFIG_EM_SEL
 }
 
 PHDRS
@@ -54,7 +64,9 @@ SECTIONS
 
   __rom_header_start__ = ORIGIN(rom_header);
   __bl616cl_cache_xip_start = ABSOLUTE(ORIGIN(rom_header));
-  __bl616cl_cache_xip_end = ABSOLUTE(ORIGIN(flash) + LENGTH(flash));
+  /* Cache maintenance covers the hardware XIP window, not just this image. */
+
+  __bl616cl_cache_xip_end = ABSOLUTE(ORIGIN(rom_header) + 4M);
   __bl616cl_cache_ram_start = ABSOLUTE(ORIGIN(ram));
   __bl616cl_cache_ram_end = ABSOLUTE(ORIGIN(ram) + LENGTH(ram));
 
@@ -170,8 +182,6 @@ SECTIONS
     LONG(0xffffffff);
   } > flash :flash
 
-  __LD_CONFIG_EM_SEL = 0;
-
   __ram_nocache_start__ = ORIGIN(ram_nocache);
 
   .nocache_data :
@@ -247,11 +257,15 @@ SECTIONS
     _ebss = ABSOLUTE(.);
   } > ram :ram_bss
 
-  . = ALIGN(16);
-  __StackBase = ABSOLUTE(.);
-  . += CONFIG_IDLETHREAD_STACKSIZE;
-  __StackTop = ABSOLUTE(.);
-  __HeapBase = ABSOLUTE(.);
+  .idle_stack (NOLOAD) : AT(ADDR(.idle_stack))
+  {
+    . = ALIGN(16);
+    __StackBase = ABSOLUTE(.);
+    . += CONFIG_IDLETHREAD_STACKSIZE;
+    __StackTop = ABSOLUTE(.);
+  } > ram :ram_bss
+
+  __HeapBase = ALIGN(__StackTop, 16);
   __HeapLimit = ORIGIN(ram) + LENGTH(ram);
 
   __rom_end__ = LOADADDR(.data) + SIZEOF(.data);
@@ -272,7 +286,17 @@ SECTIONS
   ASSERT(__ram_nocache_end__ <= ORIGIN(ram_nocache) + LENGTH(ram_nocache),
          "BL616CL nocache RAM overflow")
   ASSERT(__HeapBase < __HeapLimit, "BL616CL cacheable RAM overflow")
-  ASSERT(__HeapLimit == 0x61010000, "BL616CL heap overlaps WiFi RAM")
+  ASSERT(__bl616cl_app_size > 4K + 6K,
+         "BL616CL application partition is too small")
+  ASSERT(__bl616cl_wram_size >= 64K && __bl616cl_wram_size <= 160K,
+         "BL616CL WRAM size is invalid")
+  ASSERT(__LD_CONFIG_EM_SEL == 0 || __LD_CONFIG_EM_SEL == 16K ||
+         __LD_CONFIG_EM_SEL == 32K, "BL616CL EM size is invalid")
+  ASSERT(__LD_CONFIG_EM_SEL <= __bl616cl_wram_size,
+         "BL616CL EM exceeds WRAM")
+  ASSERT(__HeapLimit - 0x40000000 == ORIGIN(ram_wifi),
+         "BL616CL heap overlaps WiFi RAM")
+  ASSERT((__StackTop & 15) == 0, "BL616CL idle stack must be 16-byte aligned")
 
   /DISCARD/ :
   {
