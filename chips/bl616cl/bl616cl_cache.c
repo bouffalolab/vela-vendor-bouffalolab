@@ -37,6 +37,9 @@
 #include "bl616cl_cache.h"
 #include "bl616cl_cpu.h"
 #include "hardware/bl616cl_core.h"
+#ifdef CONFIG_BL616CL_PSRAM
+#include "include/bl616cl_psram.h"
+#endif
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -80,6 +83,14 @@ static bool bl616cl_cache_domain_contains(uintptr_t start, uintptr_t end,
 
 static bool bl616cl_cache_ram_contains(uintptr_t start, uintptr_t end)
 {
+#ifdef CONFIG_BL616CL_PSRAM
+  if (bl616cl_cache_domain_contains(start, end, BL616CL_PSRAM_BASE,
+        BL616CL_PSRAM_BASE + bl616cl_psram_size_get()))
+    {
+      return true;
+    }
+#endif
+
   return bl616cl_cache_domain_contains(
     start, end, (uintptr_t)&__bl616cl_cache_ram_start,
     (uintptr_t)&__bl616cl_cache_ram_end);

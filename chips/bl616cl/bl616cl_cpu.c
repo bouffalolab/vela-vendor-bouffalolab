@@ -30,6 +30,9 @@
 
 #include "bl616cl_cpu.h"
 #include "hardware/bl616cl_core.h"
+#ifdef CONFIG_BL616CL_PSRAM
+#include "include/bl616cl_psram.h"
+#endif
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -46,6 +49,15 @@
 
 static const pmp_config_entry_t g_bl616cl_pmp_entry[] =
 {
+#ifdef CONFIG_BL616CL_PSRAM
+  [7] =
+  {
+    .entry_flag = ENTRY_FLAG_ADDR_NAPOT | ENTRY_FLAG_M_MODE_L |
+                  ENTRY_FLAG_PERM_R | ENTRY_FLAG_PERM_W,
+    .entry_pa_base = BL616CL_PSRAM_NOCACHE_BASE,
+    .entry_pa_length = PMP_REG_SZ_16M,
+  },
+#endif
   [8] =
   {
     .entry_flag = ENTRY_FLAG_ADDR_NAPOT | ENTRY_FLAG_M_MODE_L |
@@ -76,6 +88,16 @@ static const pmp_config_entry_t g_bl616cl_pmp_entry[] =
     .entry_pa_base = 0x80000000,
     .entry_pa_length = PMP_REG_SZ_64M,
   },
+#ifdef CONFIG_BL616CL_PSRAM
+  [12] =
+  {
+    .entry_flag = ENTRY_FLAG_ADDR_NAPOT | ENTRY_FLAG_M_MODE_L |
+                  ENTRY_FLAG_PERM_R | ENTRY_FLAG_PERM_W |
+                  ENTRY_FLAG_PERM_X,
+    .entry_pa_base = BL616CL_PSRAM_BASE,
+    .entry_pa_length = PMP_REG_SZ_16M,
+  },
+#endif
   [13] =
   {
     .entry_flag = ENTRY_FLAG_ADDR_NAPOT | ENTRY_FLAG_M_MODE_L |

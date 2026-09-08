@@ -43,6 +43,20 @@ config BL616CL_CACHE
 		the coherent-cache ABI requires both implementations. The boot path
 		continues to enable hardware caches when this option is disabled.
 
+config BL616CL_PSRAM
+	bool "Winbond x8 PSRAM heap"
+	default n
+	depends on BUILD_FLAT && !MM_SMALL && MM_REGIONS >= 2
+	depends on !PMP_NO_INIT
+	select BL616CL_CACHE
+	---help---
+		Initialize Winbond x8 PSRAM and add its detected
+		4, 8 or 16 MiB capacity to the default heap. Initialization failures
+		are reported on the early console and leave PSRAM out of the heap.
+		Without factory trim, calibrate DQS using the first 4 MiB before
+		heap registration. Corrupt factory trim and 32 MiB devices are not
+		supported. This option does not place static sections in PSRAM.
+
 menuconfig BL616CL_UART
 	bool "UART"
 	default y

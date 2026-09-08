@@ -26,6 +26,10 @@
 #include <nuttx/config.h>
 
 #include "chip.h"
+#ifdef CONFIG_BL616CL_PSRAM
+#include <nuttx/mm/mm.h>
+#include "include/bl616cl_psram.h"
+#endif
 
 /****************************************************************************
  * Private Types
@@ -99,5 +103,13 @@ void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 #if CONFIG_MM_REGIONS > 1
 void riscv_addregion(void)
 {
+#ifdef CONFIG_BL616CL_PSRAM
+  size_t size = bl616cl_psram_size_get();
+
+  if (size != 0)
+    {
+      umm_addregion((void *)BL616CL_PSRAM_BASE, size);
+    }
+#endif
 }
 #endif
