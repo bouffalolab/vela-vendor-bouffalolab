@@ -137,8 +137,10 @@ SECTIONS
   {
     _stext = ABSOLUTE(.);
     *(.text .text.*)
-    *(.rodata .rodata.*)
-    *(.srodata .srodata.*)
+    *(EXCLUDE_FILE (*bflb_sflash.c.o) .rodata)
+    *(EXCLUDE_FILE (*bflb_sflash.c.o) .rodata.*)
+    *(EXCLUDE_FILE (*bflb_sflash.c.o) .srodata)
+    *(EXCLUDE_FILE (*bflb_sflash.c.o) .srodata.*)
     *(.gnu.linkonce.t.*)
     *(.gnu.linkonce.r.*)
     . = ALIGN(4);
@@ -221,6 +223,11 @@ SECTIONS
     . = ALIGN(4);
     *(.tcm_const*)
     *(.sclock_rlt_const*)
+    /* Flash command functions use compiler-generated io_mode jump tables
+     * before XIP is restored. Keep those tables with the RAM code.
+     */
+
+    *bflb_sflash.c.o(.rodata .rodata.* .srodata .srodata.*)
     . = ALIGN(4);
   } > ram AT > flash :ram_rodata
 
