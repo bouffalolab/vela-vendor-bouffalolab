@@ -43,25 +43,16 @@ MEMORY
                    LENGTH = __bl616cl_wram_size - __LD_CONFIG_EM_SEL
 }
 
-PHDRS
-{
-  fw_header   PT_LOAD FLAGS(4); /* R  */
-  rom_header  PT_LOAD FLAGS(5); /* RX */
-  ram_nocache PT_LOAD FLAGS(6); /* RW */
-  ram_code    PT_LOAD FLAGS(5); /* RX */
-  ram_rodata  PT_LOAD FLAGS(4); /* R  */
-  ram_data    PT_LOAD FLAGS(6); /* RW */
-  flash       PT_LOAD FLAGS(5); /* RX */
-  flash_rodata PT_LOAD FLAGS(4); /* R  */
-  ram_bss     PT_LOAD FLAGS(6); /* RW */
-}
+/* Let ld derive program headers from section attributes. Script-generated
+ * constants need READONLY because they have no read-only input sections.
+ */
 
 SECTIONS
 {
   .fw_header :
   {
     KEEP(*(.fw_header))
-  } > fw_header :fw_header
+  } > fw_header
 
   __rom_header_start__ = ORIGIN(rom_header);
   __bl616cl_cache_xip_start = ABSOLUTE(ORIGIN(rom_header));
@@ -75,9 +66,9 @@ SECTIONS
   {
     KEEP(*(.text.entry))
     KEEP(*(SORT_NONE(.init)))
-  } > rom_header :rom_header
+  } > rom_header
 
-  .multi_bins ORIGIN(rom_header) + 512 :
+  .multi_bins ORIGIN(rom_header) + 512 (READONLY) :
   {
     __multi_bins__ = ABSOLUTE(.);
     LONG(0x464c4553) LONG(0x00000000)
@@ -95,15 +86,15 @@ SECTIONS
     LONG(0x00000000) LONG(0x00000000)
     LONG(0xffffffff) LONG(0xffffffff)
     LONG(0xffffffff) LONG(0xffffffff)
-  } > rom_header :rom_header
+  } > rom_header
 
-  .rftlv.tool ORIGIN(rom_header) + 1K :
+  .rftlv.tool ORIGIN(rom_header) + 1K (READONLY) :
   {
     _ld_symbol_rftlv_address = ABSOLUTE(.);
     LONG(0x46524c42)
     LONG(0x41524150)
     . = ORIGIN(rom_header) + 3K;
-  } > rom_header :rom_header
+  } > rom_header
 
   .ver ORIGIN(rom_header) + 3K :
   {
@@ -117,7 +108,7 @@ SECTIONS
     _version_info_section_start = ABSOLUTE(.);
     KEEP(*(.version.*))
     _version_info_section_end = ABSOLUTE(.);
-  } > rom_header :rom_header
+  } > rom_header
 
   .init_code :
   {
@@ -129,7 +120,7 @@ SECTIONS
     KEEP(*bl616cl_cache.c.o(.text.bl616cl_cache_early_init))
     KEEP(*rv_pmp.c.o(.text.rvpmp_* .rodata.rvpmp_*))
     KEEP(*bl616cl_glb.c.o(.text.GLB_Set_EM_Sel))
-  } > rom_header :rom_header
+  } > rom_header
 
   __rom_header_used_end__ = ABSOLUTE(.);
   __rom_header_end__ = ORIGIN(rom_header) + LENGTH(rom_header);
@@ -141,7 +132,7 @@ SECTIONS
     . = ALIGN(4);
     *(.nocache_ram)
     . = ALIGN(4);
-  } > ram_nocache AT > flash :ram_nocache
+  } > ram_nocache AT > flash
 
   .nocache_noinit (NOLOAD) :
   {
@@ -149,7 +140,7 @@ SECTIONS
     *(.nocache_noinit_ram)
     *(.noncacheable)
     . = ALIGN(4);
-  } > ram_nocache :ram_nocache
+  } > ram_nocache
 
   __ram_nocache_end__ = ABSOLUTE(.);
 
@@ -158,7 +149,7 @@ SECTIONS
     . += (ABSOLUTE(__ram_nocache_end__) -
           ABSOLUTE(ORIGIN(ram_nocache)));
     . = ALIGN(32);
-  } > ram :NONE
+  } > ram
 
   .ram_code :
   {
@@ -166,7 +157,7 @@ SECTIONS
     *(.tcm_code*)
     *(.sclock_rlt_code*)
     . = ALIGN(4);
-  } > ram AT > flash :ram_code
+  } > ram AT > flash
 
   .ram_rodata :
   {
@@ -179,7 +170,7 @@ SECTIONS
 
     *bflb_sflash.c.o(.rodata .rodata.* .srodata .srodata.*)
     . = ALIGN(4);
-  } > ram AT > flash :ram_rodata
+  } > ram AT > flash
 
   .data :
   {
@@ -192,7 +183,7 @@ SECTIONS
     *(.gnu.linkonce.d.*)
     . = ALIGN(4);
     _edata = ABSOLUTE(.);
-  } > ram AT > flash :ram_data
+  } > ram AT > flash
 
   /* Give NOLOAD sections an explicit RAM LMA so they do not inherit the
    * preceding flash-backed data mapping.
@@ -205,7 +196,7 @@ SECTIONS
 
     *(.noinit_data*)
     . = ALIGN(16);
-  } > ram :ram_bss
+  } > ram
 
   .bss (NOLOAD) : AT(ADDR(.bss))
   {
@@ -215,7 +206,7 @@ SECTIONS
     *(COMMON)
     . = ALIGN(16);
     _ebss = ABSOLUTE(.);
-  } > ram :ram_bss
+  } > ram
 
   .idle_stack (NOLOAD) : AT(ADDR(.idle_stack))
   {
@@ -223,7 +214,7 @@ SECTIONS
     __StackBase = ABSOLUTE(.);
     . += CONFIG_IDLETHREAD_STACKSIZE;
     __StackTop = ABSOLUTE(.);
-  } > ram :ram_bss
+  } > ram
 
   __HeapBase = ALIGN(__StackTop, 16);
   __HeapLimit = ORIGIN(ram) + LENGTH(ram);
@@ -238,7 +229,7 @@ SECTIONS
     *(.text .text.*)
     *(.gnu.linkonce.t.*)
     . = ALIGN(4);
-  } > flash :flash
+  } > flash
 
   .rodata :
   {
@@ -249,7 +240,7 @@ SECTIONS
     /* NuttX defines _etext as the end of text plus rodata. */
 
     _etext = ABSOLUTE(.);
-  } > flash :flash_rodata
+  } > flash
 
   .init_section :
   {
@@ -257,9 +248,9 @@ SECTIONS
     KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
     KEEP(*(.init_array))
     _einit = ABSOLUTE(.);
-  } > flash :flash_rodata
+  } > flash
 
-  .copy.table :
+  .copy.table (READONLY) :
   {
     __mem_copy_sections = ABSOLUTE(.);
     LONG(ADDR(.nocache_data));
@@ -277,24 +268,24 @@ SECTIONS
     LONG(0xffffffff);
     LONG(0xffffffff);
     LONG(0xffffffff);
-  } > flash :flash_rodata
+  } > flash
 
-  .zero.table :
+  .zero.table (READONLY) :
   {
     __mem_setz_sections = ABSOLUTE(.);
     LONG(ADDR(.bss));
     LONG(ADDR(.bss) + SIZEOF(.bss));
     LONG(0xffffffff);
     LONG(0xffffffff);
-  } > flash :flash_rodata
+  } > flash
 
   /* Keep all flash-backed output sections above this final marker. */
 
-  .image_end :
+  .image_end (READONLY) :
   {
     . = ALIGN(4);
     __rom_end__ = ABSOLUTE(.);
-  } > flash :flash_rodata
+  } > flash
 
   /* Startup copies and clears complete 32-bit words. */
 
