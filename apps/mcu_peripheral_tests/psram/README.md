@@ -8,21 +8,22 @@ PSRAM 作为 NuttX default heap 的第二个 region 使用，普通 `malloc()` �
 ## 构建与运行
 
 ```sh
-vendor/bouffalolab/vela build ai-m64l-32s-kit/nsh-psram -j14
-vendor/bouffalolab/vela flash ai-m64l-32s-kit/nsh-psram --port /dev/ttyUSB2
+vendor/bouffalolab/vela build ai-m64l-32s-kit/nsh-peripherals -j14
+vendor/bouffalolab/vela flash ai-m64l-32s-kit/nsh-peripherals --port /dev/ttyUSB2
 ```
 
 串口为 2000000 baud；进入 NSH 后执行 `mcu_psram_test`，最终应输出 `PSRAM PASS`。
 NSH 可能先返回提示符，再输出异步 app 的结果，验收应等待最终 PASS/FAIL。
 
-`nsh-psram` 是含手动测试 app 的配置；基础 `nsh` 默认关闭 PSRAM。
+`nsh-peripherals` 是含手动测试 app 的配置；基础 `nsh` 默认关闭 PSRAM。
 产品配置通过 `vela menuconfig` 设置 `MM_REGIONS >= 2`、`BL616CL_PSRAM=y`，
 保留 `BL_MCU_PERIPHERAL_TESTS_PSRAM=n`。配置依赖 flat build、非 `MM_SMALL`、
 启用 PMP 初始化和 default heap；cache API 随 PSRAM 自动启用。
 
 ## 测试含义
 
-- 从 heap 分配“实际容量减 64 KiB”，确认返回地址落在 PSRAM。
+- 从 heap 分配“实际容量与最大空闲块的较小值减 64 KiB”，确认返回地址落在 PSRAM。
+  该方式兼容统一配置的 KASAN shadow 和 heap 元数据开销。
 - 四轮地址相关模式写入后 clean，通过 uncached alias 核对整个分配区。
 - 预热 1 KiB cache 后从 uncached alias 改写；确认 invalidate 前仍读到旧值，
   invalidate 后读到新值，避免仅因 cache 命中而误判。

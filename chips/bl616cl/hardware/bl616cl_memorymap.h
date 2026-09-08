@@ -45,6 +45,6 @@
 #endif
 
 #include "bl616cl.h"
-#include "../../../drivers/lhal/config/bl616cl/bl616cl_memorymap.h"
+#include <bl616cl_memorymap.h>
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIP_BL616CL_HARDWARE_BL616CL_MEMORYMAP_H */

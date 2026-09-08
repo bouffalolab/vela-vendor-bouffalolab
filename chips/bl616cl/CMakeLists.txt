@@ -85,6 +85,4 @@ endif()
 
 target_sources(arch PRIVATE ${SRCS})
 
-target_include_directories(arch PRIVATE ${NUTTX_CHIP_ABS_DIR}/include)
-
 target_compile_definitions(arch PRIVATE BL616CL)

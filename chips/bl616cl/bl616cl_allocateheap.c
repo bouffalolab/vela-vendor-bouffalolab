@@ -28,7 +28,7 @@
 #include "chip.h"
 #ifdef CONFIG_BL616CL_PSRAM
 #include <nuttx/mm/mm.h>
-#include "include/bl616cl_psram.h"
+#include <arch/chip/bl616cl_psram.h>
 #endif
 
 /****************************************************************************

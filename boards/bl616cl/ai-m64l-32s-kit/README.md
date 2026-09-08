@@ -2,9 +2,12 @@
 
 ## 统一外设测试配置
 
-`configs/nsh-peripherals` 用于在同一固件中回归 DMA、I2C、PWM、SPI、
+`configs/nsh-peripherals` 用于在同一固件中回归 DMA、I2C、PSRAM、PWM、SPI、
 Timer、UART 和 WDT。该配置保留 GPIO lower-half，但关闭与 SPI0 引脚冲突的
 GPIO 示例和测试命令。
+
+后续新增外设驱动及测试统一加入此配置，不为单个外设新增 defconfig。
+基础 `configs/nsh` 提供 `free`、`ps` 命令，并通过启动脚本挂载 `/proc`。
 
 QFN48 封装提供 GPIO0 到 GPIO36。板级固定或保留资源如下：
 

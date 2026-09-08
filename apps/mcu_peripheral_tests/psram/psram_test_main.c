@@ -40,6 +40,7 @@ int main(int argc, FAR char *argv[])
   uintptr_t start;
   uintptr_t end;
   size_t capacity = bl616cl_psram_size_get();
+  struct mallinfo info = mallinfo();
   size_t bytes;
   size_t words;
   size_t i;
@@ -48,13 +49,17 @@ int main(int argc, FAR char *argv[])
   uint32_t actual;
   int ret = EXIT_FAILURE;
 
-  if (capacity <= PSRAM_RESERVE)
+  bytes = capacity < (size_t)info.mxordblk ?
+          capacity : (size_t)info.mxordblk;
+  if (bytes <= PSRAM_RESERVE)
     {
       printf("PSRAM FAIL: unavailable, capacity=%zu\n", capacity);
       return ret;
     }
 
-  bytes = capacity - PSRAM_RESERVE;
+  /* KASAN shadow and heap metadata reduce the largest usable block. */
+
+  bytes = (bytes - PSRAM_RESERVE) & ~(size_t)31;
   cached = memalign(32, bytes);
   start = (uintptr_t)cached;
   end = start + bytes;
