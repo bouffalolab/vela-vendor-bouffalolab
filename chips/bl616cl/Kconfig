@@ -30,6 +30,8 @@ config ARCH_CHIP_BL616CL
 
 endchoice
 
+menu "BL616CL Peripheral Support"
+
 config BL616CL_CACHE
 	bool "OpenVela cache maintenance API"
 	default y
@@ -40,8 +42,6 @@ config BL616CL_CACHE
 		OpenVela cache API. I-cache and D-cache are selected together because
 		the coherent-cache ABI requires both implementations. The boot path
 		continues to enable hardware caches when this option is disabled.
-
-menu "BL616CL Peripheral Support"
 
 menuconfig BL616CL_UART
 	bool "UART"
