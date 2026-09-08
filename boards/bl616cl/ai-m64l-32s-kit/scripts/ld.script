@@ -47,11 +47,11 @@ PHDRS
 {
   fw_header   PT_LOAD FLAGS(4); /* R  */
   rom_header  PT_LOAD FLAGS(5); /* RX */
-  flash       PT_LOAD FLAGS(5); /* RX */
   ram_nocache PT_LOAD FLAGS(6); /* RW */
   ram_code    PT_LOAD FLAGS(5); /* RX */
   ram_rodata  PT_LOAD FLAGS(4); /* R  */
   ram_data    PT_LOAD FLAGS(6); /* RW */
+  flash       PT_LOAD FLAGS(5); /* RX */
   ram_bss     PT_LOAD FLAGS(6); /* RW */
 }
 
@@ -132,57 +132,6 @@ SECTIONS
 
   __rom_header_used_end__ = ABSOLUTE(.);
   __rom_header_end__ = ORIGIN(rom_header) + LENGTH(rom_header);
-
-  .text ORIGIN(flash) :
-  {
-    _stext = ABSOLUTE(.);
-    *(.text .text.*)
-    *(EXCLUDE_FILE (*bflb_sflash.c.o) .rodata)
-    *(EXCLUDE_FILE (*bflb_sflash.c.o) .rodata.*)
-    *(EXCLUDE_FILE (*bflb_sflash.c.o) .srodata)
-    *(EXCLUDE_FILE (*bflb_sflash.c.o) .srodata.*)
-    *(.gnu.linkonce.t.*)
-    *(.gnu.linkonce.r.*)
-    . = ALIGN(4);
-    _etext = ABSOLUTE(.);
-  } > flash :flash
-
-  .init_section :
-  {
-    _sinit = ABSOLUTE(.);
-    KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
-    KEEP(*(.init_array))
-    _einit = ABSOLUTE(.);
-  } > flash :flash
-
-  .copy.table :
-  {
-    __mem_copy_sections = ABSOLUTE(.);
-    LONG(ADDR(.nocache_data));
-    LONG(ADDR(.nocache_data) + SIZEOF(.nocache_data));
-    LONG(LOADADDR(.nocache_data));
-    LONG(ADDR(.ram_code));
-    LONG(ADDR(.ram_code) + SIZEOF(.ram_code));
-    LONG(LOADADDR(.ram_code));
-    LONG(ADDR(.ram_rodata));
-    LONG(ADDR(.ram_rodata) + SIZEOF(.ram_rodata));
-    LONG(LOADADDR(.ram_rodata));
-    LONG(ADDR(.data));
-    LONG(ADDR(.data) + SIZEOF(.data));
-    LONG(LOADADDR(.data));
-    LONG(0xffffffff);
-    LONG(0xffffffff);
-    LONG(0xffffffff);
-  } > flash :flash
-
-  .zero.table :
-  {
-    __mem_setz_sections = ABSOLUTE(.);
-    LONG(ADDR(.bss));
-    LONG(ADDR(.bss) + SIZEOF(.bss));
-    LONG(0xffffffff);
-    LONG(0xffffffff);
-  } > flash :flash
 
   __ram_nocache_start__ = ORIGIN(ram_nocache);
 
@@ -275,7 +224,60 @@ SECTIONS
   __HeapBase = ALIGN(__StackTop, 16);
   __HeapLimit = ORIGIN(ram) + LENGTH(ram);
 
-  __rom_end__ = LOADADDR(.data) + SIZEOF(.data);
+  /* Special RAM sections consume their inputs first. Place the remaining
+   * XIP code and constants after their flash load images.
+   */
+
+  .text ALIGN(LOADADDR(.data) + SIZEOF(.data), 4) :
+  {
+    _stext = ABSOLUTE(.);
+    *(.text .text.*)
+    *(.rodata .rodata.*)
+    *(.srodata .srodata.*)
+    *(.gnu.linkonce.t.*)
+    *(.gnu.linkonce.r.*)
+    . = ALIGN(4);
+    _etext = ABSOLUTE(.);
+  } > flash :flash
+
+  .init_section :
+  {
+    _sinit = ABSOLUTE(.);
+    KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
+    KEEP(*(.init_array))
+    _einit = ABSOLUTE(.);
+  } > flash :flash
+
+  .copy.table :
+  {
+    __mem_copy_sections = ABSOLUTE(.);
+    LONG(ADDR(.nocache_data));
+    LONG(ADDR(.nocache_data) + SIZEOF(.nocache_data));
+    LONG(LOADADDR(.nocache_data));
+    LONG(ADDR(.ram_code));
+    LONG(ADDR(.ram_code) + SIZEOF(.ram_code));
+    LONG(LOADADDR(.ram_code));
+    LONG(ADDR(.ram_rodata));
+    LONG(ADDR(.ram_rodata) + SIZEOF(.ram_rodata));
+    LONG(LOADADDR(.ram_rodata));
+    LONG(ADDR(.data));
+    LONG(ADDR(.data) + SIZEOF(.data));
+    LONG(LOADADDR(.data));
+    LONG(0xffffffff);
+    LONG(0xffffffff);
+    LONG(0xffffffff);
+  } > flash :flash
+
+  .zero.table :
+  {
+    __mem_setz_sections = ABSOLUTE(.);
+    LONG(ADDR(.bss));
+    LONG(ADDR(.bss) + SIZEOF(.bss));
+    LONG(0xffffffff);
+    LONG(0xffffffff);
+  } > flash :flash
+
+  __rom_end__ = LOADADDR(.zero.table) + SIZEOF(.zero.table);
 
   ASSERT(SIZEOF(.fw_header) == 256,
          "BL616CL firmware header must be 256 bytes")
@@ -286,8 +288,10 @@ SECTIONS
          "BL616CL version offset is invalid")
   ASSERT(__rom_header_used_end__ <= __rom_header_end__,
          "BL616CL pre-cache code exceeds ROM header")
-  ASSERT(ADDR(.text) == ORIGIN(flash),
-         "BL616CL XIP text must follow the ROM header")
+  ASSERT(LOADADDR(.nocache_data) == ORIGIN(flash),
+         "BL616CL RAM load images must follow the ROM header")
+  ASSERT(ADDR(.text) == ALIGN(LOADADDR(.data) + SIZEOF(.data), 4),
+         "BL616CL XIP text must follow the RAM load images")
   ASSERT(__rom_end__ <= ORIGIN(flash) + LENGTH(flash),
          "BL616CL flash image overflow")
   ASSERT(__ram_nocache_end__ <= ORIGIN(ram_nocache) + LENGTH(ram_nocache),
