@@ -1,0 +1,22 @@
+config BL_OS_FEATURE_TESTS_UBSAN
+	bool "Undefined behavior sanitizer test"
+	default n
+	depends on BUILD_FLAT && BUILTIN
+	depends on MM_UBSAN && !MM_UBSAN_ALL
+	depends on !MM_UBSAN_TRAP_ON_ERROR && !MM_UBSAN_DUMMY
+	---help---
+		Enable deterministic recover-mode UBSAN tests. The test target is
+		instrumented for signed integer overflow and invalid shifts without
+		enabling full-image instrumentation.
+
+if BL_OS_FEATURE_TESTS_UBSAN
+
+config BL_OS_FEATURE_TESTS_UBSAN_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_OS_FEATURE_TESTS_UBSAN_STACKSIZE
+	int "Stack size"
+	default 2048
+
+endif

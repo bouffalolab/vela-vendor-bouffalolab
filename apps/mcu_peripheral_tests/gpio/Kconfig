@@ -1,0 +1,22 @@
+config BL_MCU_PERIPHERAL_TESTS_GPIO
+	tristate "MCU peripheral GPIO tests"
+	default n
+	depends on DEV_GPIO && !DISABLE_SIGNALS
+	---help---
+		Enable the MCU peripheral GPIO case runner.
+
+if BL_MCU_PERIPHERAL_TESTS_GPIO
+
+config BL_MCU_PERIPHERAL_TESTS_GPIO_PROGNAME
+	string "Program name"
+	default "mcu_gpio_test"
+
+config BL_MCU_PERIPHERAL_TESTS_GPIO_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_GPIO_STACKSIZE
+	int "Stack size"
+	default DEFAULT_TASK_STACKSIZE
+
+endif
