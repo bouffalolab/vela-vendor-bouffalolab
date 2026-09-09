@@ -1,0 +1,9 @@
+tools/bflb_fw_post_proc/bflb_fw_post_proc-* filter=lfs diff=lfs merge=lfs -text
+tools/bflb_fw_post_proc/*.exe filter=lfs diff=lfs merge=lfs -text
+tools/bouffalo_flash_cube/BLFlashCommand-* filter=lfs diff=lfs merge=lfs -text
+tools/bouffalo_flash_cube/BLFlashCube-* filter=lfs diff=lfs merge=lfs -text
+tools/bouffalo_flash_cube/**/*.exe filter=lfs diff=lfs merge=lfs -text
+tools/bouffalo_flash_cube/**/*.dll filter=lfs diff=lfs merge=lfs -text
+tools/bouffalo_flash_cube/**/*.dylib filter=lfs diff=lfs merge=lfs -text
+tools/bouffalo_flash_cube/**/*.so filter=lfs diff=lfs merge=lfs -text
+tools/bouffalo_flash_cube/**/*.so.* filter=lfs diff=lfs merge=lfs -text

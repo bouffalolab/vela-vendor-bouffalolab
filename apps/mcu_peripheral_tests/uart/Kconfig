@@ -1,0 +1,25 @@
+config BL_MCU_PERIPHERAL_TESTS_UART
+	tristate "MCU peripheral UART tests"
+	default n
+	depends on SERIAL && SERIAL_TERMIOS && BL616CL_UART1
+	depends on !DISABLE_PTHREAD
+	---help---
+		Enable the BL616CL UART1 standard-serial case runner.  UART1 is
+			opened as /dev/ttyS1 and requires an external loopback from GPIO14
+			(TX) to GPIO15 (RX) for the data cases.
+
+if BL_MCU_PERIPHERAL_TESTS_UART
+
+config BL_MCU_PERIPHERAL_TESTS_UART_PROGNAME
+	string "Program name"
+	default "mcu_uart_test"
+
+config BL_MCU_PERIPHERAL_TESTS_UART_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_UART_STACKSIZE
+	int "Stack size"
+	default 8192
+
+endif

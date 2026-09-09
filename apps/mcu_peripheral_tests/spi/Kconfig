@@ -1,0 +1,33 @@
+config BL_MCU_PERIPHERAL_TESTS_SPI
+	tristate "MCU peripheral SPI tests"
+	default n
+	depends on SPI && SPI_EXCHANGE && BL616CL_SPI
+	depends on BL616CL_SPI0 || BL616CL_SPI1
+	depends on !DISABLE_PTHREAD
+	select BL616CL_SPI_TEST
+	select SPI_BITORDER
+	---help---
+		Enable the BL616CL SPI master case runner. It exercises fake
+		configuration, timeout recovery, length boundaries, and concurrency.
+		Hardware loopback additionally requires the board /dev/spi0 node.
+
+if BL_MCU_PERIPHERAL_TESTS_SPI
+
+config BL_MCU_PERIPHERAL_TESTS_SPI_PROGNAME
+	string "Program name"
+	default "mcu_spi_test"
+
+config BL_MCU_PERIPHERAL_TESTS_SPI_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_SPI_STACKSIZE
+	int "Stack size"
+	default 6144
+
+config BL_MCU_PERIPHERAL_TESTS_SPI_ITERATIONS
+	int "Concurrent transfer iterations"
+	default 32
+	range 2 256
+
+endif

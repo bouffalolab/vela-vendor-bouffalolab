@@ -1,0 +1,57 @@
+/****************************************************************************
+ * vendor/bouffalolab/chips/bl616cl/include/bl616cl_timer.h
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ ****************************************************************************/
+
+#ifndef __VENDOR_BOUFFALOLAB_CHIP_BL616CL_INCLUDE_BL616CL_TIMER_H
+#define __VENDOR_BOUFFALOLAB_CHIP_BL616CL_INCLUDE_BL616CL_TIMER_H
+
+/****************************************************************************
+ * Included Files
+ ****************************************************************************/
+
+#include <nuttx/config.h>
+
+#include <stdint.h>
+
+#include <nuttx/timers/timer.h>
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+/* Public chip-specific extension: the standard timer API has no operation for
+ * setting the hardware clock divider (0..255).
+ */
+
+#define BL616CL_TCIOC_SETCLOCKDIV _TCIOC(0x0040)
+
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
+
+#ifdef CONFIG_BL616CL_TIMER_TEST
+/* The timer test application uses this public, configuration-gated extension
+ * because the standard timer API cannot exercise the lower-half callback
+ * contract directly.
+ */
+
+struct timer_lowerhalf_s *bl616cl_timer_test_lower(uint8_t timer);
+#endif
+
+#endif /* __VENDOR_BOUFFALOLAB_CHIP_BL616CL_INCLUDE_BL616CL_TIMER_H */

@@ -1,0 +1,4 @@
+interface:
+  display_name: "BL Module Reset"
+  short_description: "通过固定 DTR/RTS 时序复位模组并验证启动串口日志"
+  default_prompt: "使用 $bl-module-reset 复位指定串口上的 BouffaloLab 模组并验证启动日志。"

@@ -1,0 +1,8 @@
+config BL_MCU_PERIPHERAL_TESTS_PSRAM
+	bool "MCU peripheral PSRAM tests"
+	default n
+	depends on BL616CL_PSRAM && BL616CL_CACHE
+	---help---
+		Verify a large allocation from the PSRAM heap, address-dependent
+		patterns and cache maintenance through the uncached alias.
+		Only allocated memory is modified. Run manually on a test board.

@@ -1,0 +1,24 @@
+config BL_MCU_PERIPHERAL_TESTS_RTC
+	bool "MCU peripheral RTC tests"
+	default n
+	depends on BL616CL_RTC
+	depends on !BL616CL_RTC_ALARM || !DISABLE_SIGNALS
+	---help---
+			Enable the built-in MCU peripheral RTC case runner. Alarm cases are
+			reported as unavailable when BL616CL_RTC_ALARM is not enabled.
+
+if BL_MCU_PERIPHERAL_TESTS_RTC
+
+config BL_MCU_PERIPHERAL_TESTS_RTC_PROGNAME
+	string "Program name"
+	default "mcu_rtc_test"
+
+config BL_MCU_PERIPHERAL_TESTS_RTC_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_RTC_STACKSIZE
+	int "Stack size"
+	default 4096
+
+endif

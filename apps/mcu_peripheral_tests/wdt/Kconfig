@@ -1,0 +1,22 @@
+config BL_MCU_PERIPHERAL_TESTS_WDT
+	tristate "MCU peripheral WDT tests"
+	default n
+	depends on WATCHDOG && BOARDCTL_RESET_CAUSE
+	---help---
+		Enable the MCU peripheral WDT case runner.
+
+if BL_MCU_PERIPHERAL_TESTS_WDT
+
+config BL_MCU_PERIPHERAL_TESTS_WDT_PROGNAME
+	string "Program name"
+	default "mcu_wdt_test"
+
+config BL_MCU_PERIPHERAL_TESTS_WDT_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_WDT_STACKSIZE
+	int "Stack size"
+	default DEFAULT_TASK_STACKSIZE
+
+endif

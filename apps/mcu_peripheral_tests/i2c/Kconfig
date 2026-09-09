@@ -1,0 +1,39 @@
+config BL_MCU_PERIPHERAL_TESTS_I2C
+	tristate "MCU peripheral I2C tests"
+	default n
+	depends on I2C && I2C_DRIVER && BL616CL_I2C
+	depends on AI_M64L_KIT_I2C0 || AI_M64L_KIT_I2C1
+	depends on !DISABLE_PTHREAD
+	select BL616CL_I2C_TEST
+	---help---
+		Enable the BL616CL I2C master case runner. It exercises parameter
+		validation, fake lower-half error paths, single-message transfers,
+		combined write/read transfers, explicit target probes,
+		EEPROM backup/restore, and
+		per-bus concurrency. Hardware cases require an external I2C target.
+
+if BL_MCU_PERIPHERAL_TESTS_I2C
+
+config BL_MCU_PERIPHERAL_TESTS_I2C_PROGNAME
+	string "Program name"
+	default "mcu_i2c_test"
+
+config BL_MCU_PERIPHERAL_TESTS_I2C_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_I2C_STACKSIZE
+	int "Stack size"
+	default 6144
+
+config BL_MCU_PERIPHERAL_TESTS_I2C_THREADS
+	int "Concurrent transfer threads"
+	default 4
+	range 2 8
+
+config BL_MCU_PERIPHERAL_TESTS_I2C_ITERATIONS
+	int "Transfers per concurrent thread"
+	default 32
+	range 2 256
+
+endif

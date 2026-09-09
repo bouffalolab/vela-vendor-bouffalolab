@@ -1,0 +1,25 @@
+config BL_OS_FEATURE_TESTS_RTC_IOCTL
+	bool "RTC upper-half ioctl validation test"
+	default n
+	depends on BUILD_FLAT && BUILTIN
+	depends on RTC_DRIVER && !DISABLE_PSEUDOFS_OPERATIONS
+	---help---
+		Enable a fake RTC lower-half and a built-in test application for
+		validating the common RTC upper-half ioctl argument contract. The
+		fake device is registered only while the test application runs.
+
+if BL_OS_FEATURE_TESTS_RTC_IOCTL
+
+config BL_OS_FEATURE_TESTS_RTC_IOCTL_PROGNAME
+	string "Program name"
+	default "rtc_ioctl_test"
+
+config BL_OS_FEATURE_TESTS_RTC_IOCTL_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_OS_FEATURE_TESTS_RTC_IOCTL_STACKSIZE
+	int "Stack size"
+	default 4096
+
+endif

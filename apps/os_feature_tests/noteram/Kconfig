@@ -1,0 +1,23 @@
+config BL_OS_FEATURE_TESTS_NOTERAM
+	bool "Note RAM trace test"
+	default n
+	depends on BUILD_FLAT && BUILTIN
+	depends on DRIVERS_NOTERAM
+	---help---
+		Enable the Note RAM status, clear, mode and burst test.
+
+if BL_OS_FEATURE_TESTS_NOTERAM
+
+config BL_OS_FEATURE_TESTS_NOTERAM_PROGNAME
+	string "Program name"
+	default "noteram_test"
+
+config BL_OS_FEATURE_TESTS_NOTERAM_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_OS_FEATURE_TESTS_NOTERAM_STACKSIZE
+	int "Task stack size"
+	default 2048
+
+endif

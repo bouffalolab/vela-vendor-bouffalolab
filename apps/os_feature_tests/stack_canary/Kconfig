@@ -1,0 +1,22 @@
+config BL_OS_FEATURE_TESTS_STACK_CANARY
+	bool "Compiler stack canary test"
+	default n
+	depends on BUILD_FLAT && BUILTIN && STACK_CANARIES
+	---help---
+		Enable the deterministic compiler stack canary test.
+
+if BL_OS_FEATURE_TESTS_STACK_CANARY
+
+config BL_OS_FEATURE_TESTS_STACK_CANARY_PROGNAME
+	string "Program name"
+	default "stack_canary_test"
+
+config BL_OS_FEATURE_TESTS_STACK_CANARY_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_OS_FEATURE_TESTS_STACK_CANARY_STACKSIZE
+	int "Stack size"
+	default 2048
+
+endif

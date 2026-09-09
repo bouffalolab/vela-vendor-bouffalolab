@@ -1,0 +1,36 @@
+config BL_MCU_PERIPHERAL_TESTS_TRNG
+	bool "MCU peripheral TRNG tests"
+	default n
+	depends on BL616CL_TRNG && (DEV_RANDOM || DEV_URANDOM_ARCH)
+	depends on !DISABLE_PTHREAD
+	---help---
+		Enable the BL616CL TRNG case runner. It covers the standard random
+		device ABI, boundary lengths, unaligned buffers, basic data smoke
+		checks, poll behavior, unsupported ioctl handling, and concurrent
+		readers. The checks do not certify entropy quality.
+
+if BL_MCU_PERIPHERAL_TESTS_TRNG
+
+config BL_MCU_PERIPHERAL_TESTS_TRNG_PROGNAME
+	string "Program name"
+	default "mcu_trng_test"
+
+config BL_MCU_PERIPHERAL_TESTS_TRNG_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_TRNG_STACKSIZE
+	int "Stack size"
+	default 4096
+
+config BL_MCU_PERIPHERAL_TESTS_TRNG_THREADS
+	int "Concurrent reader threads"
+	default 4
+	range 2 8
+
+config BL_MCU_PERIPHERAL_TESTS_TRNG_ITERATIONS
+	int "Reads per concurrent reader"
+	default 32
+	range 4 256
+
+endif
