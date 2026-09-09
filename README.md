@@ -1,7 +1,7 @@
 # Bouffalo Lab Vendor (vela)
 
 Bouffalo Lab 芯片原厂维护的、基于 **openvela** 的适配层：芯片移植 + 板级 +
-驱动 + 中间件 + 示例。对外镜像为 `github/bouffalolab/vendor_bouffalolab`，
+驱动 + 中间件 + 示例。对外镜像为 `github/bouffalolab/vela-vendor-bouffalolab`，
 通过 BL Vela SDK 的 repo manifest（`vendor/bouffalolab`，remote `bouffalo`，
 默认 revision `trunk`）接入整树。
 
