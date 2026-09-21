@@ -198,6 +198,32 @@ SECTIONS
     . = ALIGN(16);
   } > ram
 
+  /* Wi-Fi shared data: macsw descriptors, wl80211 RX buffer memory and
+   * platform glue buffers must live in the WiFi-visible RAM window
+   * (collection modeled after the BL4 baseline .wifibss section).
+   */
+
+  .wifibss (NOLOAD) :
+  {
+    PROVIDE(__wifi_bss_start = ABSOLUTE(.));
+    _sshram = ABSOLUTE(.);
+    *(SHAREDRAMIPC)
+    *(SHAREDRAM)
+    _eshram = ABSOLUTE(.);
+    *ipc_shared.o(COMMON)
+    *sdu_shared.o(COMMON)
+    *hal_desc.o(COMMON)
+    *txl_buffer_shared.o(SHAREDRAM) *txl_buffer_shared.o(COMMON)
+    *txl_frame_shared.o(COMMON)
+    *scan_shared.o(COMMON)
+    *scanu_shared.o(COMMON)
+    *mfp_bip.o(COMMON)
+    *me_mic.o(COMMON)
+    *(.wifi_ram*)
+    . = ALIGN(16);
+    PROVIDE(__wifi_bss_end = ABSOLUTE(.));
+  } > ram_wifi
+
   .bss (NOLOAD) : AT(ADDR(.bss))
   {
     _sbss = ABSOLUTE(.);

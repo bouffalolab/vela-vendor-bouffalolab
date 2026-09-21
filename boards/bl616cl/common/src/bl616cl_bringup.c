@@ -28,6 +28,10 @@
 
 #include <sys/types.h>
 
+#ifdef CONFIG_BL_COMPONENT_WL80211
+#include "bl616_wlan.h"
+#endif
+
 #include "bl616cl_bod.h"
 #include "bl616cl_bus.h"
 #include "bl616cl_sec_mutex.h"
@@ -104,6 +108,15 @@ int bl616cl_bringup(void)
     {
       return ret;
     }
+
+#ifdef CONFIG_BL_COMPONENT_WL80211
+  ret = bl616_wlan_sta_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize Wi-Fi WLAN: %d\n", ret);
+      return ret;
+    }
+#endif
 
 #ifdef CONFIG_BL616CL_RTC
   ret = bl616cl_rtc_register(0);
