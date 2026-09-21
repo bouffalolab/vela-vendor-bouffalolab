@@ -497,6 +497,9 @@ static int rssi_compare(const void *arg1, const void *arg2)
   return item1->rssi - item2->rssi;
 }
 
+extern void wl80211_scan_result_lock(void);
+extern void wl80211_scan_result_unlock(void);
+
 static int format_scan_result_to_wapi(struct iwreq *req)
 {
   int i = 0;
@@ -509,6 +512,10 @@ static int format_scan_result_to_wapi(struct iwreq *req)
 
   struct wl80211_scan_result_item *n, *tmp;
 
+  /* Serialize with the WiFi task tree producers */
+
+  wl80211_scan_result_lock();
+
   /* Count wl80211 scan results */
 
   RB_FOREACH_SAFE(n, _scan_result_tree, &wl80211_scan_result, tmp)
@@ -518,6 +525,7 @@ static int format_scan_result_to_wapi(struct iwreq *req)
 
   if (result_cnt == 0)
     {
+      wl80211_scan_result_unlock();
       return -ENOENT;
     }
 
@@ -530,22 +538,24 @@ static int format_scan_result_to_wapi(struct iwreq *req)
 
   if (req->u.data.length == 0 || req->u.data.length < event_buff_len)
     {
+      wl80211_scan_result_unlock();
       return -E2BIG;
     }
 
   req->u.data.length = event_buff_len;
 
-  /* alloc rssi list */
+  /* alloc rssi list - outside the lock, kmm_malloc may sleep */
 
   rssi_list = kmm_malloc(result_cnt * sizeof(uintptr_t));
   if (rssi_list == NULL)
     {
+      wl80211_scan_result_unlock();
       return -ENOMEM;
     }
 
-  /* Record all valid scan result items and remove from tree
-   * We remove nodes during traversal to ensure tree is cleaned up,
-   * then free memory after formatting is complete */
+  /* Record all valid scan result items and remove from tree.
+   * The locked region must not allocate or sleep, so only the RB tree
+   * manipulation happens here; all heap operations run afterwards. */
 
   j = 0;
 
@@ -559,6 +569,11 @@ static int format_scan_result_to_wapi(struct iwreq *req)
   }
 
   DEBUGASSERT(j == result_cnt);
+
+  /* Tree is empty now and every node is privately owned by this call;
+   * the remaining work (sort, format, frees) runs without the lock. */
+
+  wl80211_scan_result_unlock();
 
   /* Sort the valid list according the rssi using custom comparator */
 
@@ -602,7 +617,8 @@ static int format_scan_result_to_wapi(struct iwreq *req)
       iwe->len = offsetof(struct iw_event, u) + sizeof(struct iw_point) +
                  IW_ESSID_MAX_SIZE;
       iwe->cmd = SIOCGIWESSID;
-      iwe->u.essid.length = scan->ssid ? strlen(scan->ssid) : sizeof("<hidden>");
+      iwe->u.essid.length =
+        scan->ssid ? strnlen(scan->ssid, IW_ESSID_MAX_SIZE) : 0;
       iwe->u.essid.flags = 1;
       /* refer:wapi wireless.c:272 */
       iwe->u.essid.pointer = (void *)(uintptr_t)sizeof(struct iw_point);
@@ -859,6 +875,15 @@ int bl616_wifi_adapter_init(void)
   platform_get_mac(WL80211_VIF_STA, eth_mac);
 
   wl80211_init();
+
+  /* The scan path requires a country channel plan; nothing in the NuttX
+   * boot flow sets one, so default to CN (channels 1-13).  Users can
+   * override via SIOCSIWCOUNTRY. */
+
+  if (wifi_mgmr_set_country_code("CN") != 0)
+    {
+      wlerr("ERROR: Failed to set default country code\n");
+    }
 
   bl_wifi_sta_ps_active_ms(CONFIG_BL616_WLAN_PS_ACTIVETIME);
 
