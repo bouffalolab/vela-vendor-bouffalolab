@@ -49,3 +49,12 @@ if(NOT EXISTS ${WL80211_ARCHIVE})
 endif()
 
 nuttx_add_extra_library(${WL80211_ARCHIVE})
+# The wl80211 core and macsw paths call into the PHY/RF library (phy_init,
+# phy_get_channel, wl_wlan_bb_*, wl_wlan_power_cfg_get); link the BL616CL
+# PHYRF prebuilt next to the core archive.
+nuttx_add_extra_library(${BL_BOUFFALO_DRIVERS_DIR}/soc/bl616cl/phyrf/lib-gcc_10.2.0-toolchain_V2.6.1/libbl616cl_phyrf.a)
+
+# Host-side platform glue (wifi_mgmr/country/nuttx/rtos_al_nuttx +
+# bl616_wlan/bl616_wifi_adapter adapted for BL616CL). Kept out of the
+# upstream component repository; see glue/CMakeLists.txt for details.
+add_subdirectory(glue)

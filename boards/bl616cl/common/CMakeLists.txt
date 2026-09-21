@@ -20,3 +20,9 @@
 
 add_subdirectory(src)
 target_include_directories(board PRIVATE include)
+
+# Wi-Fi STA glue interface (ticket 02: platform bring-up wiring)
+if(CONFIG_BL_COMPONENT_WL80211)
+  target_include_directories(board PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/../../../components/wireless/wifi/wl80211/glue)
+endif()
