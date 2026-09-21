@@ -559,6 +559,7 @@ void wl80211_post_event_with_mac(int code1, int code2, const uint8_t mac[6])
   struct event_node_s *event;
   int ret;
 
+
   /* Allocate event node */
   event = (struct event_node_s *)malloc(sizeof(struct event_node_s));
   if (!event)
@@ -587,6 +588,26 @@ void wl80211_post_event_with_mac(int code1, int code2, const uint8_t mac[6])
     {
       wlerr("Failed to queue event handler work\n");
     }
+}
+
+/**
+ ****************************************************************************************
+ * @brief Serialize the wl80211 scan-result tree across tasks.
+ *
+ * Non-blocking scheduler lock: the tree critical sections never sleep, and
+ * a blocking mutex here could deadlock against the kernel heap semaphore.
+ ****************************************************************************************
+ */
+static irqstate_t g_scan_result_irqflags;
+
+void wl80211_scan_result_lock(void)
+{
+  g_scan_result_irqflags = up_irq_save();
+}
+
+void wl80211_scan_result_unlock(void)
+{
+  up_irq_restore(g_scan_result_irqflags);
 }
 
 /**
