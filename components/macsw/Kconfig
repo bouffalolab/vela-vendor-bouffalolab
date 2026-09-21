@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+
+config BL_COMPONENT_MACSW
+	bool "Bouffalo macsw"
+	depends on ARCH_CHIP_BL616CL
+
+config MACSW_SELECT
+	string
+	default "default"
+	depends on BL_COMPONENT_MACSW
