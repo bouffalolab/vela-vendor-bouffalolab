@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+
+if(NOT CONFIG_BL_COMPONENT_MACSW)
+  return()
+endif()
+
+if(NOT CONFIG_ARCH_CHIP_BL616CL OR NOT CONFIG_MACSW_SELECT STREQUAL "default")
+  message(FATAL_ERROR "The Vela MACSW port supports BL616CL/default")
+endif()
+
+set(CHIP bl616cl)
+string(REGEX REPLACE "gcc$" "" CROSS_COMPILE "${CMAKE_C_COMPILER}")
+set(PHYRF_INCLUDE
+    ${BL_BOUFFALO_DRIVERS_DIR}/soc/bl616cl/phyrf/include)
+
+# MACSW owns its source list. Its standalone project does not use sdk_* APIs.
+add_subdirectory(macsw)
+
+foreach(target macsw_bl616cl macsw_config_bl616cl_default)
+  # The Vela compiler implements the standard ISA but not the vendor tune name.
+  get_target_property(options ${target} COMPILE_OPTIONS)
+  list(REMOVE_ITEM options -mtune=e907 -march=rv32imafc_xtheade)
+  set_property(TARGET ${target} PROPERTY COMPILE_OPTIONS ${options})
+  target_compile_options(${target} PRIVATE -march=rv32imafc_zicsr_zifencei)
+  # The NuttX kernel build injects -Wshadow/-Wundef which the macsw source
+  # does not support under its own -Werror; silence them locally.
+  target_compile_options(${target} PRIVATE -Wno-shadow -Wno-undef)
+  nuttx_add_external_library(${target} MODE KERNEL)
+endforeach()

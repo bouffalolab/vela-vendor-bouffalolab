@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+
+config BL_COMPONENT_WL80211
+    bool "Bouffalo wl80211"
+    depends on ARCH_CHIP_BL616CL
+    depends on BL_COMPONENT_MACSW
+    depends on BL_COMPONENT_WPA_SUPPLICANT
+    help
+      Build the wl80211 BL616CL/default core archive with the standalone
+      CMake flow and register it for the kernel link. FreeRTOS and lwIP
+      platform sources are excluded; platform glue lands with the
+      BL616CL WLAN port.
