@@ -46,7 +46,7 @@ target_include_directories(bl_wpa_supplicant PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/../wl80211/wl80211
   ${BL_BOUFFALO_DRIVERS_DIR}/lhal/include
   ${BL_BOUFFALO_DRIVERS_DIR}/lhal/include/arch
-  ${CMAKE_CURRENT_LIST_DIR}/../../../apps/crypto/mbedtls/include)
+  ${CMAKE_CURRENT_LIST_DIR}/../../../../apps/crypto/mbedtls/include)
 nuttx_export_header(TARGET bl_wpa_supplicant INCLUDE_DIRECTORIES
   ${wpa_source}/include
   ${wpa_source}/include/bl_supplicant)
