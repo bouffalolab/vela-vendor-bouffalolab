@@ -35,6 +35,7 @@ target_sources(bl616cl_wlan_glue PRIVATE
   ${glue_dir}/bl616cl_macsw_lp.c
   ${glue_dir}/bl616cl_rfparam_ext.c
   ${BL_BOUFFALO_DRIVERS_DIR}/rfparam/Src/rfparam_adapter.c
+  ${BL_BOUFFALO_DRIVERS_DIR}/rfparam/Src/rfparam_bl616cl_flash_otp.c
   ${BL_BOUFFALO_DRIVERS_DIR}/rfparam/Src/rfparam_rftlv.c)
 
 # rfparam_adapter.c pulls the SoC headers whose BL_Err_Type ERROR enumerator
@@ -43,6 +44,7 @@ target_sources(bl616cl_wlan_glue PRIVATE
 # lhal flash include dir for bflb_sflash.h.
 set_source_files_properties(
   ${BL_BOUFFALO_DRIVERS_DIR}/rfparam/Src/rfparam_adapter.c
+  ${BL_BOUFFALO_DRIVERS_DIR}/rfparam/Src/rfparam_bl616cl_flash_otp.c
   ${BL_BOUFFALO_DRIVERS_DIR}/rfparam/Src/rfparam_rftlv.c
   PROPERTIES COMPILE_OPTIONS
   "-include;${glue_dir}/include/bl616cl_soc_preinc.h")
