@@ -102,6 +102,8 @@ int bl616_wifi_sta_register_recv_cb(int (*recv_cb)(void *net,
 
 void bl616_wifi_sta_register_txdone_cb(wifi_txdone_cb_t cb);
 
+void bl616_wifi_sta_txdone(void);
+
 int bl616_wifi_sta_read_mac(uint8_t *mac);
 
 int bl616_wifi_sta_password(struct iwreq *iwr, bool set);

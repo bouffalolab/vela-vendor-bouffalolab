@@ -42,6 +42,7 @@
 
 #include "wl80211.h"
 #include "macsw/wl80211_mac.h"
+#include "bl616_wifi_adapter.h"
 #include <bflb_sec_trng.h>
 
 /* DEFINES
@@ -145,6 +146,12 @@ void net_buf_tx_free(net_buf_tx_t *buf)
     {
       iob_free_chain(iob);
     }
+}
+
+static void wl80211_sta_tx_complete(void *buf)
+{
+  net_buf_tx_free((net_buf_tx_t *)buf);
+  bl616_wifi_sta_txdone();
 }
 
 /**
@@ -562,7 +569,12 @@ int wl80211_output(net_buf_tx_t *buf)
    */
 
   ret = wl80211_mac_tx(WL80211_VIF_STA, txhdr, 0, txseg, seg_cnt,
-                       (void (*)(void *))net_buf_tx_free, iob);
+                       wl80211_sta_tx_complete, iob);
+
+  if (ret == -EAGAIN)
+    {
+      return ret;
+    }
 
   if (ret != 0)
     {

@@ -960,6 +960,14 @@ void bl616_wifi_sta_register_txdone_cb(wifi_txdone_cb_t cb)
   g_sta_txdone_cb = cb;
 }
 
+void bl616_wifi_sta_txdone(void)
+{
+  if (g_sta_txdone_cb != NULL)
+    {
+      g_sta_txdone_cb(NULL);
+    }
+}
+
 
 /****************************************************************************
  * Name: bl616_wifi_sta_send_data
