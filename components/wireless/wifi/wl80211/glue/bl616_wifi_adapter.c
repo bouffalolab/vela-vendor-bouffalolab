@@ -909,6 +909,7 @@ int bl616_wifi_adapter_init(void)
 
 int bl616_wifi_sta_start(void)
 {
+  g_wifi_cfg.mode = IW_MODE_INFRA;
   g_wifi_cfg.pta = IW_PTA_PRIORITY_BALANCED;
 
   return OK;

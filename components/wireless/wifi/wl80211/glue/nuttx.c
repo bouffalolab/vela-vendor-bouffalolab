@@ -549,7 +549,12 @@ int wl80211_output(net_buf_tx_t *buf)
 
   seg_cnt = idx;
 
-  DEBUGASSERT(length == 0);
+  if (length != 0)
+    {
+      wlerr("Not enough segments for complete TX packet\n");
+      net_buf_tx_free((net_buf_tx_t *)iob);
+      return ERROR;
+    }
 
   /* Transmit packet through MAC layer.
    * The MAC layer will call the provided callback to free the IOB buffer

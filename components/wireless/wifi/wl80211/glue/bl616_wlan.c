@@ -326,7 +326,15 @@ static inline void dump_ethhdr(const char *msg,
 
 static inline void wlan_cache_txpkt_tail(struct wlan_priv_s *priv)
 {
-  iob_tryadd_queue(priv->dev.d_iob, &priv->txb);
+  int ret = iob_tryadd_queue(priv->dev.d_iob, &priv->txb);
+
+  if (ret < 0)
+    {
+      wlerr("TX queue insertion failed: %d\n", ret);
+      netdev_iob_release(&priv->dev);
+      return;
+    }
+
   netdev_iob_clear(&priv->dev);
 }
 
@@ -445,22 +453,22 @@ static void wlan_transmit(struct wlan_priv_s *priv)
   uint16_t llhdrlen = NET_LL_HDRLEN(&priv->dev);
   unsigned int offset = CONFIG_NET_LL_GUARDSIZE - llhdrlen;
   struct iob_s *iob;
+  int ret;
 
-  while ((iob = iob_peek_queue(&priv->txb)) != NULL)
+  while ((iob = iob_remove_queue(&priv->txb)) != NULL)
     {
 #ifdef CONFIG_BL616_NET_DEBUG
       wlinfo("iob=%p\n", iob);
 #endif
       dump_ethhdr("TX", IOB_DATA(iob) - llhdrlen, iob->io_pktlen + llhdrlen);
 
-      priv->ops->send(iob, llhdrlen, offset);
-
-      /* Here, only the iob needs to be removed from txb.
-       * The WiFi driver will free the corresponding iob
-       * after the data is sent.
-       */
-
-      iob_remove_queue(&priv->txb);
+      /* send() takes ownership even on failure; the MAC frees the IOB on
+       * synchronous error and at the final completion on success. */
+      ret = priv->ops->send(iob, llhdrlen, offset);
+      if (ret < 0)
+        {
+          wlerr("Wi-Fi TX failed: %d\n", ret);
+        }
     }
 }
 
