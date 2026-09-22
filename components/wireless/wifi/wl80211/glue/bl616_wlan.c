@@ -56,6 +56,7 @@
 
 #include "bl616_wifi_adapter.h"
 #include "bl616_wlan.h"
+#include "wl80211_mac.h"
 #include "wifi_mgmr_ext.h"
 
 #ifdef CONFIG_BL616_WLAN_SDIO
@@ -135,6 +136,7 @@ struct wlan_priv_s
   /* TX ready packet queue */
 
   struct iob_queue_s txb;
+  struct iob_s *tx_pending;
 #ifdef CONFIG_BL616_WLAN_WORK_THREAD
   pid_t tid;
   sem_t sem;
@@ -455,16 +457,34 @@ static void wlan_transmit(struct wlan_priv_s *priv)
   struct iob_s *iob;
   int ret;
 
-  while ((iob = iob_remove_queue(&priv->txb)) != NULL)
+  while (wl80211_mac_tx_ready())
     {
+      if (priv->tx_pending != NULL)
+        {
+          iob = priv->tx_pending;
+          priv->tx_pending = NULL;
+        }
+      else
+        {
+          iob = iob_remove_queue(&priv->txb);
+          if (iob == NULL)
+            {
+              break;
+            }
+        }
 #ifdef CONFIG_BL616_NET_DEBUG
       wlinfo("iob=%p\n", iob);
 #endif
       dump_ethhdr("TX", IOB_DATA(iob) - llhdrlen, iob->io_pktlen + llhdrlen);
 
-      /* send() takes ownership even on failure; the MAC frees the IOB on
-       * synchronous error and at the final completion on success. */
+      /* Pool exhaustion leaves ownership with this driver. The completion
+       * callback frees a slot and schedules another transmit pass. */
       ret = priv->ops->send(iob, llhdrlen, offset);
+      if (ret == -EAGAIN)
+        {
+          priv->tx_pending = iob;
+          break;
+        }
       if (ret < 0)
         {
           wlerr("Wi-Fi TX failed: %d\n", ret);
@@ -832,7 +852,10 @@ static void wlan_dopoll(struct wlan_priv_s *priv)
 
   /* Try to let TCP/IP to send all packets to netcard driver */
 
-  while (devif_poll(dev, wlan_txpoll));
+  while (wl80211_mac_tx_ready() && devif_poll(dev, wlan_txpoll))
+    {
+      wlan_transmit(priv);
+    }
 
   /* Try to send all cached TX packets */
 
@@ -857,13 +880,13 @@ static void wlan_txtimeout_work(void *arg)
 {
   struct wlan_priv_s *priv = (struct wlan_priv_s *)arg;
 
+  net_lock();
+
   /* Try to send all cached TX packets */
 
   wlan_transmit(priv);
 
   wlwarn("tx timeout \n");
-
-  net_lock();
 
   /* Then poll for new XMIT data */
 
@@ -921,17 +944,11 @@ static void wlan_txavail_work(void *arg)
 {
   struct wlan_priv_s *priv = (struct wlan_priv_s *)arg;
 
+  net_lock();
+
   /* Try to send all cached TX packets even if net is down */
 
   wlan_transmit(priv);
-
-  /* Lock the network and serialize driver operations if necessary.
-   * NOTE: Serialization is only required in the case where the driver work
-   * is performed on an LP worker thread and where more than one LP worker
-   * thread has been configured.
-   */
-
-  net_lock();
 
   /* Ignore the notification if the interface is not yet up */
 
@@ -1031,6 +1048,7 @@ static int wlan_ifup(struct net_driver_s *dev)
 
   IOB_QINIT(&priv->rxb);
   IOB_QINIT(&priv->txb);
+  priv->tx_pending = NULL;
 
   priv->dev.d_buf = NULL;
   priv->dev.d_len = 0;
@@ -1087,6 +1105,11 @@ static int wlan_ifdown(struct net_driver_s *dev)
 
   iob_free_queue(&priv->rxb);
   iob_free_queue(&priv->txb);
+  if (priv->tx_pending != NULL)
+    {
+      iob_free_chain(priv->tx_pending);
+      priv->tx_pending = NULL;
+    }
 
 #ifdef CONFIG_BL616_WLAN_WORK_THREAD
   if (priv->tid > 0)
