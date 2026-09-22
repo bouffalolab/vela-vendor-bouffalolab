@@ -39,7 +39,8 @@ execute_process(
   OUTPUT_STRIP_TRAILING_WHITESPACE
   COMMAND_ERROR_IS_FATAL ANY)
 target_link_options(nuttx PRIVATE
-                    -Wl,--defsym=__bl616cl_app_size=${BL616CL_APP_SIZE})
+                    -Wl,--defsym=__bl616cl_app_size=${BL616CL_APP_SIZE}
+                    -Wl,--defsym=_wifi_log_flag=1)
 
 set(BL616CL_POSTPROCESS
     "${BOUFFALOLAB_VENDOR_DIR}/tools/bl616cl/postprocess_bl616cl.sh")

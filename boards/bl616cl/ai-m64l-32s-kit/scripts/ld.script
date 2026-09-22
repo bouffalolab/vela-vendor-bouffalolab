@@ -23,11 +23,11 @@
 OUTPUT_ARCH(riscv)
 ENTRY(__start)
 
-/* WRAM and EM share the upper 160 KiB. Keep the current non-wireless
- * allocation here until wireless configuration is integrated.
+/* WRAM and EM share the upper 160 KiB. Enlarged to 128K so wifi-shared TX
+ * frames (THD, headers, payload copies) fit next to the macsw shared objects.
  */
 
-__bl616cl_wram_size = 64K;
+__bl616cl_wram_size = 128K;
 __LD_CONFIG_EM_SEL = 0;
 __bl616cl_ram_size = 224K - 1K + 160K - __bl616cl_wram_size;
 
