@@ -1218,6 +1218,7 @@ static int is_ascii_hex_char(char c)
 int bl616_wifi_sta_connect(void)
 {
   int ret;
+  uint16_t status;
   uint16_t freq = 0;
   uint8_t bssid[18] = {0};
 
@@ -1316,20 +1317,27 @@ int bl616_wifi_sta_connect(void)
 
   /* check connect state */
 
-  ret |= wifi_mgmr_sta_info_status_code_get();
+  status = wifi_mgmr_sta_info_status_code_get();
 
-  if (ret != 0)
+  if (ret < 0 || status != WLAN_FW_SUCCESSFUL)
     {
-      wlerr("ERROR: connect Wi-Fi ret=%d\n", ret);
+      wlerr("ERROR: connect Wi-Fi ret=%d status=%u\n", ret, status);
 
-      switch (ret)
+      if (ret == 0)
         {
-          case WLAN_FW_4WAY_HANDSHAKE_ERROR_PSK_TIMEOUT_FAILURE:
-          case WLAN_FW_DEAUTH_BY_AP_WHEN_NOT_CONNECTION:
-          case WLAN_FW_AUTHENTICATION_FAIILURE:
-          case WLAN_FW_DEAUTH_BY_AP_WHEN_CONNECTION:
-            ret = WLAN_STATUS_AUTH_TIMEOUT;
-            break;
+          switch (status)
+            {
+              case WLAN_FW_4WAY_HANDSHAKE_ERROR_PSK_TIMEOUT_FAILURE:
+              case WLAN_FW_DEAUTH_BY_AP_WHEN_NOT_CONNECTION:
+              case WLAN_FW_AUTHENTICATION_FAIILURE:
+              case WLAN_FW_DEAUTH_BY_AP_WHEN_CONNECTION:
+                ret = -WLAN_STATUS_AUTH_TIMEOUT;
+                break;
+
+              default:
+                ret = -EIO;
+                break;
+            }
         }
 
       /* Clear sta info */
@@ -1340,7 +1348,7 @@ int bl616_wifi_sta_connect(void)
 
   adapter_wifi_lock(false);
 
-  return -ret;
+  return ret;
 }
 
 /****************************************************************************
