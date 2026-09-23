@@ -96,7 +96,7 @@ static struct
   char ssid[SSID_MAX_LEN];
   int ssid_len;
   int essid_flag;
-  char *pwd;
+  char pwd[PWD_MAX_LEN + 1];
   int pwd_len;
   uint16_t channel;
   uint16_t freq;
@@ -635,12 +635,8 @@ static int format_scan_result_to_wapi(struct iwreq *req)
 
 static void bl616_wifi_sta_clear_info(void)
 {
-  if (g_wifi_cfg.pwd != NULL)
-    {
-      kmm_free(g_wifi_cfg.pwd);
-      g_wifi_cfg.pwd = NULL;
-      g_wifi_cfg.pwd_len = 0;
-    }
+  memset(g_wifi_cfg.pwd, 0x0, sizeof(g_wifi_cfg.pwd));
+  g_wifi_cfg.pwd_len = 0;
 
   memset(g_wifi_cfg.bssid, 0x0, sizeof(g_wifi_cfg.bssid));
   memset(g_wifi_cfg.ssid, 0x0, sizeof(g_wifi_cfg.ssid));
@@ -1035,6 +1031,16 @@ int bl616_wifi_sta_password(struct iwreq *iwr, bool set)
 {
   struct iw_encode_ext *ext = iwr->u.encoding.pointer;
   uint8_t *pdata = ext->key;
+  int ret;
+
+  /* Serialize with bl616_wifi_sta_connect(), which reads pwd */
+
+  ret = adapter_wifi_lock(true);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
   if (set)
     {
       uint8_t len = ext->key_len;
@@ -1043,37 +1049,21 @@ int bl616_wifi_sta_password(struct iwreq *iwr, bool set)
         {
           case IW_ENCODE_ALG_NONE:
             {
-              if (g_wifi_cfg.pwd != NULL)
-                {
-                  kmm_free(g_wifi_cfg.pwd);
-                  g_wifi_cfg.pwd = NULL;
-                }
+              memset(g_wifi_cfg.pwd, 0x0, sizeof(g_wifi_cfg.pwd));
               g_wifi_cfg.pwd_len = 0;
               break;
             }
 
           default:
             {
-              char *passphrase = NULL;
-
               if (len > PWD_MAX_LEN)
                 {
-                  return -EINVAL;
+                  ret = -EINVAL;
+                  break;
                 }
 
-              passphrase = kmm_malloc(len + 1);
-              DEBUGASSERT(passphrase != NULL);
-
-              if (g_wifi_cfg.pwd != NULL)
-                {
-                  kmm_free(g_wifi_cfg.pwd);
-                }
-
-              memset(passphrase, 0x0, len);
-              memcpy(passphrase, pdata, len);
-              passphrase[len] = '\0';
-
-              g_wifi_cfg.pwd = passphrase;
+              memset(g_wifi_cfg.pwd, 0x0, sizeof(g_wifi_cfg.pwd));
+              memcpy(g_wifi_cfg.pwd, pdata, len);
               g_wifi_cfg.pwd_len = len;
               break;
             }
@@ -1081,7 +1071,7 @@ int bl616_wifi_sta_password(struct iwreq *iwr, bool set)
     }
   else
     {
-      if (g_wifi_cfg.pwd == NULL || strlen(g_wifi_cfg.pwd) == 0)
+      if (g_wifi_cfg.pwd_len == 0)
         {
           ext->alg = IW_ENCODE_ALG_NONE;
           ext->key_len = 0;
@@ -1093,7 +1083,9 @@ int bl616_wifi_sta_password(struct iwreq *iwr, bool set)
           ext->key_len = g_wifi_cfg.pwd_len;
         }
     }
-  return OK;
+
+  adapter_wifi_lock(false);
+  return ret;
 }
 
 /****************************************************************************
@@ -2019,7 +2011,7 @@ int bl616_wifi_sta_pmksa(struct iwreq *iwr, bool set)
     {
       /* Check if password exists */
 
-      if (g_wifi_cfg.pwd != NULL)
+      if (g_wifi_cfg.pwd_len > 0)
         {
           /* Only support WPA2-PSK and WPA-PSK */
 
