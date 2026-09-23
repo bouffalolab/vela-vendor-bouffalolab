@@ -96,7 +96,7 @@ SECTIONS
     . = ORIGIN(rom_header) + 3K;
   } > rom_header
 
-  .ver ORIGIN(rom_header) + 3K :
+  .ver ORIGIN(rom_header) + 3K (READONLY) :
   {
     LONG(0x42464c42)
     LONG(0x46524556)
