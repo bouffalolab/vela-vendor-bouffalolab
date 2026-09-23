@@ -56,7 +56,7 @@
  * half; the rest is filled from efuse words (or a fixed pattern when the
  * efuse reads back empty). */
 
-#define EF_MAC_FALLBACK_PREFIX "\\x02\\xE0\\x4C"
+#define EF_MAC_FALLBACK_PREFIX "\x02\xE0\x4C"
 
 #define WRWD_TO_BYTEP(p, val)  \
   {                            \
