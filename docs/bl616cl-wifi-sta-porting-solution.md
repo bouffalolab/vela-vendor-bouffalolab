@@ -46,8 +46,8 @@ WPA3-SAE 已完成 100 轮连接循环和四方向 100 秒压力，尚未做 500
 | `vela-nuttx` | NuttX 网络栈和 OS 基座 | `97496437931`，修复 buffered send 唤醒竞态 |
 | `vela-vendor-bouffalolab` | OpenVela wrapper、BL616CL glue、板级、linker、配置 | `6365c1f`、`4f56261`、`7069305`、`71bd08b`、`f112fa0`、`62b724f`、`253c8a0` 等 |
 | `macsw` | Wi-Fi MAC/协议数据路径和 BL616CL/default 配置库 | `f9b9a8b4`，恢复单天线扫描间的 coex plan |
-| `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | 当前本地 `bf96ed6` |
-| `wl80211/private` | wl80211/net80211 core，单独生成 `libwl80211_bl616cl.a` | 当前本地 `15d4edd` |
+| `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | 当前本地 `b086c54` |
+| `wl80211/private` | wl80211/net80211 core，单独生成 `libwl80211_bl616cl.a` | 当前本地 `d189124` |
 | `bl_wpa_supplicant` | WPA/WPA2/WPA3 认证相关源码 | `de35a74`（`ffc9839` rebase 到 2.3.35），增加 NuttX OS port 和 mbedTLS PBKDF2；`36e4c44`，`os_get_random()` 改用 `getrandom()` |
 | `bouffalo_sdk-drivers` | BL616CL PHYRF、rfparam、LHAL 等原厂驱动 | `8470912`，补充 BL616CL PHYRF 兼容头 |
 
@@ -247,7 +247,7 @@ NuttX socket
   -> TCP/UDP buffered send
   -> NuttX netdev poll / d_txavail
   -> bl616_wlan TX
-  -> wl80211/macsw TX pool
+  -> wl80211 NuttX host port（IOB 链直接作为 PBD 段）
   -> Wi-Fi hardware
 
 Wi-Fi hardware
@@ -258,11 +258,11 @@ Wi-Fi hardware
 
 TX/RX 的关键原则是：
 
-- NuttX socket 和 IOB 负责上层网络缓冲；
-- wl80211/macsw 负责 Wi-Fi 帧、描述符和底层 TX pool；
+- NuttX socket 和 IOB 负责上层网络缓冲，IOB 固定池位于 Wi-Fi 可见的 `ram_wifi`，TX 不复制；
+- wl80211/macsw 负责 Wi-Fi 帧和描述符，描述符放在首个 IOB 的 guard 中；
 - 跨硬件可见区域的数据必须遵守 shared RAM/cache ownership；
 - 异步 TX 完成后由明确的 owner 回收资源；
-- pool 暂时耗尽时不得丢失可重试的发送机会。
+- 在途帧达到上限时不得丢失可重试的发送机会。
 
 ## 6. Shared RAM、cache 和 linker
 
@@ -275,18 +275,20 @@ ram_wifi ORIGIN = 0x21020000 - 128K
 
 `.wifibss` 将以下对象放入 Wi-Fi 可见区域：
 
-- `SHAREDRAMIPC` / `SHAREDRAM`；
+- `SHAREDRAMIPC` / `SHAREDRAM`，其中包括 NuttX IOB 固定池（wifi defconfig `CONFIG_IOB_SECTION="SHAREDRAM"`，与 BL4 相同）；
 - macsw 的 TX buffer/frame；
 - scan/shared 数据；
 - MFP、MIC 和其他 Wi-Fi shared/common 对象；
 - `wifi_ram*` 区段。
 
-最终验收镜像中：
+TX 零拷贝镜像中：
 
 - `ram_wifi` 起始地址为 `0x21000000`；
 - 区域大小为 `0x20000`；
-- `.wifibss` 使用 `0x1ab30`；
-- 剩余约 21,712 字节。
+- `.wifibss` 使用 `0x1df00`（其中 IOB 池 `g_iob_buffer` 58,683 字节）；
+- 剩余 8,448 字节。
+
+`ram_wifi` 链接在 nocache 别名上，协议栈对 IOB 的读写都不经 cache；原生 SDK 的 lwIP 内存同样从这里分配。改为零拷贝前，`.wifibss` 为 `0x1ab30`，其中 45,408 字节是 wl80211 private 的 TX pool；IOB 池移出后系统堆增加约 58.7 KB。`.wifibss` 为 NOLOAD 且启动时不清零；`CONFIG_IOB_ALLOC` 关闭时 `iob_initialize()` 写入每个节点的链表指针、分配时重置长度与偏移，不依赖清零。
 
 wl80211 public/private 侧的配套修改包括：
 
@@ -295,13 +297,13 @@ wl80211 public/private 侧的配套修改包括：
 - public `0b1e062`：修正 NuttX host port（`nuttx.c`、`rtos_al_nuttx.c`）在当前 NuttX 下的编译；
 - public `bf349bc`：`bl_lp.h` 仅在 `CONFIG_LPAPP` 下包含；
 - public `d1d2a8a`：`wifi_mgmr.c` 的 scan-result 读者在锁内复制记录；
-- public `9beb1cf`、`832c94b`、`bf96ed6`：TX descriptor 携带 shared-RAM pool 引用、暴露 TX pool 状态、NuttX TX 完成回调；
+- public `22224e4`：TX 描述符大小的静态检查扣除以太头占用的 guard；
+- public `b086c54`：NuttX STA TX 在途帧上限、完成回调与 `wl80211_output_ready()`；
 - private `151365a`：BL616CL 按工具链探测 ISA 参数，并增加 `CONFIG_MACSW_SELECT` profile 定义；
 - private `aad7cb5`：空 SSID 上报不再清除已知 SSID；
-- private `d189124`：`wl80211_scan_result_lock/unlock` 基于 `rtos_lock()` 实现，生产者在锁外构造记录；
-- private `cd439d3`、`6aaa8ce`、`15d4edd`：host TX frame 放入 Wi-Fi shared RAM、加固 shared TX pool、pool 暂时不可用时 backpressure。
+- private `d189124`：`wl80211_scan_result_lock/unlock` 基于 `rtos_lock()` 实现，生产者在锁外构造记录。
 
-前 5 个 public 提交和前 3 个 private 提交不依赖 TX pool，按上游顺序排在前面；TX pool 相关提交暂不可上游，排在末尾。
+private 的 TX 路径与 master 相同。此前为复制方案加入的 TX pool（private `b86b33e`、`2fee8fe`、`089097b`，public `93e1af5`、`7369603`）已撤回。
 
 `wl80211.h` 强制使用统一的 tree layout，避免不同 translation unit 对 RB tree entry 的大小和布局理解不一致。这是扫描结果树跨 public header、private core 和 chip adapter 时的 ABI 约束。
 
@@ -309,32 +311,37 @@ scan-result tree 由 private 的 `wl80211_scan_result_lock/unlock` 保护，底�
 
 ## 7. TX 资源所有权与稳定性修复
 
-vendor 适配层的两笔修复（代码现位于 public `nuttx.c` 与 `chips/bl616cl`）和 wl80211 private 的一笔修复对应底层数据路径的三个问题：
+STA TX 采用零拷贝，与原生 SDK 和 BL4 相同：
 
-- vendor `f112fa0 fix(wifi): correct STA TX ownership`：修正 STA TX buffer 在提交、异步完成和失败路径中的 owner 转移；
-- vendor `62b724f fix(wifi): retry TX after pool release`：TX pool 释放后重新触发可发送路径，避免 pool 恢复后没有新的 poll/notify；
-- wl80211 private `15d4edd fix(wifi6): backpressure TX pool`（`macsw/tx.c`）：pool 无空闲 slot 时返回 `-EAGAIN` 而不是丢帧，TX IOB 仍由发送方持有并等待重试。
+- `wl80211_output()` 把 TX 描述符放在首个 IOB 的 guard（`CONFIG_NET_LL_GUARDSIZE=388`，以太头占最后 14 字节），把 IOB 链作为 PBD 段交给 `wl80211_mac_tx()`；一个 MTU 帧占 3 个 640 字节 IOB，不超过 `TX_PBD_CNT=5`；
+- MAC 从 L3 数据起点向前写 LLC、安全头和 MAC 头，最坏需要以太头之前 38 字节，落在 guard 内；SW 重传复用同一份帧，IOB 在最终完成前不得改动；
+- 完成回调 `wl80211_sta_tx_complete()` 释放 IOB 链，递减在途计数，并调用 chip 通过 `internal_register_txdone_cb()` 注册的钩子；
+- MAC 队列本身没有上限，在途数据帧最多 `WL80211_TX_INFLIGHT_MAX`（24，与原 TX pool 槽数相同）；达到上限时 `wl80211_output()` 返回 `-EAGAIN`，IOB 仍归驱动，驱动存入 `tx_pending`，完成钩子触发下一轮发送；驱动在 poll 前用 `wl80211_output_ready()` 判断；
+- raw/EAPOL/管理帧不计入在途上限，复制进同一 IOB 池后发送。
+
+历史修复：vendor `f112fa0 fix(wifi): correct STA TX ownership` 修正了提交、异步完成和失败路径中的 owner 转移；vendor `62b724f fix(wifi): retry TX after pool release` 让资源释放后重新触发发送路径。零拷贝沿用这两项合同，只是资源从 TX pool 槽改为在途帧计数。
 
 macsw `f9b9a8b4` 则恢复 BL616CL 单天线跨扫描流程的 coex plan，保证反复扫描和连接过程中无线协同状态不会被错误地耗尽或遗失。
 
-这些修复共同形成如下 ownership 合同：
+ownership 合同：
 
 ```text
-上层 NuttX IOB / socket buffer
+上层 NuttX socket buffer
         |
-        | copy/prepare
+        | 协议栈 prepare/clone（IOB 固定池，位于 ram_wifi）
         v
-Wi-Fi shared TX pool
+dev->d_iob -> 驱动 txb / tx_pending
         |
-        | submit: ownership -> hardware/macsw
+        | wl80211_output：描述符写入 guard，ownership -> MAC
+        | 在途达到上限：-EAGAIN，ownership 留在驱动
         v
-异步 TX complete / fail
+异步 TX complete / fail / cleanup
         |
-        +--> release/recycle
-        +--> wake/retry waiting sender
+        +--> iob_free_chain，在途计数减一
+        +--> txdone 钩子唤醒发送
 ```
 
-任何失败路径都必须完成资源回收；任何 pool release 都必须让等待发送者重新获得进展机会。
+任何失败路径都必须完成资源回收；任何完成都必须让等待发送者重新获得进展机会。
 
 ## 8. NuttX buffered-send 竞态修复
 
@@ -523,6 +530,26 @@ TCP TX 初次脚本失败是 UART 输出一行缺失字符造成的 parser 假�
 | UDP RX | 13,124,160 Bytes / 110.02 s | PASS |
 
 DUT 和主机每个方向都有连续非零的 10 秒窗口，未发现 `MAC transmission failed`、`Wi-Fi TX failed`、`ASSERT REC` 或 crash 标记。UDP RX 由主机 iperf2 以默认 1 Mbps 发送。
+
+### 12.4 TX 零拷贝镜像
+
+`wifi` 零拷贝镜像（`nuttx.bin` SHA-256 `a2360d0e…d3524b`）在屏蔽箱内的 WPA3 `ax86u` 上验证：
+
+- clean 全量构建通过，警告与复制方案镜像相同；`g_iob_buffer` 位于 `.wifibss`，TX pool 符号不再存在；最简 `nsh` 构建通过；
+- WPA3 单轮连接、10 轮连接/DHCP/断开、30 轮扫描均 PASS；
+- iperf 四方向各 30 秒和各 120 秒均 PASS，无 `ASSERT REC`；
+- 同一次上电内 UDP、TCP 各饱和发送 60 秒后 `/proc/iobinfo` 空闲 90/90，`g_tx_inflight` 为 0；UDP 发送中途断开再重连后同样回到 90/90、在途 0，重连后发送恢复满速。
+
+同一环境 30 秒吞吐对比（Mbps，主机端）：
+
+| 方向 | 复制方案 | 零拷贝 | 零拷贝 120 秒 |
+| --- | --- | --- | --- |
+| TCP TX | 11.3 | 11.2 | 11.1 |
+| UDP TX | 14.1 | 15.7 | 15.5（丢包 0%） |
+| TCP RX | 5.09 | 3.31 | 4.00 |
+| UDP RX | 1.05 | 1.05 | 1.05 |
+
+TCP RX 在同一套复制代码上也曾测得 3.51–5.09，差异在波动范围内。测试中未观察到在途帧达到上限。
 
 ## 13. 后续发布门禁
 
