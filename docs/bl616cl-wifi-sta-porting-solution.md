@@ -8,7 +8,7 @@
 NSH / WEXT
     |
     v
-BL616CL netdev glue
+BL616CL netdev / adapter（chips/bl616cl）
     |
     +--> wifi_mgmr: 扫描、关联、断开、状态
     |       |
@@ -92,11 +92,14 @@ manifest 当前按 `master` 跟踪无线子仓，移植验收时使用的提交 
 
 ```text
 components/wireless/
+├── rfparam/                 # 选择 drivers/rfparam 源文件的 wrapper
 └── wifi/
     ├── macsw/
     ├── wl80211/
     └── bl_wpa_supplicant/
 ```
+
+`wifi/` 下每个组件目录只有公共子仓及对应的 `CMakeLists.txt`、`Kconfig`；BL616CL 专用实现在 `chips/bl616cl`。
 
 顶层只做一层 `nuttx_add_subdirectory()` 和 Kconfig 菜单生成。每个组件 wrapper 自己根据 `CONFIG_BL_COMPONENT_*` 选择是否接入，避免 vendor 顶层直接拉入所有无线源码。
 
@@ -113,7 +116,7 @@ components/wireless/
 
 `default` 是 macsw 的功能/资源 profile，不是工具链或 ABI 标识。芯片、profile、工具链必须作为一组输入锁定。
 
-### 4.3 wl80211 core 与 host glue 分界
+### 4.3 wl80211 core、host port 与 chip 适配分界
 
 这是本次集成的核心边界。
 
@@ -136,22 +139,32 @@ wl80211/wl80211/src
 
 vendor 主构建随后只消费该 archive，并额外链接 BL616CL PHYRF 库。这样隔离了 private core 的 SDK 侧 CMake、FreeRTOS/lwIP 假设和 NuttX 头文件差异。
 
-host-side glue 保留在 vendor：
+NuttX host port 直接从 public 子仓编译，wrapper 生成 `bl_wl80211` 库；原生 Bouffalo SDK 从同一仓库选择 FreeRTOS/lwIP 文件（`wl80211_platform.c`、`lwip.c`、`wifi_mgmr_cli.c`），两套源文件互不进入对方构建：
 
 ```text
-components/wireless/wifi/wl80211/glue/
+components/wireless/wifi/wl80211/wl80211/   # public 子仓
 ├── wifi_mgmr.c              # 管理面封装
 ├── country.c
+├── supplicant.c
 ├── nuttx.c                  # NuttX OS/网络接口
-├── rtos_al_nuttx.c          # NuttX RTOS 抽象
-├── bl616_wlan.c             # netdev/WEXT/收发回调
-├── bl616_wifi_adapter.c     # BL616CL adapter 和控制流程
-├── bl616cl_efuse_mac.c      # MAC 地址读取
-├── bl616cl_macsw_lp.c       # 低功耗/平台 glue
-└── bl616cl_rfparam_ext.c    # rfparam 扩展接口
+└── rtos_al_nuttx.c          # NuttX RTOS 抽象、scan-result lock
 ```
 
-这种划分对应 BL4 的实际结构：private core 作为库，平台 glue 在芯片/板级适配层编译。它避免将 NuttX 特定实现反向塞入 wl80211 private core。
+BL616CL 专用实现编入 `arch`（`chips/bl616cl/CMakeLists.txt`，`CONFIG_BL_COMPONENT_WL80211`）：
+
+```text
+chips/bl616cl/
+├── bl616cl_wlan.[ch]            # netdev/WEXT/收发回调
+├── bl616cl_wifi_adapter.[ch]    # adapter 和控制流程
+├── bl616cl_efuse_mac.[ch]       # bl616_efuse_read_mac_address()：MAC 地址回退链
+├── bl616cl_macsw_plat.c         # macsw 低功耗 hook 与单调时间源
+├── bl616cl_rfparam_ext.c        # rfparam 扩展接口
+└── bl616cl_wifi_glb.h
+```
+
+public 与 chip 之间的接口：chip 实现 `bl616_wifi_event_handler()`、`bl616_efuse_read_mac_address()`，并通过 `internal_register_recv_cb()`、`internal_register_txdone_cb()` 注册 RX 与 TX 完成回调。
+
+这种划分对应 BL4 的实际结构：private core 作为库，平台适配在芯片层编译。它避免将 NuttX 特定实现反向塞入 wl80211 private core。
 
 ### 4.4 supplicant wrapper
 
@@ -172,14 +185,14 @@ wrapper 不执行公共仓库面向 Bouffalo SDK 的原始 CMake，也不编译 
 
 PBKDF2 则使用 Vela 的 mbedTLS `mbedtls_pkcs5_pbkdf2_hmac()`，避免引入另一套 crypto 实现。
 
-## 5. BL616CL 平台 glue
+## 5. BL616CL 平台适配
 
 ### 5.1 启动和 netdev 注册
 
 `boards/bl616cl/common/src/bl616cl_bringup.c` 在 `CONFIG_BL_COMPONENT_WL80211` 打开时调用：
 
 ```c
-bl616_wlan_sta_initialize();
+bl616_wlan_sta_initialize();   /* chips/bl616cl/bl616cl_wlan.h */
 ```
 
 初始化顺序包括：
@@ -190,11 +203,11 @@ bl616_wlan_sta_initialize();
 4. 注册 RX callback 和 TX-done callback；
 5. 根据配置启动后续 Wi-Fi 管理流程。
 
-`bl616_wlan.c` 提供 NuttX 网络接口，设置 `d_txavail`，并通过 `netdev_register(netdev, NET_LL_IEEE80211)` 将设备纳入 NuttX 网络栈。carrier 状态由连接/断开事件更新。
+`bl616cl_wlan.c` 提供 NuttX 网络接口，设置 `d_txavail`，并通过 `netdev_register(netdev, NET_LL_IEEE80211)` 将设备纳入 NuttX 网络栈。carrier 状态由连接/断开事件更新。
 
 ### 5.2 控制面
 
-NuttX WEXT/ioctl 请求在 `bl616_wifi_adapter.c` 中转换为 wl80211/wifi_mgmr 操作：
+NuttX WEXT/ioctl 请求在 `bl616cl_wifi_adapter.c` 中转换为 wl80211/wifi_mgmr 操作：
 
 ```text
 WEXT scan
@@ -216,7 +229,7 @@ WEXT disconnect
   -> netdev_carrier_off()
 ```
 
-扫描结果在 glue 中转换为 NuttX/WAPI 所需的 SSID、BSSID、信道、RSSI、认证和 cipher 信息。`71bd08b` 补齐了 BL616CL 的 WEXT scan result 路径和相关 NuttX RTOS 辅助接口。
+扫描结果在 adapter 中转换为 NuttX/WAPI 所需的 SSID、BSSID、信道、RSSI、认证和 cipher 信息。`71bd08b` 补齐了 BL616CL 的 WEXT scan result 路径和相关 NuttX RTOS 辅助接口。
 
 连接流程支持：
 
@@ -287,11 +300,11 @@ wl80211 public/private 侧的配套修改包括：
 - private `2fee8fe`：加固 shared TX pool；
 - private `089097b`：pool 暂时不可用时进行 backpressure。
 
-`wl80211.h` 强制使用统一的 tree layout，避免不同 translation unit 对 RB tree entry 的大小和布局理解不一致。这是扫描结果树跨 public header、private core 和 vendor glue 时的 ABI 约束。
+`wl80211.h` 强制使用统一的 tree layout，避免不同 translation unit 对 RB tree entry 的大小和布局理解不一致。这是扫描结果树跨 public header、private core 和 chip adapter 时的 ABI 约束。
 
 ## 7. TX 资源所有权与稳定性修复
 
-vendor glue 的两笔修复和 wl80211 private 的一笔修复对应底层数据路径的三个问题：
+vendor 适配层的两笔修复（代码现位于 public `nuttx.c` 与 `chips/bl616cl`）和 wl80211 private 的一笔修复对应底层数据路径的三个问题：
 
 - vendor `f112fa0 fix(wifi): correct STA TX ownership`：修正 STA TX buffer 在提交、异步完成和失败路径中的 owner 转移；
 - vendor `62b724f fix(wifi): retry TX after pool release`：TX pool 释放后重新触发可发送路径，避免 pool 恢复后没有新的 poll/notify；
@@ -345,17 +358,17 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 
 ### 9.2 Flash OTP rfparam
 
-vendor `253c8a0` 在 `wl80211/glue/CMakeLists.txt` 中加入：
+`components/wireless/rfparam/CMakeLists.txt` 从 drivers 树选择以下源文件，生成 `bl_rfparam` 库（`BL_COMPONENT_RFPARAM`，由 `BL_COMPONENT_WL80211` select）：
 
 - `rfparam_adapter.c`；
 - `rfparam_bl616cl_flash_otp.c`；
 - `rfparam_rftlv.c`。
 
-同时对 rfparam 源使用 `bl616cl_soc_preinc.h`，解决 BL SoC 头文件中的 `ERROR` 枚举与 NuttX `sys/types.h` 冲突，并加入 LHAL flash include 路径。
+同时对 rfparam 源强制包含 `include/bl616cl_rfparam_preinc.h`，解决 BL SoC 头文件中的 `ERROR` 枚举与 NuttX `sys/types.h` 冲突；`include/log.h` 把 rfparam 的 `LOG_*` 映射到 NuttX 无线日志，并加入 LHAL flash include 路径。drivers 是上游子仓，这两个 shim 不放进 drivers。按 AGENTS §8.3，drivers 源码原则上由 `cmake/*.cmake` 选择；rfparam 是 Wi-Fi（以及后续 BLE）共用的 RF 参数层，因此作为例外放在 `components/wireless/rfparam`，随无线组件一起自动发现。最初由 vendor `253c8a0` 加在 wl80211 glue 中。
 
 `rfparam_bl616cl_flash_otp.c` 负责 BL616CL Flash OTP 记录、CRC、trim/power offset 和 MAC slot 的读取定义，使运行时能够使用 BL616CL 对应的 RF 校准参数来源。
 
-`bl616cl_rfparam_ext.c` 提供当前 glue 所需的扩展接口。天线增益目前由适配层记录；country setter 对尚未接入的 BL616CL rfparam 流程明确返回 `-EOPNOTSUPP`，避免静默成功。
+`chips/bl616cl/bl616cl_rfparam_ext.c` 提供当前 adapter 所需的扩展接口。天线增益目前由适配层记录；country setter 对尚未接入的 BL616CL rfparam 流程明确返回 `-EOPNOTSUPP`，避免静默成功。
 
 ## 10. 配置方案
 
@@ -413,7 +426,7 @@ macsw 与 wl80211 core 以 `-flto -ffat-lto-objects` 编译，`CONFIG_ALLSYMS` �
 2. 先独立构建 macsw，确认 `bl616cl/default` profile 和工具链参数；
 3. 用 wl80211 private 子构建生成 `libwl80211_bl616cl.a`；
 4. 在 vendor wrapper 中链接 PHYRF、macsw、wl80211 core 和 supplicant；
-5. 编译 BL616CL glue 和直接 netdev；
+5. 编译 public NuttX host port 与 `chips/bl616cl` 的 adapter/netdev；
 6. 检查 linker map 中的 `ram_wifi`、`.wifibss` 和各独立 archive；
 7. 检查 `nm -u final_nuttx` 无未解析符号；
 8. 分别构建 `nsh` 和 `wifi` 配置，确认配置隔离。
