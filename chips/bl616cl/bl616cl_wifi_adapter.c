@@ -1820,11 +1820,11 @@ int bl616_wifi_sta_scan(struct iwreq *iwr)
 
   /* Wait for scan to complete */
 
-  ret = sem_trywait(&g_wifi_scan_sem);
+  ret = nxsem_trywait(&g_wifi_scan_sem);
   if (ret < 0)
     {
       wlerr("ERROR: start scan failed\n");
-      return ret;
+      return -EBUSY;
     }
 
   memset(&config, 0, sizeof(wifi_mgmr_scan_params_t));
