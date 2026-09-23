@@ -405,6 +405,8 @@ vendor/bouffalolab/vela build \
   bl616cl/ai-m64l-32s-kit/configs/wifi -j14
 ```
 
+macsw 与 wl80211 core 以 `-flto -ffat-lto-objects` 编译，`CONFIG_ALLSYMS` 又使最终固件链接四次（`nuttx`、`first_link`、`second_link`、`final_nuttx`），每次都会重做 LTRANS。`components/wireless/wifi/CMakeLists.txt` 在启用 macsw 或 wl80211 时给链接加 `-flto=auto`，让各 LTRANS 分区并行，单次链接由约 7.8 s 降到约 3.9 s，生成固件不变；`nsh` 不受影响。
+
 推荐的实现顺序：
 
 1. 通过 manifest 拉取并确认四个无线子仓；
