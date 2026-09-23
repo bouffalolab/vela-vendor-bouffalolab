@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/risc-v/src/bl616/bl616_wifi_adapter.c
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_wifi_adapter.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -42,14 +42,13 @@
 
 #include "bl616cl_wifi_glb.h"
 
-#include "bl616_wifi_adapter.h"
-#include "bl616_wlan.h"
+#include "bl616cl_wifi_adapter.h"
+#include "bl616cl_wlan.h"
 
 #include "wl80211.h"
-#include "timeout.h"
 #include "macsw.h"
 
-#include "supplicant_api.h"
+#include "supplicant.h"
 #include "bl_wpa.h"
 #include "wifi_mgmr.h"
 #include "macsw_plat.h"
@@ -58,8 +57,6 @@
 #ifdef CONFIG_BL616_WIRELESS_COEX
 #include "ble/btble_lib_api.h"
 #endif /* CONFIG_BL616_WIRELESS_COEX */
-
-#include "riscv_internal.h"
 
 #ifdef CONFIG_BL616_USBDEV_ECM
 #include "usbd_cdc_ecm.h"
@@ -957,7 +954,10 @@ int bl616_wifi_sta_stop(void)
 
 void bl616_wifi_sta_register_txdone_cb(wifi_txdone_cb_t cb)
 {
+  extern void internal_register_txdone_cb(void (*cb)(void));
+
   g_sta_txdone_cb = cb;
+  internal_register_txdone_cb(bl616_wifi_sta_txdone);
 }
 
 void bl616_wifi_sta_txdone(void)

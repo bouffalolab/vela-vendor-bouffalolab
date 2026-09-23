@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/risc-v/src/bl616/bl616_wifi_adapter.h
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_wifi_adapter.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,8 +18,8 @@
  *
  ****************************************************************************/
 
-#ifndef __ARCH_RISCV_SRC_BL616_BL616_WIFI_ADAPTER_H
-#define __ARCH_RISCV_SRC_BL616_BL616_WIFI_ADAPTER_H
+#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_WIFI_ADAPTER_H
+#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_WIFI_ADAPTER_H
 
 /****************************************************************************
  * Included Files
@@ -154,4 +154,4 @@ void bl616_wifi_stop_callback(void);
 #undef EXTERN
 
 #endif /* __ASSEMBLY__ */
-#endif /* __ARCH_RISCV_SRC_BL616_BL616_WIFI_ADAPTER_H */
+#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_WIFI_ADAPTER_H */

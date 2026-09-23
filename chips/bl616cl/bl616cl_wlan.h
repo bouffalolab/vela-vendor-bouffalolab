@@ -1,5 +1,5 @@
 /****************************************************************************
- * arch/risc-v/src/bl616/bl616_wlan.h
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_wlan.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -18,8 +18,8 @@
  *
  ****************************************************************************/
 
-#ifndef __ARCH_RISCV_SRC_BL616_BL616_WLAN_H
-#define __ARCH_RISCV_SRC_BL616_BL616_WLAN_H
+#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_WLAN_H
+#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_WLAN_H
 
 /****************************************************************************
  * Included Files
@@ -29,7 +29,7 @@
 #include <nuttx/wdog.h>
 #include <nuttx/wqueue.h>
 
-#include "bl616_wifi_adapter.h"
+#include "bl616cl_wifi_adapter.h"
 
 #ifndef __ASSEMBLY__
 
@@ -109,4 +109,4 @@ struct net_driver_s *bl616_wlan_sta_get_netdev(void);
 #undef EXTERN
 
 #endif /* __ASSEMBLY__ */
-#endif /* __ARCH_RISCV_SRC_BL616_BL616_WLAN_H */
+#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_WLAN_H */

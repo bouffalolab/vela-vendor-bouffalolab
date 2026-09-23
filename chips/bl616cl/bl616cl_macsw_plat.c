@@ -1,10 +1,11 @@
 /****************************************************************************
- * components/wireless/wifi/wl80211/glue/bl616cl_macsw_lp.c
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_macsw_plat.c
  *
- * BL616CL macsw low-power interface stubs for the STA-only, no-low-power
- * build. The macsw core calls these hooks from the wifi_main startup and
- * the wake-up paths; without the low-power firmware path they report
- * "no low-power state" and keep the MAC in full-power mode.
+ * BL616CL platform hooks for the macsw core: low-power interface stubs for
+ * the STA-only, no-low-power build, and the monotonic time source.  The
+ * macsw core calls the low-power hooks from the wifi_main startup and the
+ * wake-up paths; without the low-power firmware path they report "no
+ * low-power state" and keep the MAC in full-power mode.
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -23,9 +24,10 @@
  *
  ****************************************************************************/
 
+#include <assert.h>
+#include <errno.h>
 #include <stdint.h>
-
-#include "hal_machw.h"
+#include <time.h>
 
 /****************************************************************************
  * Public Functions
@@ -61,5 +63,28 @@ int hal_macsw_lp_is_wake_by_ap_existence_check(void)
 
 int hal_macsw_lp_is_wake_by_ap_disconnected(void)
 {
+  return 0;
+}
+
+/**
+ ****************************************************************************************
+ * @brief Monotonic time source for the MAC stack (macsw_plat.h).
+ *
+ * @param[out] time_us Monotonic time in microseconds.
+ * @return 0 on success.
+ ****************************************************************************************
+ */
+int macsw_platform_get_time_us(uint64_t *time_us)
+{
+  struct timespec ts;
+
+  DEBUGASSERT(time_us != NULL);
+
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+    {
+      return -EIO;
+    }
+
+  *time_us = (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000;
   return 0;
 }

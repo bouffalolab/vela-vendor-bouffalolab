@@ -1,7 +1,7 @@
 /****************************************************************************
- * components/wireless/wifi/wl80211/glue/bl616cl_efuse_mac.c
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_efuse_mac.c
  *
- * BL616CL efuse STA MAC-address read for the wl80211 platform glue.
+ * BL616CL efuse STA MAC-address read for the wl80211 host port.
  * Logic ported from the BL4 vendor tree (chip/bl616/bl616_efuse.c,
  * bl616_efuse_read_mac_address): read ef_zone_01 words W2/W3 through the
  * lhal ef_ctrl direct interface, verify the stored zero-bit parity and
@@ -33,7 +33,7 @@
 
 #include <bflb_ef_ctrl.h>
 
-#include "bl616_efuse.h"
+#include "bl616cl_efuse_mac.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -139,10 +139,11 @@ static int bl616cl_efuse_read_slot(uint32_t low_off, uint32_t high_off,
 }
 
 /****************************************************************************
- * Name: bl616cl_efuse_mac_get
+ * Name: bl616_efuse_read_mac_address
  *
  * Description:
- *   Resolve the STA MAC address: provisioned ef_zone_01 first, then the
+ *   Resolve the STA MAC address for platform_get_mac(): provisioned
+ *   ef_zone_01 first, then the
  *   chip-id WiFi-MAC slot, then a deterministic locally administered
  *   fallback (fixed prefix + efuse chip-id words) so the interface is
  *   always usable on boards without a provisioned address.
@@ -152,7 +153,7 @@ static int bl616cl_efuse_read_slot(uint32_t low_off, uint32_t high_off,
  *
  ****************************************************************************/
 
-int bl616cl_efuse_mac_get(uint8_t mac[6])
+int bl616_efuse_read_mac_address(uint8_t mac[6])
 {
   uint32_t low = 0;
   uint32_t high = 0;
@@ -192,69 +193,4 @@ int bl616cl_efuse_mac_get(uint8_t mac[6])
     }
 
   return 0;
-}
-
-/****************************************************************************
- * Name: bl616_efuse_read_mac_address
- *
- * Description:
- *   Read the provisioned STA MAC address from efuse zone 01 and verify
- *   its stored parity.  On success the address is returned in network
- *   order (first byte is the OUI MSB).
- *
- * Input Parameters:
- *   mac - buffer receiving the 6-byte address
- *
- * Returned Value:
- *   0 on success, -ENODATA when the stored parity does not match.
- *
- ****************************************************************************/
-
-int bl616_efuse_read_mac_address(uint8_t mac[6])
-{
-  uint8_t *maclow = (uint8_t *)mac;
-  uint8_t *machigh = (uint8_t *)(mac + 4);
-  uint32_t tmpval = 0;
-  uint32_t i = 0;
-  uint32_t cnt = 0;
-
-  bflb_ef_ctrl_read_direct(NULL,
-                           EF_DATA_EF_ZONE_01_W2_OFFSET,
-                           &tmpval,
-                           1,
-                           1);
-
-  WRWD_TO_BYTEP(maclow, tmpval);
-
-  bflb_ef_ctrl_read_direct(NULL,
-                           EF_DATA_EF_ZONE_01_W3_OFFSET,
-                           &tmpval,
-                           1,
-                           1);
-
-  machigh[0] = tmpval & 0xff;
-  machigh[1] = (tmpval >> 8) & 0xff;
-
-  /* Check parity */
-
-  for (i = 0; i < 6; i++)
-    {
-      cnt += count_zero_bits_in_byte(mac[i]);
-    }
-
-  if ((cnt & 0x3f) == ((tmpval >> 16) & 0x3f))
-    {
-      /* Change to network order */
-
-      for (i = 0; i < 3; i++)
-        {
-          tmpval = mac[i];
-          mac[i] = mac[5 - i];
-          mac[5 - i] = tmpval;
-        }
-
-      return 0;
-    }
-
-  return -ENODATA;
 }

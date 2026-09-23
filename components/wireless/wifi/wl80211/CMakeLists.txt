@@ -54,7 +54,35 @@ nuttx_add_extra_library(${WL80211_ARCHIVE})
 # PHYRF prebuilt next to the core archive.
 nuttx_add_extra_library(${BL_BOUFFALO_DRIVERS_DIR}/soc/bl616cl/phyrf/lib-gcc_10.2.0-toolchain_V2.6.1/libbl616cl_phyrf.a)
 
-# Host-side platform glue (wifi_mgmr/country/nuttx/rtos_al_nuttx +
-# bl616_wlan/bl616_wifi_adapter adapted for BL616CL). Kept out of the
-# upstream component repository; see glue/CMakeLists.txt for details.
-add_subdirectory(glue)
+# NuttX host port straight from the public wl80211 repository. The native
+# Bouffalo SDK build selects the FreeRTOS/lwIP set (wl80211_platform.c,
+# lwip.c, wifi_mgmr_cli.c) from the same repository instead. The BL616CL
+# netdev and adapter live in chips/bl616cl.
+set(WL80211_PUBLIC_DIR ${CMAKE_CURRENT_LIST_DIR}/wl80211)
+
+nuttx_add_kernel_library(bl_wl80211)
+target_sources(
+  bl_wl80211
+  PRIVATE ${WL80211_PUBLIC_DIR}/wifi_mgmr.c
+          ${WL80211_PUBLIC_DIR}/country.c
+          ${WL80211_PUBLIC_DIR}/supplicant.c
+          ${WL80211_PUBLIC_DIR}/nuttx.c
+          ${WL80211_PUBLIC_DIR}/rtos_al_nuttx.c)
+
+target_include_directories(
+  bl_wl80211
+  PRIVATE ${WL80211_PUBLIC_DIR}/include
+          ${WL80211_PUBLIC_DIR}
+          ${WL80211_PUBLIC_DIR}/macsw
+          ${MACSW_INCLUDE}
+          ${SUPPLICANT_INCLUDE}
+          ${PHYRF_INCLUDE}
+          ${BL_BOUFFALO_DRIVERS_DIR}/lhal/include
+          ${BL_BOUFFALO_DRIVERS_DIR}/lhal/include/arch)
+
+target_compile_definitions(
+  bl_wl80211
+  PRIVATE BL616CL ARCH_RISCV
+          CONFIG_MACSW_SELECT_INCLUDE="macsw_${CONFIG_MACSW_SELECT}_config.h")
+target_compile_options(bl_wl80211 PRIVATE -Wno-undef -Wno-unused-function
+                                          -Wno-unused-variable)

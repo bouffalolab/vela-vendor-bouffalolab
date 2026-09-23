@@ -29,7 +29,7 @@
 #include <sys/types.h>
 
 #ifdef CONFIG_BL_COMPONENT_WL80211
-#include "bl616_wlan.h"
+#include "bl616cl_wlan.h"
 #endif
 
 #include "bl616cl_bod.h"

@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+
+config BL_COMPONENT_RFPARAM
+	bool "Bouffalo rfparam"
+	depends on ARCH_CHIP_BL616CL
+	help
+	  Build the BL616CL RF parameter sources from the drivers tree
+	  (rfparam adapter, Flash OTP and RFTLV parsing) with the NuttX
+	  shims they need. Selected by the Wi-Fi stack.

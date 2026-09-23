@@ -83,6 +83,32 @@ if(CONFIG_BL616CL_TIMER)
   list(APPEND SRCS bl616cl_tim.c)
 endif()
 
+# Wi-Fi STA port on top of the wl80211 component: netdev, adapter, efuse MAC
+# and macsw platform hooks.
+if(CONFIG_BL_COMPONENT_WL80211)
+  list(
+    APPEND
+    SRCS
+    bl616cl_wlan.c
+    bl616cl_wifi_adapter.c
+    bl616cl_efuse_mac.c
+    bl616cl_macsw_plat.c
+    bl616cl_rfparam_ext.c)
+
+  set(BL616CL_VENDOR_DIR ${CMAKE_CURRENT_LIST_DIR}/../..)
+  set(BL616CL_WIFI_DIR ${BL616CL_VENDOR_DIR}/components/wireless/wifi)
+  target_include_directories(
+    arch
+    PRIVATE ${BL616CL_WIFI_DIR}/wl80211/wl80211/include
+            ${BL616CL_WIFI_DIR}/wl80211/wl80211
+            ${BL616CL_WIFI_DIR}/wl80211/wl80211/macsw
+            ${BL616CL_WIFI_DIR}/macsw/macsw/inc
+            ${BL616CL_WIFI_DIR}/bl_wpa_supplicant/bl_wpa_supplicant/include/bl_supplicant
+            ${BL616CL_VENDOR_DIR}/drivers/soc/bl616cl/phyrf/include)
+  target_compile_definitions(
+    arch PRIVATE CONFIG_MACSW_SELECT_INCLUDE="macsw_${CONFIG_MACSW_SELECT}_config.h")
+endif()
+
 target_sources(arch PRIVATE ${SRCS})
 
 target_compile_definitions(arch PRIVATE BL616CL)

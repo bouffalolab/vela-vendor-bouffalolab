@@ -1,7 +1,7 @@
 /****************************************************************************
- * components/wireless/wifi/wl80211/glue/bl616cl_efuse_mac.h
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_efuse_mac.h
  *
- * BL616CL efuse MAC-address resolution for the wl80211 platform glue.
+ * BL616CL efuse STA MAC-address resolution for the wl80211 host port.
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -20,13 +20,21 @@
  *
  ****************************************************************************/
 
-#ifndef __BL616CL_EFUSE_MAC_H
-#define __BL616CL_EFUSE_MAC_H
+#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_EFUSE_MAC_H
+#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_EFUSE_MAC_H
+
+/****************************************************************************
+ * Included Files
+ ****************************************************************************/
+
+#include <stdint.h>
 
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
-int bl616cl_efuse_mac_get(uint8_t mac[6]);
+/* wl80211 host port contract (rtos_al_nuttx.c platform_get_mac()). */
 
-#endif /* __BL616CL_EFUSE_MAC_H */
+int bl616_efuse_read_mac_address(uint8_t mac[6]);
+
+#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_EFUSE_MAC_H */

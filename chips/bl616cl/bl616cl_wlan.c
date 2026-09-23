@@ -1,6 +1,6 @@
 /****************************************************************************
 
- * arch/risc-v/src/bl616/bl616_wlan.c
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_wlan.c
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -54,8 +54,8 @@
 #endif
 #endif
 
-#include "bl616_wifi_adapter.h"
-#include "bl616_wlan.h"
+#include "bl616cl_wifi_adapter.h"
+#include "bl616cl_wlan.h"
 #include "wl80211_mac.h"
 #include "wifi_mgmr_ext.h"
 
