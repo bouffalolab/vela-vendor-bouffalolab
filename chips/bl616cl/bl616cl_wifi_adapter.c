@@ -1116,6 +1116,11 @@ int bl616_wifi_sta_essid(struct iwreq *iwr, bool set)
     {
       uint8_t len = iwr->u.essid.length;
 
+      if (len > SSID_MAX_LEN)
+        {
+          return -EINVAL;
+        }
+
       /* save ssid */
 
       memset(g_wifi_cfg.ssid, 0x0, SSID_MAX_LEN);
