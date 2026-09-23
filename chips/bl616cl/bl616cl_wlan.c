@@ -64,6 +64,10 @@
 
 #define WLAN_WORK    LPWORK
 
+/* TX frames waiting for a completion are retried if none arrives in time */
+
+#define WLAN_TXTOUT  SEC2TICK(1)
+
 #define SSID_MAX_LEN (32)
 #define PWD_MAX_LEN  (64)
 
@@ -386,6 +390,16 @@ static void wlan_transmit(struct wlan_priv_s *priv)
         {
           wlerr("Wi-Fi TX failed: %d\n", ret);
         }
+    }
+
+  /* Frames left behind wait for a TX completion, which cancels the
+   * watchdog; if none comes, wlan_txtimeout_work() retries them.
+   */
+
+  if (priv->tx_pending != NULL || !IOB_QEMPTY(&priv->txb))
+    {
+      wd_start(&priv->txtimeout, WLAN_TXTOUT,
+               wlan_txtimeout_expiry, (wdparm_t)priv);
     }
 }
 
