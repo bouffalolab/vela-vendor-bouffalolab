@@ -54,21 +54,12 @@
 #include "macsw_plat.h"
 #include "wl80211_platform.h"
 
-#ifdef CONFIG_BL616CL_WIRELESS_COEX
-#include "ble/btble_lib_api.h"
-#endif /* CONFIG_BL616CL_WIRELESS_COEX */
-
-#ifdef CONFIG_BL616CL_USBDEV_ECM
-#include "usbd_cdc_ecm.h"
-#endif
-
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
 #define CONFIG_BL616CL_FW_TASK_NAME       "wifi_fw"
 #define CONFIG_BL616CL_FW_TASK_PRIORITY   (127)
-#define CONFIG_BL616CL_FW_TASK_STACK_SIZE (4096)
 
 #ifndef CONFIG_BL616CL_WLAN_THREAD_PRIORITY
   #define CONFIG_BL616CL_WLAN_THREAD_PRIORITY (150) /* BL4 default */
@@ -86,19 +77,11 @@
   #define CONFIG_BL616CL_WLAN_PS_ACTIVETIME (50)
 #endif
 
-#define SCAN_UNIT(_ms)                  ((_ms)*8 / 5)
-
-#define WIFI_MGMR                       wifiMgmr
-
  #define WIFI_TASK_STACK_SIZE           (6 * 1024)
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
-
-#ifdef CONFIG_BL616CL_WIRELESS_COEX
-static struct work_s *g_coex_ctx;
-#endif /* CONFIG_BL616CL_WIRELESS_COEX */
 
 /* Wi-Fi interrupt private data */
 
@@ -145,12 +128,6 @@ static sem_t g_wifi_notify_sem = SEM_INITIALIZER(0);
 /* Main wifi stack entry point */
 extern void wifi_main(void *param);
 
-#ifdef BL616_WLAN_HAS_STA
-
-/* If reconnect automatically */
-
-static bool g_sta_reconnect;
-
 /* If Wi-Fi sta connected */
 
 static bool g_sta_connected;
@@ -159,20 +136,13 @@ static bool g_sta_connected;
 
 static volatile bool g_sta_block = false;
 
-static int g_retry_cnt = 0;
-
-static int g_channel = 0;
-
 /* Wi-Fi station TX done callback function */
 
 static wifi_txdone_cb_t g_sta_txdone_cb;
 
-static sem_t g_wifi_wait_start_sem = SEM_INITIALIZER(0);
 static sem_t g_wifi_scan_sem = SEM_INITIALIZER(1);
 static sem_t g_wifi_wait_connect_sem = SEM_INITIALIZER(0);
 
-
-#endif /* BL616_WLAN_HAS_STA */
 
 /****************************************************************************
  * Private Function Prototypes
@@ -887,8 +857,6 @@ int bl616_wifi_adapter_init(void)
   return OK;
 }
 
-#ifdef BL616_WLAN_HAS_STA
-
 /****************************************************************************
  * Name: bl616_wifi_sta_start
  *
@@ -991,7 +959,6 @@ int bl616_wifi_sta_send_data(struct iob_s *iob,
                              uint16_t offset)
 {
   int ret = OK;
-  void *payload;
 
   extern int wl80211_output(struct iob_s *buf);
   ret = wl80211_output(iob);
@@ -1232,66 +1199,6 @@ static int is_ascii_hex_char(char c)
 	return -1;
 }
 
-#ifdef CONFIG_BL616CL_WIRELESS_COEX
-/****************************************************************************
- * Name: bl616_coex_restore_work
- *
- * Description:
- *   Restore coex priority
- *
- * Input Parameters:
- *   arg   - address of priority
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-static void bl616_coex_restore_work(FAR void *arg)
-{
-  uint8_t pta_prio = *(FAR uint8_t *)arg;
-  irqstate_t flags;
-
-  wlinfo("Restore PTA %d -> %d\n", g_wifi_cfg.pta, pta_prio);
-  switch (pta_prio)
-    {
-      case IW_PTA_PRIORITY_COEX_MAXIMIZED:
-        {
-          btblecontroller_change_scan_itl_win(
-            SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_MAXIMIZED_INTERVAL),
-            SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_MAXIMIZED_WINDOW));
-          break;
-        }
-
-      case IW_PTA_PRIORITY_WLAN_MAXIMIZED:
-        {
-          btblecontroller_change_scan_itl_win(
-            SCAN_UNIT(CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_INTERVAL),
-            SCAN_UNIT(CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_WINDOW));
-          break;
-        }
-
-      default:
-        {
-          btblecontroller_change_scan_itl_win(
-            SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_BALANCED_INTERVAL),
-            SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_BALANCED_WINDOW));
-        }
-    }
-
-  flags = up_irq_save();
-  g_wifi_cfg.pta = pta_prio;
-
-  if (g_coex_ctx != NULL)
-    {
-      kmm_free(g_coex_ctx);
-    }
-
-  g_coex_ctx = NULL;
-  up_irq_restore(flags);
-}
-#endif
-
 /****************************************************************************
  * Name: bl616_wifi_sta_connect
  *
@@ -1312,10 +1219,6 @@ int bl616_wifi_sta_connect(void)
   int ret;
   uint16_t freq = 0;
   uint8_t bssid[18] = {0};
-#ifdef CONFIG_BL616CL_WIRELESS_COEX
-  static uint8_t pta_prio_old = IW_PTA_PRIORITY_BALANCED;
-  irqstate_t flags;
-#endif
 
   ret = adapter_wifi_lock(true);
   if (ret < 0)
@@ -1366,54 +1269,7 @@ int bl616_wifi_sta_connect(void)
 
   freq = g_wifi_cfg.freq;
 
-#ifdef CONFIG_BL616CL_WIRELESS_COEX
-  do
-    {
-      flags = up_irq_save();
-      if (g_coex_ctx != NULL)
-        {
-          work_cancel(LPWORK, g_coex_ctx);
-          kmm_free(g_coex_ctx);
-          g_wifi_cfg.pta = pta_prio_old;
-        }
-
-      g_coex_ctx = kmm_malloc(sizeof(struct work_s));
-      if (g_coex_ctx == NULL)
-        {
-          up_irq_restore(flags);
-          adapter_wifi_lock(false);
-          return -ENOMEM;
-        }
-
-      memset(g_coex_ctx, 0, sizeof(struct work_s));
-
-      /* Save old pta priority */
-
-      pta_prio_old = g_wifi_cfg.pta;
-      g_wifi_cfg.pta = IW_PTA_PRIORITY_WLAN_MAXIMIZED;
-
-      up_irq_restore(flags);
-
-      /* Scan window 8, interval 160 */
-
-      btblecontroller_change_scan_itl_win(
-        SCAN_UNIT(CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_INTERVAL),
-        SCAN_UNIT(CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_WINDOW));
-
-      wlinfo("PTA %d -> %d, window %d interval %d\n",
-             pta_prio_old,
-             g_wifi_cfg.pta,
-             CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_WINDOW,
-             CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_INTERVAL);
-    }
-  while (0);
-#endif
-
   bl616_wifi_sta_set_quick_connect(true);
-
-#ifdef CONFIG_BL616CL_WLAN_LOWRATE_CONNECT
-  bl616_wifi_sta_set_lowrate_connect(true);
-#endif
 
   /* Set connect block */
 
@@ -1447,12 +1303,6 @@ int bl616_wifi_sta_connect(void)
 
       g_sta_block = false;
 
-#ifdef CONFIG_BL616CL_WIRELESS_COEX
-      /* restore coex */
-
-      bl616_coex_restore_work(&pta_prio_old);
-#endif
-
       adapter_wifi_lock(false);
       return ret;
     }
@@ -1485,45 +1335,7 @@ int bl616_wifi_sta_connect(void)
 
       bl616_wifi_sta_clear_info();
 
-#ifdef CONFIG_BL616CL_WIRELESS_COEX
-      /* restore coex */
-
-      bl616_coex_restore_work(&pta_prio_old);
-#endif
     }
-#ifdef CONFIG_BL616CL_WIRELESS_COEX
-  else
-    {
-      do
-        {
-          int32_t timeout_msec = 5000;
-
-          flags = up_irq_save();
-          if (g_coex_ctx == NULL)
-            {
-              wlwarn("interrupted by following disconnect\n");
-
-              /* restore coex */
-
-              bl616_coex_restore_work(&pta_prio_old);
-
-              up_irq_restore(flags);
-
-              adapter_wifi_lock(false);
-              return -EAGAIN;
-            }
-
-          up_irq_restore(flags);
-
-          work_queue(LPWORK,
-                     g_coex_ctx,
-                     bl616_coex_restore_work,
-                     &pta_prio_old,
-                     MSEC2TICK(timeout_msec));
-        }
-      while (0);
-    }
-#endif
 
   adapter_wifi_lock(false);
 
@@ -1609,7 +1421,6 @@ int bl616_wifi_sta_mode(struct iwreq *iwr, bool set)
 
 int bl616_wifi_sta_auth(struct iwreq *iwr, bool set)
 {
-  int ret;
   int cmd;
 
   if (set)
@@ -1744,8 +1555,6 @@ int bl616_wifi_sta_freq(struct iwreq *iwr, bool set)
 
 int bl616_wifi_sta_bitrate(struct iwreq *iwr, bool set)
 {
-  int ret;
-
   if (set)
     {
       return -ENOSYS;
@@ -1832,62 +1641,13 @@ int bl616_wifi_sta_txpower(struct iwreq *iwr, bool set)
 
 int bl616_wifi_sta_pta(struct iwreq *iwr, bool set)
 {
-  struct iwreq *req = (struct iwreq *)iwr;
-  uint8_t pta_prio;
-
   if (set)
     {
-#ifdef CONFIG_BL616CL_WIRELESS_COEX
-      pta_prio = req->u.param.value;
-
-      if (pta_prio >= IW_PTA_PRIORITY_COEX_MAXIMIZED &&
-          pta_prio <= IW_PTA_PRIORITY_WLAN_MAXIMIZED)
-        {
-          wlinfo("set pta_prio: %d\n", pta_prio);
-
-          switch (pta_prio)
-            {
-              case IW_PTA_PRIORITY_COEX_MAXIMIZED:
-                {
-                  btblecontroller_change_scan_itl_win(
-                    SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_MAXIMIZED_INTERVAL),
-                    SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_MAXIMIZED_WINDOW));
-                  break;
-                }
-
-              case IW_PTA_PRIORITY_WLAN_MAXIMIZED:
-                {
-                  btblecontroller_change_scan_itl_win(
-                    SCAN_UNIT(CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_INTERVAL),
-                    SCAN_UNIT(CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_WINDOW));
-                  break;
-                }
-
-              default:
-                {
-                  btblecontroller_change_scan_itl_win(
-                    SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_BALANCED_INTERVAL),
-                    SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_BALANCED_WINDOW));
-                }
-            }
-
-          g_wifi_cfg.pta = pta_prio;
-        }
-      else
-        {
-          return -EINVAL;
-        }
-#else
       return -ENOSYS;
-#endif
     }
   else
     {
-#ifdef CONFIG_BL616CL_WIRELESS_COEX
-      iwr->u.param.value = g_wifi_cfg.pta;
-#else
       iwr->u.param.value = IW_PTA_PRIORITY_BALANCED;
-#endif
     }
 
   return OK;
@@ -2183,7 +1943,6 @@ int bl616_wifi_sta_dtim(struct iwreq *iwr, bool set)
 int bl616_wifi_sta_powersave(struct iwreq *iwr, bool set)
 {
   struct iwreq *req = (struct iwreq *)iwr;
-  int ret;
 
   DEBUGASSERT(req != NULL);
 
@@ -2439,4 +2198,3 @@ void bl616_wifi_event_handler(void *arg1, uint32_t arg2)
         break;
     }
 }
-#endif
