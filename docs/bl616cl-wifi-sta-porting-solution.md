@@ -385,7 +385,7 @@ vendor `253c8a0` 在 `wl80211/glue/CMakeLists.txt` 中加入：
 - `CONFIG_NSH_READLINE=y`；
 - `CONFIG_READLINE_TABCOMPLETION=y`；
 - `CONFIG_READLINE_CMD_HISTORY=y`；
-- `CONFIG_BL616CL_TRNG=y`、`CONFIG_DEV_URANDOM=y`（默认 `DEV_URANDOM_ARCH`，同时启用 `/dev/random`）。
+- `CONFIG_BL616CL_TRNG=y`、`CONFIG_DEV_URANDOM=y`：由 `BL_COMPONENT_WPA_SUPPLICANT` 在 Kconfig 中 `select`，不写在 defconfig 中；`DEV_URANDOM` 默认 `DEV_URANDOM_ARCH`，同时启用 `/dev/random`。
 
 此前 `1c95e7b feat(bl616): enable WiFi in nsh` 将 Wi-Fi 选项错误地加入 `nsh`。本次配置收尾已恢复 `nsh`，并将 Wi-Fi、iperf、Tab 补全和命令历史集中到 `wifi/defconfig`。defconfig 应继续通过 menuconfig/savedefconfig 生成，不能直接维护生成的 `.config`。
 
