@@ -49,7 +49,7 @@
 
 #ifdef CONFIG_PM
 #include <nuttx/power/pm.h>
-#ifdef CONFIG_BL616_LOWPOWER
+#ifdef CONFIG_BL616CL_LOWPOWER
 #include "bl616_lp.h"
 #endif
 #endif
@@ -59,7 +59,7 @@
 #include "wl80211_mac.h"
 #include "wifi_mgmr_ext.h"
 
-#ifdef CONFIG_BL616_WLAN_SDIO
+#ifdef CONFIG_BL616CL_WLAN_SDIO
 #include "sdiowifi_mgmr.h"
 #endif
 
@@ -78,7 +78,7 @@
 #define SSID_MAX_LEN (32)
 #define PWD_MAX_LEN  (64)
 
-#ifdef CONFIG_BL616_WLAN_WORK_THREAD
+#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
 #define NETDEV_THREAD_NAME_FMT "netdev-%s"
 #define NETDEV_TX_CONTINUE 1 /* Return value for devif_poll */
 #endif
@@ -117,7 +117,7 @@ struct wlan_priv_s
   struct work_s rxwork;   /* Send packet work */
   struct work_s txwork;   /* Receive packet work */
   struct work_s toutwork; /* Send packet timeout work */
-#ifdef CONFIG_BL616_WLAN_PROBE
+#ifdef CONFIG_BL616CL_WLAN_PROBE
   struct work_s probework; /* Probe work */
 #endif
 
@@ -137,7 +137,7 @@ struct wlan_priv_s
 
   struct iob_queue_s txb;
   struct iob_s *tx_pending;
-#ifdef CONFIG_BL616_WLAN_WORK_THREAD
+#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
   pid_t tid;
   sem_t sem;
 #endif
@@ -276,7 +276,7 @@ static void up_pm_notify(struct pm_callback_s *cb,
                          enum pm_state_e pmstate);
 #endif
 
-#ifdef CONFIG_BL616_WLAN_PROBE
+#ifdef CONFIG_BL616CL_WLAN_PROBE
 static void wlan_sta_probe_status(struct wlan_priv_s *dev);
 #endif
 
@@ -294,8 +294,8 @@ static void wlan_sta_probe_status(struct wlan_priv_s *dev);
  *     mutex/semaphore instead of disable interrupt, if necessary.
  */
 
-// #define CONFIG_BL616_NET_DEBUG
-#ifdef CONFIG_BL616_NET_DEBUG
+// #define CONFIG_BL616CL_NET_DEBUG
+#ifdef CONFIG_BL616CL_NET_DEBUG
 static inline void dump_ethhdr(const char *msg,
                                unsigned char *buf,
                                int buflen)
@@ -351,7 +351,7 @@ static inline void wlan_cache_txpkt_tail(struct wlan_priv_s *priv)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_BL616_WLAN_WORK_THREAD
+#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
 static inline void wlan_upper_queue_work(struct wlan_priv_s *priv)
 {
   int semcount;
@@ -472,7 +472,7 @@ static void wlan_transmit(struct wlan_priv_s *priv)
               break;
             }
         }
-#ifdef CONFIG_BL616_NET_DEBUG
+#ifdef CONFIG_BL616CL_NET_DEBUG
       wlinfo("iob=%p\n", iob);
 #endif
       dump_ethhdr("TX", IOB_DATA(iob) - llhdrlen, iob->io_pktlen + llhdrlen);
@@ -552,7 +552,7 @@ static int wlan_rx_done(struct wlan_priv_s *priv,
 
   dump_ethhdr("RX", buffer, len);
 
-#ifdef CONFIG_BL616_WLAN_PROBE
+#ifdef CONFIG_BL616CL_WLAN_PROBE
   /* Upon receipt of a data packet, the active WLAN connection
    * is deemed stable, resulting in the refresh of the probe timer.
    */
@@ -605,7 +605,7 @@ static int wlan_rx_done(struct wlan_priv_s *priv,
       goto out;
     }
 
-#ifdef CONFIG_BL616_NET_DEBUG
+#ifdef CONFIG_BL616CL_NET_DEBUG
   wlinfo("RX: net %p, buff %p, len: %d, iob %p\n", net, buffer, len, iob);
 #endif
 
@@ -629,7 +629,7 @@ recv_frame:
       goto out;
     }
 
-#ifdef CONFIG_BL616_WLAN_WORK_THREAD
+#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
   wlan_upper_queue_work(priv);
 #else
   if (work_available(&priv->rxwork))
@@ -1002,7 +1002,7 @@ static int wlan_ifup(struct net_driver_s *dev)
         dev->d_ipv6addr[7]);
 #endif
 
-#ifdef CONFIG_BL616_WLAN_WORK_THREAD
+#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
   /* Try to bring up a dedicated thread for work. */
 
   nxsem_init(&priv->sem, 0, 0);
@@ -1019,7 +1019,7 @@ static int wlan_ifup(struct net_driver_s *dev)
       argv[1] = NULL;
 
       priv->tid = kthread_create(name,
-                                 CONFIG_BL616_WLAN_THREAD_PRIORITY,
+                                 CONFIG_BL616CL_WLAN_THREAD_PRIORITY,
                                  CONFIG_DEFAULT_TASK_STACKSIZE,
                                  wlan_loop,
                                  argv);
@@ -1111,7 +1111,7 @@ static int wlan_ifdown(struct net_driver_s *dev)
       priv->tx_pending = NULL;
     }
 
-#ifdef CONFIG_BL616_WLAN_WORK_THREAD
+#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
   if (priv->tid > 0)
     {
       /* Try to tear down the dedicated thread for work. */
@@ -1169,7 +1169,7 @@ static int wlan_txavail(struct net_driver_s *dev)
 {
   struct wlan_priv_s *priv = (struct wlan_priv_s *)dev->d_private;
 
-#ifdef CONFIG_BL616_WLAN_WORK_THREAD
+#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
   wlan_upper_queue_work(priv);
 #else
   if (work_available(&priv->txwork))
@@ -1604,7 +1604,7 @@ static void wlan_sta_tx_done(void *arg)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_BL616_WLAN_PROBE
+#ifdef CONFIG_BL616CL_WLAN_PROBE
 static void wlan_sta_probe_status_work(void *net_dev)
 {
   struct wlan_priv_s *dev = (struct wlan_priv_s *)net_dev;
@@ -1613,7 +1613,7 @@ static void wlan_sta_probe_status_work(void *net_dev)
 
   DEBUGASSERT(netdev != NULL);
 
-#ifdef CONFIG_BL616_WLAN_PROBE_ARP
+#ifdef CONFIG_BL616CL_WLAN_PROBE_ARP
 
   /* ipv4_acd_announce */
 
@@ -1629,7 +1629,7 @@ static void wlan_sta_probe_status_work(void *net_dev)
 
     /* Do not enter low power while waiting for arp response */
 
-#ifdef CONFIG_BL616_LOWPOWER
+#ifdef CONFIG_BL616CL_LOWPOWER
       pm_wakelock_stay(&dev->wakelock);
 #endif
 
@@ -1654,7 +1654,7 @@ static void wlan_sta_probe_status_work(void *net_dev)
           wlerr("ERROR: arp probe failed\n");
         }
 
-#ifdef CONFIG_BL616_LOWPOWER
+#ifdef CONFIG_BL616CL_LOWPOWER
       pm_wakelock_relax(&dev->wakelock);
 #endif
 
@@ -1671,7 +1671,7 @@ static void wlan_sta_probe_status_work(void *net_dev)
 
                        MSEC2TICK(CONFIG_MIIO_OT_KPLV_TIMEOUT_MS / 3 + 1e4));
 #else
-                       SEC2TICK(CONFIG_BL616_WLAN_PROBE_ARP_INTERVAL));
+                       SEC2TICK(CONFIG_BL616CL_WLAN_PROBE_ARP_INTERVAL));
 #endif
       if (ret != OK)
         {
@@ -1696,7 +1696,7 @@ static void wlan_sta_probe_status(struct wlan_priv_s *dev)
 
                        MSEC2TICK(CONFIG_MIIO_OT_KPLV_TIMEOUT_MS / 3 + 1e4));
 #else
-                       SEC2TICK(CONFIG_BL616_WLAN_PROBE_ARP_INTERVAL));
+                       SEC2TICK(CONFIG_BL616CL_WLAN_PROBE_ARP_INTERVAL));
 #endif
   if (ret != OK)
     {
@@ -1833,7 +1833,7 @@ int bl616_wlan_sta_initialize(void)
   bl616_wifi_sta_register_recv_cb(wlan_sta_rx_done);
   bl616_wifi_sta_register_txdone_cb(wlan_sta_tx_done);
 
-#ifdef CONFIG_BL616_WLAN_SDIO
+#ifdef CONFIG_BL616CL_WLAN_SDIO
   sdiowifi_mgmr_start();
 #endif
 
