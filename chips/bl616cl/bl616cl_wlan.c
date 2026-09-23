@@ -49,9 +49,6 @@
 
 #ifdef CONFIG_PM
 #include <nuttx/power/pm.h>
-#ifdef CONFIG_BL616CL_LOWPOWER
-#include "bl616_lp.h"
-#endif
 #endif
 
 #include "bl616cl_wifi_adapter.h"
@@ -59,17 +56,9 @@
 #include "wl80211_mac.h"
 #include "wifi_mgmr_ext.h"
 
-#ifdef CONFIG_BL616CL_WLAN_SDIO
-#include "sdiowifi_mgmr.h"
-#endif
-
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-
-/* TX timeout = 1 minute */
-
-#define WLAN_TXTOUT  (60 * CLK_TCK)
 
 /* Low-priority work queue processes RX/TX */
 
@@ -77,11 +66,6 @@
 
 #define SSID_MAX_LEN (32)
 #define PWD_MAX_LEN  (64)
-
-#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
-#define NETDEV_THREAD_NAME_FMT "netdev-%s"
-#define NETDEV_TX_CONTINUE 1 /* Return value for devif_poll */
-#endif
 
 /****************************************************************************
  * Private Types
@@ -117,9 +101,6 @@ struct wlan_priv_s
   struct work_s rxwork;   /* Send packet work */
   struct work_s txwork;   /* Receive packet work */
   struct work_s toutwork; /* Send packet timeout work */
-#ifdef CONFIG_BL616CL_WLAN_PROBE
-  struct work_s probework; /* Probe work */
-#endif
 
 #ifdef CONFIG_PM
   struct work_s pmwork; /* PM work */
@@ -137,10 +118,6 @@ struct wlan_priv_s
 
   struct iob_queue_s txb;
   struct iob_s *tx_pending;
-#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
-  pid_t tid;
-  sem_t sem;
-#endif
 };
 
 struct wlan_ops_s
@@ -183,7 +160,6 @@ struct wlan_ops_s
 static uint8_t g_callback_register_ref = 0;
 static struct wlan_priv_s g_wlan_priv[BL616_WLAN_DEVS];
 
-#ifdef BL616_WLAN_HAS_STA
 static const struct wlan_ops_s g_sta_ops =
 {
   .start       = bl616_wifi_sta_start,
@@ -209,7 +185,6 @@ static const struct wlan_ops_s g_sta_ops =
   .powersave   = bl616_wifi_sta_powersave,
   .pmksa       = bl616_wifi_sta_pmksa,
 };
-#endif
 
 #ifdef CONFIG_PM
 struct bl616_wlan_pm_config_s
@@ -276,10 +251,6 @@ static void up_pm_notify(struct pm_callback_s *cb,
                          enum pm_state_e pmstate);
 #endif
 
-#ifdef CONFIG_BL616CL_WLAN_PROBE
-static void wlan_sta_probe_status(struct wlan_priv_s *dev);
-#endif
-
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
@@ -293,24 +264,6 @@ static void wlan_sta_probe_status(struct wlan_priv_s *dev);
  *     These functions are called in a Wi-Fi private thread. So we just use
  *     mutex/semaphore instead of disable interrupt, if necessary.
  */
-
-// #define CONFIG_BL616CL_NET_DEBUG
-#ifdef CONFIG_BL616CL_NET_DEBUG
-static inline void dump_ethhdr(const char *msg,
-                               unsigned char *buf,
-                               int buflen)
-{
-  syslog(LOG_INFO, "WLAN: %s %d bytes\n", msg, buflen);
-  syslog(LOG_INFO, "      %02x:%02x:%02x:%02x:%02x:%02x "
-         "%02x:%02x:%02x:%02x:%02x:%02x %02x%02x\n",
-         buf[0], buf[1], buf[2], buf[3], buf[4],  buf[5],
-         buf[6], buf[7], buf[8], buf[9], buf[10], buf[11],
-         buf[12], buf[13]
-        );
-}
-#else
-#define dump_ethhdr(m, b, l)
-#endif
 
 /****************************************************************************
  * Function: wlan_cache_txpkt_tail
@@ -350,62 +303,6 @@ static inline void wlan_cache_txpkt_tail(struct wlan_priv_s *priv)
  *   dev - Reference to the NuttX driver state structure
  *
  ****************************************************************************/
-
-#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
-static inline void wlan_upper_queue_work(struct wlan_priv_s *priv)
-{
-  int semcount;
-  if (nxsem_get_value(&priv->sem, &semcount) == OK && semcount <= 0)
-    {
-      nxsem_post(&priv->sem);
-    }
-}
-
-/****************************************************************************
- * Name: netdev_upper_txavail_work
- *
- * Description:
- *   Perform an out-of-cycle poll on a dedicated thread or the worker thread.
- *
- * Input Parameters:
- *   arg - Reference to the upper half driver structure (cast to void *)
- *
- ****************************************************************************/
-
-static void wlan_upper_work(FAR void *arg)
-{
-  struct wlan_priv_s *priv = (struct wlan_priv_s *)arg;
-
-  /* RX may release quota and driver buffer, so do RX first. */
-
-  net_lock();
-  wlan_rxpoll(priv);
-  wlan_txavail_work(priv);
-  net_unlock();
-}
-
-/****************************************************************************
- * Name: wlan_loop
- *
- * Description:
- *   The loop for dedicated thread.
- *
- ****************************************************************************/
-
-static int wlan_loop(int argc, FAR char *argv[])
-{
-  struct wlan_priv_s *priv =
-    (struct wlan_priv_s *)((uintptr_t)strtoul(argv[1], NULL, 16));
-
-  while (nxsem_wait(&priv->sem) == OK && priv->tid != INVALID_PROCESS_ID)
-    {
-      wlan_upper_work(priv);
-    }
-
-  wlwarn("WARNING: Netdev work thread quitting.");
-  return 0;
-}
-#endif
 
 /****************************************************************************
  * Function: wlan_recvframe
@@ -472,10 +369,6 @@ static void wlan_transmit(struct wlan_priv_s *priv)
               break;
             }
         }
-#ifdef CONFIG_BL616CL_NET_DEBUG
-      wlinfo("iob=%p\n", iob);
-#endif
-      dump_ethhdr("TX", IOB_DATA(iob) - llhdrlen, iob->io_pktlen + llhdrlen);
 
       /* Pool exhaustion leaves ownership with this driver. The completion
        * callback frees a slot and schedules another transmit pass. */
@@ -550,16 +443,6 @@ static int wlan_rx_done(struct wlan_priv_s *priv,
       goto out;
     }
 
-  dump_ethhdr("RX", buffer, len);
-
-#ifdef CONFIG_BL616CL_WLAN_PROBE
-  /* Upon receipt of a data packet, the active WLAN connection
-   * is deemed stable, resulting in the refresh of the probe timer.
-   */
-
-  wlan_sta_probe_status(priv);
-#endif
-
   /* If the free callback is empty, it indicates that the input
    * buffer is already a pre-constructed IOB, requiring no
    * additional memory allocation
@@ -605,10 +488,6 @@ static int wlan_rx_done(struct wlan_priv_s *priv,
       goto out;
     }
 
-#ifdef CONFIG_BL616CL_NET_DEBUG
-  wlinfo("RX: net %p, buff %p, len: %d, iob %p\n", net, buffer, len, iob);
-#endif
-
   /*  Release the occupied WLAN RX buf as soon as
    *  possible after copying the data to the IOB buffer
    */
@@ -629,14 +508,10 @@ recv_frame:
       goto out;
     }
 
-#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
-  wlan_upper_queue_work(priv);
-#else
   if (work_available(&priv->rxwork))
     {
       work_queue(WLAN_WORK, &priv->rxwork, wlan_rxpoll, priv, 0);
     }
-#endif
 
   /* wlinfo("rx done, return\n"); */
 
@@ -708,8 +583,6 @@ static void wlan_rxpoll(void *arg)
 #endif
 
       eth_hdr = (struct eth_hdr_s *)NETLLBUF;
-
-      dump_ethhdr("RX poll", (unsigned char *)eth_hdr, dev->d_len);
 
       /* We only accept IP packets of the configured type and ARP packets */
 
@@ -1002,34 +875,6 @@ static int wlan_ifup(struct net_driver_s *dev)
         dev->d_ipv6addr[7]);
 #endif
 
-#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
-  /* Try to bring up a dedicated thread for work. */
-
-  nxsem_init(&priv->sem, 0, 0);
-
-  if (priv->tid <= 0)
-    {
-      FAR char *argv[2];
-      char arg1[32];
-      char name[32];
-
-      snprintf(arg1, sizeof(arg1), "%p", priv);
-      snprintf(name, sizeof(name), NETDEV_THREAD_NAME_FMT, dev->d_ifname);
-      argv[0] = arg1;
-      argv[1] = NULL;
-
-      priv->tid = kthread_create(name,
-                                 CONFIG_BL616CL_WLAN_THREAD_PRIORITY,
-                                 CONFIG_DEFAULT_TASK_STACKSIZE,
-                                 wlan_loop,
-                                 argv);
-      if (priv->tid < 0)
-        {
-          return priv->tid;
-        }
-    }
-#endif
-
   net_lock();
 
   if (priv->ifup)
@@ -1111,18 +956,6 @@ static int wlan_ifdown(struct net_driver_s *dev)
       priv->tx_pending = NULL;
     }
 
-#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
-  if (priv->tid > 0)
-    {
-      /* Try to tear down the dedicated thread for work. */
-
-      priv->tid = INVALID_PROCESS_ID;
-      nxsem_post(&priv->sem);
-    }
-
-  nxsem_destroy(&priv->sem);
-#endif
-
   ret = priv->ops->stop();
   if (ret < 0)
     {
@@ -1169,9 +1002,6 @@ static int wlan_txavail(struct net_driver_s *dev)
 {
   struct wlan_priv_s *priv = (struct wlan_priv_s *)dev->d_private;
 
-#ifdef CONFIG_BL616CL_WLAN_WORK_THREAD
-  wlan_upper_queue_work(priv);
-#else
   if (work_available(&priv->txwork))
     {
       /* Schedule to serialize the poll on the worker thread. */
@@ -1182,7 +1012,6 @@ static int wlan_txavail(struct net_driver_s *dev)
           wlerr("error queue fail \n");
         }
     }
-#endif
 
   return OK;
 }
@@ -1556,7 +1385,6 @@ static int bl616_wlan_pm_init(void)
  *
  ****************************************************************************/
 
-#ifdef BL616_WLAN_HAS_STA
 static int wlan_sta_rx_done(void *net, void *buffer, uint16_t len, void *eb)
 {
   struct wlan_priv_s *priv = &g_wlan_priv[BL616_WLAN_STA_DEVNO];
@@ -1588,125 +1416,6 @@ static void wlan_sta_tx_done(void *arg)
 
   wlan_tx_done(priv);
 }
-
-/****************************************************************************
- * Name: wlan_sta_probe_status_work
- *
- * Description:
- *   Wi-Fi station probe status work function. If this is called, it means
- *   station sending arp probe packet.
- *
- * Input Parameters:
- *   net_dev - Pointer to the net device structure.
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-#ifdef CONFIG_BL616CL_WLAN_PROBE
-static void wlan_sta_probe_status_work(void *net_dev)
-{
-  struct wlan_priv_s *dev = (struct wlan_priv_s *)net_dev;
-  struct net_driver_s *netdev = &dev->dev;
-  int ret;
-
-  DEBUGASSERT(netdev != NULL);
-
-#ifdef CONFIG_BL616CL_WLAN_PROBE_ARP
-
-  /* ipv4_acd_announce */
-
-  if (IFF_IS_RUNNING(netdev->d_flags))
-    {
-      extern int arp_send_single(in_addr_t ipaddr);
-      extern int arp_send(in_addr_t ipaddr);
-      extern int arp_delete(in_addr_t ipaddr, FAR struct net_driver_s *dev);
-
-      /* delete arp cache */
-
-      arp_delete(netdev->d_draddr, netdev);
-
-    /* Do not enter low power while waiting for arp response */
-
-#ifdef CONFIG_BL616CL_LOWPOWER
-      pm_wakelock_stay(&dev->wakelock);
-#endif
-
-      if (OK != arp_send(netdev->d_draddr))
-        {
-          /* arp_send return:
-           * Zero (OK) is returned on success and the IP address mapping can now be
-           * found in the ARP table.  On error a negated errno value is returned:
-           *
-           *   -ETIMEDOUT:    The number or retry counts has been exceed.
-           *   -EHOSTUNREACH: Could not find a route to the host
-           */
-
-#if 0
-          ret = dev->ops->disconnect();
-          if (ret < 0)
-            {
-              wlerr("ERROR: Failed to disconnect\n");
-            }
-#endif
-
-          wlerr("ERROR: arp probe failed\n");
-        }
-
-#ifdef CONFIG_BL616CL_LOWPOWER
-      pm_wakelock_relax(&dev->wakelock);
-#endif
-
-      ret = work_queue(WLAN_WORK,
-                       &dev->probework,
-                       wlan_sta_probe_status_work,
-                       (void *)dev,
-#ifdef CONFIG_MIIO_OT_KPLV_TIMEOUT_MS
-                       /* When miio is turned on, the task with the largest
-                        * cycle is miio kplv, and the probe cycle needs to
-                        * be greater than it.
-                        * Probe will only work if miio kplv fails
-                        */
-
-                       MSEC2TICK(CONFIG_MIIO_OT_KPLV_TIMEOUT_MS / 3 + 1e4));
-#else
-                       SEC2TICK(CONFIG_BL616CL_WLAN_PROBE_ARP_INTERVAL));
-#endif
-      if (ret != OK)
-        {
-          wlerr("ERROR ret %d \n", ret);
-        }
-    }
-  else
-    {
-      wlinfo("INFO: Wi-Fi station link down, stop probe\n");
-    }
-#endif
-}
-
-static void wlan_sta_probe_status(struct wlan_priv_s *dev)
-{
-  int ret = work_queue(WLAN_WORK,
-                       &dev->probework,
-                       wlan_sta_probe_status_work,
-                       (void *)dev,
-#ifdef CONFIG_MIIO_OT_KPLV_TIMEOUT_MS
-                       /* Same as above */
-
-                       MSEC2TICK(CONFIG_MIIO_OT_KPLV_TIMEOUT_MS / 3 + 1e4));
-#else
-                       SEC2TICK(CONFIG_BL616CL_WLAN_PROBE_ARP_INTERVAL));
-#endif
-  if (ret != OK)
-    {
-      wlerr("ERROR ret %d \n", ret);
-    }
-}
-#else
-#define wlan_sta_probe_status(dev)
-#endif
-#endif
 
 /****************************************************************************
  * Public Functions
@@ -1747,7 +1456,6 @@ struct net_driver_s *bl616_wlan_sta_get_netdev(void)
  *
  ****************************************************************************/
 
-#ifdef BL616_WLAN_HAS_STA
 int bl616_wlan_sta_set_linkstatus(bool linkstatus)
 {
   int ret = -EINVAL;
@@ -1833,14 +1541,8 @@ int bl616_wlan_sta_initialize(void)
   bl616_wifi_sta_register_recv_cb(wlan_sta_rx_done);
   bl616_wifi_sta_register_txdone_cb(wlan_sta_tx_done);
 
-#ifdef CONFIG_BL616CL_WLAN_SDIO
-  sdiowifi_mgmr_start();
-#endif
-
   ninfo("INFO: Initialize Wi-Fi station success net\n");
 
   return OK;
 }
-
-#endif
 

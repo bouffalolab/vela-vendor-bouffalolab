@@ -48,8 +48,6 @@ extern "C"
  * Public Function Prototypes
  ****************************************************************************/
 
-#ifdef BL616_WLAN_HAS_STA
-
 /****************************************************************************
  * Name: bl616_wlan_sta_set_linkstatus
  *
@@ -99,8 +97,6 @@ int bl616_wlan_sta_initialize(void);
  ****************************************************************************/
 
 struct net_driver_s *bl616_wlan_sta_get_netdev(void);
-
-#endif
 
 #endif /* CONFIG_BL_COMPONENT_WL80211 */
 #ifdef __cplusplus

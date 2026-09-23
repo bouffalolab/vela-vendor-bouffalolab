@@ -45,23 +45,8 @@ extern "C"
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define CONFIG_BL616CL_WIFI_STATION
-
-#if defined(CONFIG_BL616CL_WIFI_STATION)
-#  define BL616_WLAN_HAS_STA
-#  define BL616_WLAN_STA_DEVNO    0
-#  define BL616_WLAN_DEVS         1
-#elif defined(CONFIG_BL616CL_WIFI_SOFTAP)
-#  define BL616_WLAN_HAS_SOFTAP
-#  define BL616_WLAN_SOFTAP_DEVNO 0
-#  define BL616_WLAN_DEVS         1
-#elif defined(CONFIG_BL616CL_WIFI_STATION_SOFTAP_COEXISTENCE)
-#  define BL616_WLAN_HAS_STA
-#  define BL616_WLAN_HAS_SOFTAP
-#  define BL616_WLAN_STA_DEVNO    0
-#  define BL616_WLAN_SOFTAP_DEVNO 1
-#  define BL616_WLAN_DEVS         2
-#endif
+#define BL616_WLAN_STA_DEVNO    0
+#define BL616_WLAN_DEVS         1
 
 #define MAC_LEN      (6)
 #define SSID_MAX_LEN (32)
@@ -84,8 +69,6 @@ typedef void (*wifi_txdone_cb_t)(void *arg);
  ****************************************************************************/
 
 int bl616_wifi_adapter_init(void);
-
-#ifdef BL616_WLAN_HAS_STA
 
 int bl616_wifi_sta_start(void);
 
@@ -143,7 +126,6 @@ int bl616_wifi_sta_dtim(struct iwreq *iwr, bool set);
 int bl616_wifi_sta_powersave(struct iwreq *iwr, bool set);
 
 int bl616_wifi_sta_pmksa(struct iwreq *iwr, bool set);
-#endif
 
 void bl616_wifi_stop_callback(void);
 
