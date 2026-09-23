@@ -46,7 +46,7 @@ WPA3-SAE 已完成 100 轮连接循环和四方向 100 秒压力，尚未做 500
 | `vela-nuttx` | NuttX 网络栈和 OS 基座 | `97496437931`，修复 buffered send 唤醒竞态 |
 | `vela-vendor-bouffalolab` | OpenVela wrapper、BL616CL glue、板级、linker、配置 | `6365c1f`、`4f56261`、`7069305`、`71bd08b`、`f112fa0`、`62b724f`、`253c8a0` 等 |
 | `macsw` | Wi-Fi MAC/协议数据路径和 BL616CL/default 配置库 | `f9b9a8b4`，恢复单天线扫描间的 coex plan |
-| `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | 当前本地 `b086c54` |
+| `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | 当前本地 `1f98b57` |
 | `wl80211/private` | wl80211/net80211 core，单独生成 `libwl80211_bl616cl.a` | 当前本地 `d189124` |
 | `bl_wpa_supplicant` | WPA/WPA2/WPA3 认证相关源码 | `de35a74`（`ffc9839` rebase 到 2.3.35），增加 NuttX OS port 和 mbedTLS PBKDF2；`36e4c44`，`os_get_random()` 改用 `getrandom()` |
 | `bouffalo_sdk-drivers` | BL616CL PHYRF、rfparam、LHAL 等原厂驱动 | `8470912`，补充 BL616CL PHYRF 兼容头 |
@@ -156,7 +156,7 @@ BL616CL 专用实现编入 `arch`（`chips/bl616cl/CMakeLists.txt`，`CONFIG_BL_
 chips/bl616cl/
 ├── bl616cl_wlan.[ch]            # netdev/WEXT/收发回调
 ├── bl616cl_wifi_adapter.[ch]    # adapter 和控制流程
-├── bl616cl_efuse_mac.[ch]       # bl616_efuse_read_mac_address()：MAC 地址回退链
+├── bl616cl_efuse_mac.[ch]       # bl616_efuse_read_mac_address()：出厂 MAC（mfg media）与本地管理回退
 ├── bl616cl_macsw_plat.c         # macsw 低功耗 hook 与单调时间源
 ├── bl616cl_rfparam_ext.c        # rfparam 扩展接口
 └── bl616cl_wifi_glb.h
@@ -317,7 +317,8 @@ STA TX 采用零拷贝，与原生 SDK 和 BL4 相同：
 - MAC 从 L3 数据起点向前写 LLC、安全头和 MAC 头，最坏需要以太头之前 38 字节，落在 guard 内；SW 重传复用同一份帧，IOB 在最终完成前不得改动；
 - 完成回调 `wl80211_sta_tx_complete()` 释放 IOB 链，递减在途计数，并调用 chip 通过 `internal_register_txdone_cb()` 注册的钩子；
 - MAC 队列本身没有上限，在途数据帧最多 `WL80211_TX_INFLIGHT_MAX`（24，与原 TX pool 槽数相同）；达到上限时 `wl80211_output()` 返回 `-EAGAIN`，IOB 仍归驱动，驱动存入 `tx_pending`，完成钩子触发下一轮发送；驱动在 poll 前用 `wl80211_output_ready()` 判断；
-- raw/EAPOL/管理帧不计入在途上限，复制进同一 IOB 池后发送。
+- raw/EAPOL/管理帧不计入在途上限，复制进同一 IOB 池后发送；`wl80211_output_raw()` 返回非 0 时不调用完成回调，`opaque` 仍归调用者（NuttX 与原生 lwIP 实现一致）；
+- `wlan_transmit()` 结束时若 `txb` 或 `tx_pending` 仍有帧，启动 `txtimeout`（`WLAN_TXTOUT`，1 秒），TX 完成时取消，超时后重新发送并 poll，丢失完成唤醒时发送最多延迟 1 秒。
 
 历史修复：vendor `f112fa0 fix(wifi): correct STA TX ownership` 修正了提交、异步完成和失败路径中的 owner 转移；vendor `62b724f fix(wifi): retry TX after pool release` 让资源释放后重新触发发送路径。零拷贝沿用这两项合同，只是资源从 TX pool 槽改为在途帧计数。
 
@@ -551,6 +552,24 @@ DUT 和主机每个方向都有连续非零的 10 秒窗口，未发现 `MAC tra
 
 TCP RX 在同一套复制代码上也曾测得 3.51–5.09，差异在波动范围内。测试中未观察到在途帧达到上限。
 
+### 12.5 既有缺陷修复
+
+`wifi` 镜像（vendor `f908732`，public `1f98b57`，private `d189124`）在同一模组上重跑 WPA3 单轮、10 轮连接、iperf 四方向各 30 秒、30 轮扫描，全部 PASS；MAC 为模组出厂地址 `c8:e7:13:7e:0c:11`（与原生 SDK 读到的一致）。
+
+| 缺陷 | 修复 | 实板验证 |
+| --- | --- | --- |
+| TX 看门狗从未启动，完成唤醒丢失时帧滞留 | 驱动留帧时启动 1 秒 `txtimeout` | 注入 `-EAGAIN` 并屏蔽 txdone：修复前 3 次中 2 次 4 秒内未发出、1 次靠其他 RX 发出；修复后 3 次均在 1007 ms 发出并打印 `tx timeout` |
+| rxb 入队失败时 RX buffer 双重释放 | 释放后置空 `free_cb` | 每 32 帧注入一次入队失败并在 private 打开 `INVARIANTS`：修复后 20 秒 TCP RX 注入 41 次无告警、IOB 回到 90/90；模拟修复前首次注入即报 `RX buf 4 is already FREE` |
+| `wlan_rxpoll` 首次发送不持 `net_lock` | 发送前加锁 | 回归与 iperf 通过（竞态窗口无法稳定注入） |
+| 连接超时返回正数被当成功，状态码泄漏为 `-status` | 超时返回 `-ETIMEDOUT`，认证类 `-16`，其他 `-EIO` | 未知 SSID 返回 5（EIO）、错误密码返回 16；超时路径代码审查 |
+| 扫描忙时返回 -1（`-EPERM`） | `nxsem_trywait()`，返回 `-EBUSY` | 后台扫描时再扫描返回 16 |
+| STA 密码堆指针可被并发释放 | 改为定长数组，密码 ioctl 持锁 | 错误密码、断开事件后重新设置密码并连接、ping 通过 |
+| 扫描结果 ESSID 按 32 字节越界读 | 按实际长度复制 | 扫描结果 ESSID 正确 |
+| 设置 ESSID 长度未检查 | 超过 32 返回 `-EINVAL` | wapi 截断到 32，只验证 32 字节边界可用 |
+| 兜底 MAC 前缀写成转义文本（`5c:78:30`） | 改为 `02:e0:4c` | 出厂 MAC 修复前的镜像显示 `02:e0:4c:00:01:02` |
+| MAC 读取用 BL616 efuse 布局，所有 BL616CL 板都落到兜底地址 | 改用 `mfg_media_read_macaddr_with_lock()` | 显示出厂地址 `c8:e7:13:7e:0c:11` |
+| 原生 `lwip.c` raw 发送失败时先调回调、调用者再释放 | 失败路径清除回调 | 原生 macsw_bare 注入 M4 发送失败：修复前 `tlsf_free` 断言 `block already marked as free`；修复后 3 次连接均成功、ping 4/4 |
+
 ## 13. 后续发布门禁
 
 在将本方案用于正式 SDK release 前，还应完成：
@@ -573,3 +592,4 @@ TCP RX 在同一套复制代码上也曾测得 3.51–5.09，差异在波动范�
 - 迁移记录：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/repo-migration/MIGRATION.md`
 - 原始调研：`vendor/bouffalolab/docs/bl616cl-wifi-sta-porting-research.md`
 - 测试与串口证据：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/`
+- 既有缺陷修复与故障注入：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST005-existing-defects/work/README.md`
