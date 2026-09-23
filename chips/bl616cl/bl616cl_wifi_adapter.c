@@ -464,9 +464,6 @@ static int rssi_compare(const void *arg1, const void *arg2)
   return item1->rssi - item2->rssi;
 }
 
-extern void wl80211_scan_result_lock(void);
-extern void wl80211_scan_result_unlock(void);
-
 static int format_scan_result_to_wapi(struct iwreq *req)
 {
   int i = 0;
@@ -479,20 +476,20 @@ static int format_scan_result_to_wapi(struct iwreq *req)
 
   struct wl80211_scan_result_item *n, *tmp;
 
-  /* Serialize with the WiFi task tree producers */
+  /* Count wl80211 scan results.  The scan-result lock serializes with the
+   * WiFi task producer; nothing may allocate, free or sleep under it.
+   */
 
   wl80211_scan_result_lock();
-
-  /* Count wl80211 scan results */
-
   RB_FOREACH_SAFE(n, _scan_result_tree, &wl80211_scan_result, tmp)
   {
     result_cnt++;
   }
 
+  wl80211_scan_result_unlock();
+
   if (result_cnt == 0)
     {
-      wl80211_scan_result_unlock();
       return -ENOENT;
     }
 
@@ -505,42 +502,44 @@ static int format_scan_result_to_wapi(struct iwreq *req)
 
   if (req->u.data.length == 0 || req->u.data.length < event_buff_len)
     {
-      wl80211_scan_result_unlock();
       return -E2BIG;
     }
-
-  req->u.data.length = event_buff_len;
-
-  /* alloc rssi list - outside the lock, kmm_malloc may sleep */
 
   rssi_list = kmm_malloc(result_cnt * sizeof(uintptr_t));
   if (rssi_list == NULL)
     {
-      wl80211_scan_result_unlock();
       return -ENOMEM;
     }
 
-  /* Record all valid scan result items and remove from tree.
-   * The locked region must not allocate or sleep, so only the RB tree
-   * manipulation happens here; all heap operations run afterwards. */
+  /* Unlink at most result_cnt items from the tree under the lock; the
+   * unlinked items are owned by this call, so sorting, formatting and
+   * freeing them run without the lock.
+   */
 
   j = 0;
 
+  wl80211_scan_result_lock();
   RB_FOREACH_SAFE(n, _scan_result_tree, &wl80211_scan_result, tmp)
   {
+    if (j == result_cnt)
+      {
+        break; /* The tree grew after counting */
+      }
+
     RB_REMOVE(_scan_result_tree, &wl80211_scan_result, n);
-
-    /* Store pointer for later cleanup */
-
     rssi_list[j++] = (uintptr_t)n;
   }
 
-  DEBUGASSERT(j == result_cnt);
-
-  /* Tree is empty now and every node is privately owned by this call;
-   * the remaining work (sort, format, frees) runs without the lock. */
-
   wl80211_scan_result_unlock();
+
+  /* Another reader may have drained items after counting */
+
+  result_cnt = j;
+  if (result_cnt == 0)
+    {
+      kmm_free(rssi_list);
+      return -ENOENT;
+    }
 
   /* Sort the valid list according the rssi using custom comparator */
 
@@ -596,6 +595,8 @@ static int format_scan_result_to_wapi(struct iwreq *req)
 
       curr_pos = (uint8_t *)(uintptr_t)iwe + iwe->len;
     }
+
+  req->u.data.length = curr_pos - (uint8_t *)req->u.data.pointer;
 
   /* Free memory for all nodes removed from tree earlier
    * Nodes were already removed from the tree during the first traversal,
