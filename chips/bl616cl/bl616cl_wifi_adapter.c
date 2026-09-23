@@ -557,6 +557,7 @@ static int format_scan_result_to_wapi(struct iwreq *req)
         (struct wl80211_scan_result_item *)(uintptr_t)rssi_list[i];
 
       struct iw_event *iwe;
+      uint8_t *essid;
 
       iwe = (struct iw_event *)curr_pos;
       DEBUGASSERT(((uintptr_t)iwe & 0x3) == 0);
@@ -588,10 +589,13 @@ static int format_scan_result_to_wapi(struct iwreq *req)
       iwe->u.essid.flags = 1;
       /* refer:wapi wireless.c:272 */
       iwe->u.essid.pointer = (void *)(uintptr_t)sizeof(struct iw_point);
-      memcpy((uint8_t *)iwe + offsetof(struct iw_event, u) +
-               sizeof(struct iw_point),
-             scan->ssid ? scan->ssid : "<hidden>",
-             IW_ESSID_MAX_SIZE);
+      essid = (uint8_t *)iwe + offsetof(struct iw_event, u) +
+              sizeof(struct iw_point);
+      memset(essid, 0x0, IW_ESSID_MAX_SIZE);
+      if (scan->ssid != NULL)
+        {
+          memcpy(essid, scan->ssid, iwe->u.essid.length);
+        }
 
       curr_pos = (uint8_t *)(uintptr_t)iwe + iwe->len;
     }
