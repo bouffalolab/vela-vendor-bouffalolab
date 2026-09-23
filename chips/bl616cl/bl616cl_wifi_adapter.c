@@ -54,11 +54,11 @@
 #include "macsw_plat.h"
 #include "wl80211_platform.h"
 
-#ifdef CONFIG_BL616_WIRELESS_COEX
+#ifdef CONFIG_BL616CL_WIRELESS_COEX
 #include "ble/btble_lib_api.h"
-#endif /* CONFIG_BL616_WIRELESS_COEX */
+#endif /* CONFIG_BL616CL_WIRELESS_COEX */
 
-#ifdef CONFIG_BL616_USBDEV_ECM
+#ifdef CONFIG_BL616CL_USBDEV_ECM
 #include "usbd_cdc_ecm.h"
 #endif
 
@@ -66,24 +66,24 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define CONFIG_BL616_FW_TASK_NAME       "wifi_fw"
-#define CONFIG_BL616_FW_TASK_PRIORITY   (127)
-#define CONFIG_BL616_FW_TASK_STACK_SIZE (4096)
+#define CONFIG_BL616CL_FW_TASK_NAME       "wifi_fw"
+#define CONFIG_BL616CL_FW_TASK_PRIORITY   (127)
+#define CONFIG_BL616CL_FW_TASK_STACK_SIZE (4096)
 
-#ifndef CONFIG_BL616_WLAN_THREAD_PRIORITY
-  #define CONFIG_BL616_WLAN_THREAD_PRIORITY (150) /* BL4 default */
+#ifndef CONFIG_BL616CL_WLAN_THREAD_PRIORITY
+  #define CONFIG_BL616CL_WLAN_THREAD_PRIORITY (150) /* BL4 default */
 #endif
 
-#ifndef CONFIG_BL616_SCAN_DURANTION
-  #define CONFIG_BL616_SCAN_DURANTION   (100)
-#endif /* CONFIG_BL616_SCAN_DURANTION */
+#ifndef CONFIG_BL616CL_SCAN_DURANTION
+  #define CONFIG_BL616CL_SCAN_DURANTION   (100)
+#endif /* CONFIG_BL616CL_SCAN_DURANTION */
 
-#ifndef CONFIG_BL616_WLAN_CONNECT_TIMEOUT
-  #define CONFIG_BL616_WLAN_CONNECT_TIMEOUT (20) /* 60s */
-#endif /* CONFIG_BL616_WLAN_CONNECT_TIMEOUT */
+#ifndef CONFIG_BL616CL_WLAN_CONNECT_TIMEOUT
+  #define CONFIG_BL616CL_WLAN_CONNECT_TIMEOUT (20) /* 60s */
+#endif /* CONFIG_BL616CL_WLAN_CONNECT_TIMEOUT */
 
-#ifndef CONFIG_BL616_WLAN_PS_ACTIVETIME
-  #define CONFIG_BL616_WLAN_PS_ACTIVETIME (50)
+#ifndef CONFIG_BL616CL_WLAN_PS_ACTIVETIME
+  #define CONFIG_BL616CL_WLAN_PS_ACTIVETIME (50)
 #endif
 
 #define SCAN_UNIT(_ms)                  ((_ms)*8 / 5)
@@ -96,9 +96,9 @@
  * Private Data
  ****************************************************************************/
 
-#ifdef CONFIG_BL616_WIRELESS_COEX
+#ifdef CONFIG_BL616CL_WIRELESS_COEX
 static struct work_s *g_coex_ctx;
-#endif /* CONFIG_BL616_WIRELESS_COEX */
+#endif /* CONFIG_BL616CL_WIRELESS_COEX */
 
 /* Wi-Fi interrupt private data */
 
@@ -862,8 +862,8 @@ int bl616_wifi_adapter_init(void)
       up_enable_irq(BL616CL_IRQ_NUM_WIFI);
     }
 
-  task_create(CONFIG_BL616_FW_TASK_NAME,
-              CONFIG_BL616_FW_TASK_PRIORITY,
+  task_create(CONFIG_BL616CL_FW_TASK_NAME,
+              CONFIG_BL616CL_FW_TASK_PRIORITY,
               WIFI_TASK_STACK_SIZE,
               (main_t)wifi_main,
               NULL);
@@ -882,7 +882,7 @@ int bl616_wifi_adapter_init(void)
       wlerr("ERROR: Failed to set default country code\n");
     }
 
-  bl_wifi_sta_ps_active_ms(CONFIG_BL616_WLAN_PS_ACTIVETIME);
+  bl_wifi_sta_ps_active_ms(CONFIG_BL616CL_WLAN_PS_ACTIVETIME);
 
   return OK;
 }
@@ -1232,7 +1232,7 @@ static int is_ascii_hex_char(char c)
 	return -1;
 }
 
-#ifdef CONFIG_BL616_WIRELESS_COEX
+#ifdef CONFIG_BL616CL_WIRELESS_COEX
 /****************************************************************************
  * Name: bl616_coex_restore_work
  *
@@ -1258,24 +1258,24 @@ static void bl616_coex_restore_work(FAR void *arg)
       case IW_PTA_PRIORITY_COEX_MAXIMIZED:
         {
           btblecontroller_change_scan_itl_win(
-            SCAN_UNIT(CONFIG_BL616_WIRELESS_COEX_MAXIMIZED_INTERVAL),
-            SCAN_UNIT(CONFIG_BL616_WIRELESS_COEX_MAXIMIZED_WINDOW));
+            SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_MAXIMIZED_INTERVAL),
+            SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_MAXIMIZED_WINDOW));
           break;
         }
 
       case IW_PTA_PRIORITY_WLAN_MAXIMIZED:
         {
           btblecontroller_change_scan_itl_win(
-            SCAN_UNIT(CONFIG_BL616_WIRELESS_WLAN_MAXIMIZED_INTERVAL),
-            SCAN_UNIT(CONFIG_BL616_WIRELESS_WLAN_MAXIMIZED_WINDOW));
+            SCAN_UNIT(CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_INTERVAL),
+            SCAN_UNIT(CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_WINDOW));
           break;
         }
 
       default:
         {
           btblecontroller_change_scan_itl_win(
-            SCAN_UNIT(CONFIG_BL616_WIRELESS_COEX_BALANCED_INTERVAL),
-            SCAN_UNIT(CONFIG_BL616_WIRELESS_COEX_BALANCED_WINDOW));
+            SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_BALANCED_INTERVAL),
+            SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_BALANCED_WINDOW));
         }
     }
 
@@ -1312,7 +1312,7 @@ int bl616_wifi_sta_connect(void)
   int ret;
   uint16_t freq = 0;
   uint8_t bssid[18] = {0};
-#ifdef CONFIG_BL616_WIRELESS_COEX
+#ifdef CONFIG_BL616CL_WIRELESS_COEX
   static uint8_t pta_prio_old = IW_PTA_PRIORITY_BALANCED;
   irqstate_t flags;
 #endif
@@ -1366,7 +1366,7 @@ int bl616_wifi_sta_connect(void)
 
   freq = g_wifi_cfg.freq;
 
-#ifdef CONFIG_BL616_WIRELESS_COEX
+#ifdef CONFIG_BL616CL_WIRELESS_COEX
   do
     {
       flags = up_irq_save();
@@ -1397,21 +1397,21 @@ int bl616_wifi_sta_connect(void)
       /* Scan window 8, interval 160 */
 
       btblecontroller_change_scan_itl_win(
-        SCAN_UNIT(CONFIG_BL616_WIRELESS_WLAN_MAXIMIZED_INTERVAL),
-        SCAN_UNIT(CONFIG_BL616_WIRELESS_WLAN_MAXIMIZED_WINDOW));
+        SCAN_UNIT(CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_INTERVAL),
+        SCAN_UNIT(CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_WINDOW));
 
       wlinfo("PTA %d -> %d, window %d interval %d\n",
              pta_prio_old,
              g_wifi_cfg.pta,
-             CONFIG_BL616_WIRELESS_WLAN_MAXIMIZED_WINDOW,
-             CONFIG_BL616_WIRELESS_WLAN_MAXIMIZED_INTERVAL);
+             CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_WINDOW,
+             CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_INTERVAL);
     }
   while (0);
 #endif
 
   bl616_wifi_sta_set_quick_connect(true);
 
-#ifdef CONFIG_BL616_WLAN_LOWRATE_CONNECT
+#ifdef CONFIG_BL616CL_WLAN_LOWRATE_CONNECT
   bl616_wifi_sta_set_lowrate_connect(true);
 #endif
 
@@ -1447,7 +1447,7 @@ int bl616_wifi_sta_connect(void)
 
       g_sta_block = false;
 
-#ifdef CONFIG_BL616_WIRELESS_COEX
+#ifdef CONFIG_BL616CL_WIRELESS_COEX
       /* restore coex */
 
       bl616_coex_restore_work(&pta_prio_old);
@@ -1459,7 +1459,7 @@ int bl616_wifi_sta_connect(void)
 
   ret = nxsem_tickwait_uninterruptible(
     &g_wifi_wait_connect_sem,
-    SEC2TICK(CONFIG_BL616_WLAN_CONNECT_TIMEOUT));
+    SEC2TICK(CONFIG_BL616CL_WLAN_CONNECT_TIMEOUT));
 
   g_sta_block = false;
 
@@ -1485,13 +1485,13 @@ int bl616_wifi_sta_connect(void)
 
       bl616_wifi_sta_clear_info();
 
-#ifdef CONFIG_BL616_WIRELESS_COEX
+#ifdef CONFIG_BL616CL_WIRELESS_COEX
       /* restore coex */
 
       bl616_coex_restore_work(&pta_prio_old);
 #endif
     }
-#ifdef CONFIG_BL616_WIRELESS_COEX
+#ifdef CONFIG_BL616CL_WIRELESS_COEX
   else
     {
       do
@@ -1837,7 +1837,7 @@ int bl616_wifi_sta_pta(struct iwreq *iwr, bool set)
 
   if (set)
     {
-#ifdef CONFIG_BL616_WIRELESS_COEX
+#ifdef CONFIG_BL616CL_WIRELESS_COEX
       pta_prio = req->u.param.value;
 
       if (pta_prio >= IW_PTA_PRIORITY_COEX_MAXIMIZED &&
@@ -1850,24 +1850,24 @@ int bl616_wifi_sta_pta(struct iwreq *iwr, bool set)
               case IW_PTA_PRIORITY_COEX_MAXIMIZED:
                 {
                   btblecontroller_change_scan_itl_win(
-                    SCAN_UNIT(CONFIG_BL616_WIRELESS_COEX_MAXIMIZED_INTERVAL),
-                    SCAN_UNIT(CONFIG_BL616_WIRELESS_COEX_MAXIMIZED_WINDOW));
+                    SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_MAXIMIZED_INTERVAL),
+                    SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_MAXIMIZED_WINDOW));
                   break;
                 }
 
               case IW_PTA_PRIORITY_WLAN_MAXIMIZED:
                 {
                   btblecontroller_change_scan_itl_win(
-                    SCAN_UNIT(CONFIG_BL616_WIRELESS_WLAN_MAXIMIZED_INTERVAL),
-                    SCAN_UNIT(CONFIG_BL616_WIRELESS_WLAN_MAXIMIZED_WINDOW));
+                    SCAN_UNIT(CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_INTERVAL),
+                    SCAN_UNIT(CONFIG_BL616CL_WIRELESS_WLAN_MAXIMIZED_WINDOW));
                   break;
                 }
 
               default:
                 {
                   btblecontroller_change_scan_itl_win(
-                    SCAN_UNIT(CONFIG_BL616_WIRELESS_COEX_BALANCED_INTERVAL),
-                    SCAN_UNIT(CONFIG_BL616_WIRELESS_COEX_BALANCED_WINDOW));
+                    SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_BALANCED_INTERVAL),
+                    SCAN_UNIT(CONFIG_BL616CL_WIRELESS_COEX_BALANCED_WINDOW));
                 }
             }
 
@@ -1883,7 +1883,7 @@ int bl616_wifi_sta_pta(struct iwreq *iwr, bool set)
     }
   else
     {
-#ifdef CONFIG_BL616_WIRELESS_COEX
+#ifdef CONFIG_BL616CL_WIRELESS_COEX
       iwr->u.param.value = g_wifi_cfg.pta;
 #else
       iwr->u.param.value = IW_PTA_PRIORITY_BALANCED;
@@ -2104,7 +2104,7 @@ int bl616_wifi_sta_scan(struct iwreq *iwr)
         }
     }
 
-  config.duration = CONFIG_BL616_SCAN_DURANTION;
+  config.duration = CONFIG_BL616CL_SCAN_DURANTION;
 
   /* TODO: passive scan */
   /* TODO: probt cnt */

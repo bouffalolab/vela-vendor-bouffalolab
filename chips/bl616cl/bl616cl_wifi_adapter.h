@@ -45,17 +45,17 @@ extern "C"
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define CONFIG_BL616_WIFI_STATION
+#define CONFIG_BL616CL_WIFI_STATION
 
-#if defined(CONFIG_BL616_WIFI_STATION)
+#if defined(CONFIG_BL616CL_WIFI_STATION)
 #  define BL616_WLAN_HAS_STA
 #  define BL616_WLAN_STA_DEVNO    0
 #  define BL616_WLAN_DEVS         1
-#elif defined(CONFIG_BL616_WIFI_SOFTAP)
+#elif defined(CONFIG_BL616CL_WIFI_SOFTAP)
 #  define BL616_WLAN_HAS_SOFTAP
 #  define BL616_WLAN_SOFTAP_DEVNO 0
 #  define BL616_WLAN_DEVS         1
-#elif defined(CONFIG_BL616_WIFI_STATION_SOFTAP_COEXISTENCE)
+#elif defined(CONFIG_BL616CL_WIFI_STATION_SOFTAP_COEXISTENCE)
 #  define BL616_WLAN_HAS_STA
 #  define BL616_WLAN_HAS_SOFTAP
 #  define BL616_WLAN_STA_DEVNO    0
