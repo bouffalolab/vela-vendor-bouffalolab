@@ -28,6 +28,7 @@
   ownership、运行时开关、裁剪和已确认的 cache geometry。
 - [BL616CL Wi-Fi STA 移植调研](bl616cl-wifi-sta-porting-research.md)：冻结 wl80211、
   macsw、OpenVela netdev/IOB、shared RAM/cache、ABI 边界和分阶段验收路线。
+- [BL616CL Wi-Fi STA 移植方案](bl616cl-wifi-sta-porting-solution.md)：整理本次 STA 移植的仓库修改、组件构建边界、平台 glue、shared RAM/TX ownership、NuttX 修复、配置和验收结果。
 - [BL616CL DMA0](bl616cl-dma.md)：说明 OpenVela generic DMA adapter、八通道
   mem2mem、共享 IRQ、cache ownership、裁剪、实板验证和后续 consumer 边界。
 - [BL616CL 普通 Timer 与 TIMER1 验证](bl616cl-timer.md)：说明 TIMER0/TIMER1
