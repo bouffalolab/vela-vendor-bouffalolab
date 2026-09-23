@@ -48,7 +48,7 @@ WPA3-SAE 已完成 100 轮连接循环和四方向 100 秒压力，尚未做 500
 | `macsw` | Wi-Fi MAC/协议数据路径和 BL616CL/default 配置库 | `f9b9a8b4`，恢复单天线扫描间的 coex plan |
 | `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | 当前本地 `7369603` |
 | `wl80211/private` | wl80211/net80211 core，单独生成 `libwl80211_bl616cl.a` | 当前本地 `089097b` |
-| `bl_wpa_supplicant` | WPA/WPA2/WPA3 认证相关源码 | `ffc9839`，增加 NuttX OS port 和 mbedTLS PBKDF2 |
+| `bl_wpa_supplicant` | WPA/WPA2/WPA3 认证相关源码 | `de35a74`（`ffc9839` rebase 到 2.3.35），增加 NuttX OS port 和 mbedTLS PBKDF2；`36e4c44`，`os_get_random()` 改用 `getrandom()` |
 | `bouffalo_sdk-drivers` | BL616CL PHYRF、rfparam、LHAL 等原厂驱动 | `8470912`，补充 BL616CL PHYRF 兼容头 |
 
 manifest 当前按 `master` 跟踪无线子仓，移植验收时使用的提交 SHA 仍需作为发布输入清单保存。本次工作没有执行 push、发布或合并；当前仓库引用状态中，部分提交已存在于对应远端主分支，vendor、NuttX、wl80211 public/private、supplicant 和 manifest 的本地工作分支仍应按实际 remote/ref 状态分别审计，不能把工作区 HEAD 直接视作已发布版本。
@@ -168,7 +168,7 @@ wrapper 不执行公共仓库面向 Bouffalo SDK 的原始 CMake，也不编译 
 
 - 时间和 sleep 映射到 `gettimeofday()`、`nanosleep()`；
 - 内存映射到 `kmm_malloc/kmm_free/kmm_realloc/kmm_calloc`；
-- 随机数映射到 NuttX random 和 BL616CL TRNG。
+- `os_random()` 映射到 NuttX `random()`；`os_get_random()` 调用 `getrandom(buf, len, 0)` 并要求返回完整长度，经 `/dev/urandom` 由 BL616CL TRNG 驱动提供。
 
 PBKDF2 则使用 Vela 的 mbedTLS `mbedtls_pkcs5_pbkdf2_hmac()`，避免引入另一套 crypto 实现。
 
@@ -389,7 +389,7 @@ vendor `253c8a0` 在 `wl80211/glue/CMakeLists.txt` 中加入：
 
 此前 `1c95e7b feat(bl616): enable WiFi in nsh` 将 Wi-Fi 选项错误地加入 `nsh`。本次配置收尾已恢复 `nsh`，并将 Wi-Fi、iperf、Tab 补全和命令历史集中到 `wifi/defconfig`。defconfig 应继续通过 menuconfig/savedefconfig 生成，不能直接维护生成的 `.config`。
 
-WPA3-SAE 必须有 `/dev/urandom`。supplicant 的 `crypto_ec_point_mul()` 用 mbedTLS `ctr_drbg` 做 EC 点乘，其种子来自 `mbedtls_entropy_func()`；在 NuttX 上它经 `getrandom()` 读取 `/dev/urandom`。缺少该节点时 SAE commit 构造失败，串口打印 `wpa3 build sae pkt failed`，连接以 Authentication failure 结束。WPA2-PSK 不做 EC 运算，所以不受影响。`BL616CL_TRNG` 由 chip TRNG adapter 提供 `/dev/random` 和 `/dev/urandom`，详见 `bl616cl-trng.md`。
+WPA3-SAE 必须有 `/dev/urandom`。supplicant 的 `crypto_ec_point_mul()` 用 mbedTLS `ctr_drbg` 做 EC 点乘，其种子来自 `mbedtls_entropy_func()`；在 NuttX 上它经 `getrandom()` 读取 `/dev/urandom`。缺少该节点时 SAE commit 构造失败，串口打印 `wpa3 build sae pkt failed`，连接以 Authentication failure 结束。supplicant 的 `os_get_random()`（WPA2 SNonce、SAE 随机数）同样经 `getrandom()` 读取 `/dev/urandom`，因此 WPA2 也依赖该节点。`BL616CL_TRNG` 由 chip TRNG adapter 提供 `/dev/random` 和 `/dev/urandom`，详见 `bl616cl-trng.md`。
 
 ## 11. 构建流程
 
