@@ -497,6 +497,7 @@ static int wlan_rx_done(struct wlan_priv_s *priv,
    */
 
   free_cb(net);
+  free_cb = NULL;
 
   /* wlinfo("free rx buf\n"); */
 recv_frame:
