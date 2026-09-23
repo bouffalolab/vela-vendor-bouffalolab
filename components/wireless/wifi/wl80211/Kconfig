@@ -5,8 +5,10 @@ config BL_COMPONENT_WL80211
     depends on ARCH_CHIP_BL616CL
     depends on BL_COMPONENT_MACSW
     depends on BL_COMPONENT_WPA_SUPPLICANT
+    select BL_COMPONENT_RFPARAM
     help
       Build the wl80211 BL616CL/default core archive with the standalone
-      CMake flow and register it for the kernel link. FreeRTOS and lwIP
-      platform sources are excluded; platform glue lands with the
-      BL616CL WLAN port.
+      CMake flow and register it for the kernel link, plus the NuttX host
+      port sources of the public wl80211 repository. FreeRTOS and lwIP
+      platform sources are excluded; the BL616CL netdev and adapter are
+      built from chips/bl616cl.

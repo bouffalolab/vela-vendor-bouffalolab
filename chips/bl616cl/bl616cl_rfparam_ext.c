@@ -1,5 +1,5 @@
 /****************************************************************************
- * components/wireless/wifi/wl80211/glue/bl616cl_rfparam_ext.c
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_rfparam_ext.c
  *
  * BL616CL rfparam adapter extensions for the STA-only build. The newer
  * rfparam blob (BL4 baseline) exposes ant-gain management and a country
@@ -35,7 +35,7 @@
 #include <errno.h>
 #include <stdint.h>
 
-#include "bl616_wifi_adapter.h"
+#include "bl616cl_wifi_adapter.h"
 
 /****************************************************************************
  * Private Data

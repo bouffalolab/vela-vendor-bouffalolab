@@ -1,8 +1,8 @@
 /****************************************************************************
- * components/wireless/wifi/wl80211/glue/include/log.h
+ * apps/vendor/bouffalolab/components/wireless/rfparam/include/log.h
  *
  * Minimal log shim for the rfparam adapter sources compiled into the
- * Vela glue library. The bouffalo SDK log framework is not part of this
+ * bl_rfparam library. The bouffalo SDK log framework is not part of this
  * SDK; the few LOG_I/LOG_W/LOG_E call sites of rfparam map to the NuttX
  * wireless log macros.
  *
@@ -23,8 +23,8 @@
  *
  ****************************************************************************/
 
-#ifndef __WL80211_GLUE_LOG_SHIM_H
-#define __WL80211_GLUE_LOG_SHIM_H
+#ifndef __BL_RFPARAM_LOG_SHIM_H
+#define __BL_RFPARAM_LOG_SHIM_H
 
 #include <nuttx/wireless/wireless.h>
 #include <debug.h>
@@ -44,4 +44,4 @@
 #define BFLB_LOG_TAG            BFLB_LOG_GET_TAG(rfparam)
 #define BFLB_LOG_TAG_TYPE       unsigned int
 
-#endif /* __WL80211_GLUE_LOG_SHIM_H */
+#endif /* __BL_RFPARAM_LOG_SHIM_H */

@@ -1,8 +1,8 @@
 /****************************************************************************
- * components/wireless/wifi/wl80211/glue/bl616cl_wifi_glb.h
+ * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_wifi_glb.h
  *
  * Minimal BL616CL GLB (global register) API declarations used by the
- * wl80211 platform glue. The GLB_* implementations are provided by the
+ * BL616CL Wi-Fi adapter. The GLB_* implementations are provided by the
  * chip support library (libbl_std.a); the declarations are duplicated
  * here instead of including the full bl616cl_glb.h register header to
  * avoid its BL_Err_Type enumerator colliding with the enum in
@@ -25,8 +25,8 @@
  *
  ****************************************************************************/
 
-#ifndef __WL80211_GLUE_BL616CL_WIFI_GLB_H
-#define __WL80211_GLUE_BL616CL_WIFI_GLB_H
+#ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_WIFI_GLB_H
+#define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_WIFI_GLB_H
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -60,4 +60,4 @@
 void GLB_AHB_MCU_Software_Reset(uint8_t swrst);
 int GLB_PER_Clock_UnGate(uint64_t ips);
 
-#endif /* __WL80211_GLUE_BL616CL_WIFI_GLB_H */
+#endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_WIFI_GLB_H */
