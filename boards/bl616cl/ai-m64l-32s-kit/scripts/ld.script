@@ -23,8 +23,9 @@
 OUTPUT_ARCH(riscv)
 ENTRY(__start)
 
-/* WRAM and EM share the upper 160 KiB. Enlarged to 128K so wifi-shared TX
- * frames (THD, headers, payload copies) fit next to the macsw shared objects.
+/* WRAM and EM share the upper 160 KiB. Enlarged to 128K so the NuttX IOB
+ * pool (CONFIG_IOB_SECTION="SHAREDRAM"), which the MAC transmits from
+ * directly, fits next to the macsw shared objects.
  */
 
 __bl616cl_wram_size = 128K;
@@ -199,7 +200,7 @@ SECTIONS
   } > ram
 
   /* Wi-Fi shared data: macsw descriptors, wl80211 RX buffer memory and
-   * platform glue buffers must live in the WiFi-visible RAM window
+   * the NuttX IOB pool must live in the WiFi-visible RAM window
    * (collection modeled after the BL4 baseline .wifibss section).
    */
 
