@@ -34,7 +34,7 @@ BL616CL netdev glue
 - Wi-Fi 配置独立于最简 `nsh` 配置；
 - 不把 wl80211 私有 core 的 Bouffalo SDK/FreeRTOS 构建逻辑带入 NuttX 固件。
 
-首版不宣称 WPA3-SAE 已完成实板验收，也不包含 SoftAP、P2P 或 FHOST 双栈集成。
+WPA3-SAE 已完成 100 轮连接循环和四方向 100 秒压力，尚未做 500 轮/500 秒级压力。首版不包含 SoftAP、P2P 或 FHOST 双栈集成。
 
 ## 2. 仓库与版本边界
 
@@ -384,9 +384,12 @@ vendor `253c8a0` 在 `wl80211/glue/CMakeLists.txt` 中加入：
 - `CONFIG_NETUTILS_IPERF=y`；
 - `CONFIG_NSH_READLINE=y`；
 - `CONFIG_READLINE_TABCOMPLETION=y`；
-- `CONFIG_READLINE_CMD_HISTORY=y`。
+- `CONFIG_READLINE_CMD_HISTORY=y`；
+- `CONFIG_BL616CL_TRNG=y`、`CONFIG_DEV_URANDOM=y`（默认 `DEV_URANDOM_ARCH`，同时启用 `/dev/random`）。
 
 此前 `1c95e7b feat(bl616): enable WiFi in nsh` 将 Wi-Fi 选项错误地加入 `nsh`。本次配置收尾已恢复 `nsh`，并将 Wi-Fi、iperf、Tab 补全和命令历史集中到 `wifi/defconfig`。defconfig 应继续通过 menuconfig/savedefconfig 生成，不能直接维护生成的 `.config`。
+
+WPA3-SAE 必须有 `/dev/urandom`。supplicant 的 `crypto_ec_point_mul()` 用 mbedTLS `ctr_drbg` 做 EC 点乘，其种子来自 `mbedtls_entropy_func()`；在 NuttX 上它经 `getrandom()` 读取 `/dev/urandom`。缺少该节点时 SAE commit 构造失败，串口打印 `wpa3 build sae pkt failed`，连接以 Authentication failure 结束。WPA2-PSK 不做 EC 运算，所以不受影响。`BL616CL_TRNG` 由 chip TRNG adapter 提供 `/dev/random` 和 `/dev/urandom`，详见 `bl616cl-trng.md`。
 
 ## 11. 构建流程
 
@@ -417,11 +420,12 @@ vendor/bouffalolab/vela build \
 
 ### 12.1 构建和链接
 
-验证涉及三类镜像，结论按镜像区分：
+验证涉及四类镜像，结论按镜像区分：
 
 - **中间镜像**：PHYRF 2.3.35/Flash OTP rfparam、TX 背压和 NuttX 修复之前，由 `nsh` 目标构建。
 - **拆分前最终镜像**：包含上述全部修复，由 `nsh` 目标构建，SHA-256 `e9789748…0396e9`。
-- **当前 `wifi` 镜像**：配置拆分后由 `wifi` 目标构建。与拆分前最终镜像相比，多了 readline/Tab 补全/命令历史（NSH 行编辑器由 CLE 改为 readline），并修正了 `bl616_wlan.h` 的声明条件；`nuttx.bin` SHA-256 `21dfb58a…ffcdbf`。
+- **`wifi` 镜像（TRNG 前）**：配置拆分后由 `wifi` 目标构建。与拆分前最终镜像相比，多了 readline/Tab 补全/命令历史（NSH 行编辑器由 CLE 改为 readline），并修正了 `bl616_wlan.h` 的声明条件；`nuttx.bin` SHA-256 `21dfb58a…ffcdbf`。
+- **当前 `wifi` 镜像**：在上一镜像基础上启用 `BL616CL_TRNG` 和 `DEV_URANDOM`；`nuttx.bin` SHA-256 `903ed686…6bf5b0d`。
 
 拆分前最终镜像：
 
@@ -431,13 +435,15 @@ vendor/bouffalolab/vela build \
 - 固件启动后出现 `NuttShell (NSH)` / `nsh>`，无 panic；
 - `ram_wifi` 和 `.wifibss` 预算通过。
 
-当前 `wifi` 镜像及最简 `nsh`：
+`wifi` 镜像（TRNG 前）及最简 `nsh`：
 
 - `wifi` clean 后全量构建通过（Ninja 1713/1713），0 error，无隐式函数声明告警；
 - `libmacsw_bl616cl.a`、`libmacsw_config_bl616cl_default.a`、`libwl80211_bl616cl.a`、`libbl_wpa_supplicant.a` 均进入最终链接，`nm -u final_nuttx` 无输出；
 - `ram_wifi` 起始 `0x21000000`、大小 `0x20000`，`.wifibss` 使用 `0x1ab30`，剩余 21,712 字节，与拆分前一致；
 - 最简 `nsh` 构建通过，`nsh/.config` 不含 Wi-Fi、WAPI、DHCP、iperf 和 readline 历史/Tab 配置；
 - 1 Mbps UART 烧录后主机与设备端 SHA 一致，2 Mbps 控制台启动到 `nsh>`，无 panic 或重复启动。
+
+当前 `wifi` 镜像：构建通过，0 error，`nm -u final_nuttx` 无输出，TRNG 与 random 设备注册符号已链接，`.wifibss` 仍为 `0x1ab30`；1 Mbps 烧录 SHA 一致，启动到 `nsh>` 无 panic。
 
 ### 12.2 STA 功能
 
@@ -448,13 +454,21 @@ vendor/bouffalolab/vela build \
 - DHCP 获取地址 `192.168.50.211`，网关 `192.168.50.1`；
 - 网关 ping `10/10`。
 
-当前 `wifi` 镜像：
+当前 `wifi` 镜像，`ax86u` 切换为 WPA3 后：
+
+- WPA3-SAE 单轮：SAE commit/confirm 完成，`wpa auth success`，DHCP 获取 `192.168.50.211`，网关 ping `10/10`，主机 `192.168.50.200` 可达；
+- 连接、DHCP、断开 100 轮全部成功，每轮 supplicant 均选择 WPA3。
+
+`wifi` 镜像（TRNG 前）：
 
 - 扫描到 35 个 AP，包含 `vela`；
 - WPA2/RSN（PTK CCMP）关联 `vela`，carrier 到 `RUNNING`；
 - DHCP 获取地址 `192.168.31.132`，网关 `192.168.31.1`；
 - 网关 ping `10/10`；
-- 断开后 carrier 退出 `RUNNING`，全程无 crash 或重启标记。
+- 断开后 carrier 退出 `RUNNING`，全程无 crash 或重启标记；
+- 同一镜像对 WPA3 AP 连接失败（`wpa3 build sae pkt failed`），原因见 10.2。
+
+两台测试路由器都已改为 WPA3，WPA2 未在当前镜像上复测。
 
 中间镜像：
 
@@ -479,13 +493,24 @@ vendor/bouffalolab/vela build \
 
 TCP TX 初次脚本失败是 UART 输出一行缺失字符造成的 parser 假阴性，原始失败证据和离线复核已保留在任务目录，不影响最终判定。
 
+当前 `wifi` 镜像在 WPA3 `ax86u` 上完成四个方向各 100 秒压力：
+
+| 方向 | DUT 数据量/时长 | 结果 |
+| --- | --- | --- |
+| TCP TX | 144,703,488 Bytes / 100.05 s | PASS |
+| UDP TX | 184,987,712 Bytes / 100.03 s | PASS，主机丢包 0% |
+| TCP RX | 64,618,532 Bytes / 110.05 s | PASS |
+| UDP RX | 13,124,160 Bytes / 110.02 s | PASS |
+
+DUT 和主机每个方向都有连续非零的 10 秒窗口，未发现 `MAC transmission failed`、`Wi-Fi TX failed`、`ASSERT REC` 或 crash 标记。UDP RX 由主机 iperf2 以默认 1 Mbps 发送。
+
 ## 13. 后续发布门禁
 
 在将本方案用于正式 SDK release 前，还应完成：
 
 1. 将 manifest 的 floating `master` 转为冻结 revision/tag 或 release manifest，并把内部 gerrit 源码项目从公开 manifest 拆到内部 overlay；
 2. 重新核对各组件许可、来源和对外同步策略；
-3. 对 WPA3-SAE 连接做独立实板验证；
+3. 对 WPA3-SAE 补做 500 轮连接和 500 秒级四方向压力；
 4. 明确 country code、天线增益和 RF calibration 扩展接口的产品行为；
 5. 在新的 openvela/NuttX 基线或工具链变化后重新编译 PHYRF、macsw、wl80211 和 supplicant，并重新检查 ABI；
 6. 保留最简 `nsh` 与独立 `wifi` 两个构建目标，避免测试工具和 Wi-Fi 组件重新回流到基础配置；
@@ -494,7 +519,8 @@ TCP TX 初次脚本失败是 UART 输出一行缺失字符造成的 parser 假�
 ## 14. 证据索引
 
 - 最终验收：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/FINAL_ACCEPTANCE.md`
-- 当前 `wifi` 镜像：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/closure-wifi-{build,flash-1m,reboot,wpa2-usb3}.log`
+- `wifi` 镜像（TRNG 前）：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/closure-wifi-{build,flash-1m,reboot,wpa2-usb3}.log`
+- 当前 `wifi` 镜像：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/wpa3-trng-wifi-{build,flash-1m,reboot}.log`、`closure-wifi-wpa3-ax86u-single.log`、`wpa3-connect-100.csv`、`wpa3-iperf-100s-01/`；TRNG 前的 WPA3 失败现场为 `closure-wifi-wpa3-single-01.log`
 - 组件边界：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/component-integration-contract.md`
 - BL4 边界核对：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/bl4-integration-boundary.md`
 - 迁移记录：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/repo-migration/MIGRATION.md`
