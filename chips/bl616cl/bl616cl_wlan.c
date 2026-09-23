@@ -228,6 +228,10 @@ static void wlan_txavail_work(void *arg);
 static int wlan_txavail(struct net_driver_s *dev);
 static void wlan_sta_tx_done(void *arg);
 
+/* wl80211 NuttX host port: STA TX backpressure */
+
+extern bool wl80211_output_ready(void);
+
 #if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
 static int wlan_addmac(struct net_driver_s *dev, const uint8_t *mac);
 #endif
@@ -354,7 +358,7 @@ static void wlan_transmit(struct wlan_priv_s *priv)
   struct iob_s *iob;
   int ret;
 
-  while (wl80211_mac_tx_ready())
+  while (wl80211_output_ready())
     {
       if (priv->tx_pending != NULL)
         {
@@ -370,8 +374,8 @@ static void wlan_transmit(struct wlan_priv_s *priv)
             }
         }
 
-      /* Pool exhaustion leaves ownership with this driver. The completion
-       * callback frees a slot and schedules another transmit pass. */
+      /* -EAGAIN (too many frames in flight) leaves ownership with this
+       * driver. The completion callback schedules another transmit pass. */
       ret = priv->ops->send(iob, llhdrlen, offset);
       if (ret == -EAGAIN)
         {
@@ -725,7 +729,7 @@ static void wlan_dopoll(struct wlan_priv_s *priv)
 
   /* Try to let TCP/IP to send all packets to netcard driver */
 
-  while (wl80211_mac_tx_ready() && devif_poll(dev, wlan_txpoll))
+  while (wl80211_output_ready() && devif_poll(dev, wlan_txpoll))
     {
       wlan_transmit(priv);
     }
