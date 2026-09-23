@@ -60,7 +60,9 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* Low-priority work queue processes RX/TX */
+/* RX/TX work queue.  LPWORK falls back to HPWORK when CONFIG_SCHED_LPWORK
+ * is disabled; the wl80211 timers and events also run on HPWORK.
+ */
 
 #define WLAN_WORK    LPWORK
 
