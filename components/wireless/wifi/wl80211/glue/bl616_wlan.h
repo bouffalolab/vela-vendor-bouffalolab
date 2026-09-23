@@ -42,7 +42,7 @@ extern "C"
 #define EXTERN extern
 #endif
 
-#ifdef CONFIG_BL616_WIRELESS
+#ifdef CONFIG_BL_COMPONENT_WL80211
 
 /****************************************************************************
  * Public Function Prototypes
@@ -102,7 +102,7 @@ struct net_driver_s *bl616_wlan_sta_get_netdev(void);
 
 #endif
 
-#endif /* CONFIG_BL616_WIRELESS */
+#endif /* CONFIG_BL_COMPONENT_WL80211 */
 #ifdef __cplusplus
 }
 #endif
