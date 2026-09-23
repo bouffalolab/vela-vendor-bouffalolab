@@ -561,6 +561,8 @@ static void wlan_rxpoll(void *arg)
   struct eth_hdr_s *eth_hdr;
   struct iob_s *iob;
 
+  net_lock();
+
   /* Try to send all cached TX packets for TX ack and so on */
 
   wlan_transmit(priv);
@@ -568,8 +570,6 @@ static void wlan_rxpoll(void *arg)
   /* Loop while while iob_remove_queue() successfully retrieves valid
    * Ethernet frames.
    */
-
-  net_lock();
 
   while ((iob = wlan_recvframe(priv)) != NULL)
     {
