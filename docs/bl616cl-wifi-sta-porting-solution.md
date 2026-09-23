@@ -46,8 +46,8 @@ WPA3-SAE 已完成 100 轮连接循环和四方向 100 秒压力，尚未做 500
 | `vela-nuttx` | NuttX 网络栈和 OS 基座 | `97496437931`，修复 buffered send 唤醒竞态 |
 | `vela-vendor-bouffalolab` | OpenVela wrapper、BL616CL glue、板级、linker、配置 | `6365c1f`、`4f56261`、`7069305`、`71bd08b`、`f112fa0`、`62b724f`、`253c8a0` 等 |
 | `macsw` | Wi-Fi MAC/协议数据路径和 BL616CL/default 配置库 | `f9b9a8b4`，恢复单天线扫描间的 coex plan |
-| `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | 当前本地 `7369603` |
-| `wl80211/private` | wl80211/net80211 core，单独生成 `libwl80211_bl616cl.a` | 当前本地 `089097b` |
+| `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | 当前本地 `bf96ed6` |
+| `wl80211/private` | wl80211/net80211 core，单独生成 `libwl80211_bl616cl.a` | 当前本地 `15d4edd` |
 | `bl_wpa_supplicant` | WPA/WPA2/WPA3 认证相关源码 | `de35a74`（`ffc9839` rebase 到 2.3.35），增加 NuttX OS port 和 mbedTLS PBKDF2；`36e4c44`，`os_get_random()` 改用 `getrandom()` |
 | `bouffalo_sdk-drivers` | BL616CL PHYRF、rfparam、LHAL 等原厂驱动 | `8470912`，补充 BL616CL PHYRF 兼容头 |
 
@@ -147,7 +147,7 @@ components/wireless/wifi/wl80211/wl80211/   # public 子仓
 ├── country.c
 ├── supplicant.c
 ├── nuttx.c                  # NuttX OS/网络接口
-└── rtos_al_nuttx.c          # NuttX RTOS 抽象、scan-result lock
+└── rtos_al_nuttx.c          # NuttX RTOS 抽象
 ```
 
 BL616CL 专用实现编入 `arch`（`chips/bl616cl/CMakeLists.txt`，`CONFIG_BL_COMPONENT_WL80211`）：
@@ -290,17 +290,22 @@ ram_wifi ORIGIN = 0x21020000 - 128K
 
 wl80211 public/private 侧的配套修改包括：
 
-- public `a769100`：适配 NuttX `sys/queue.h` / `sys/tree.h`；
-- public `c315207`：保留 BSD queue/tree 兼容头；
-- public `aa94781`：补充 supplicant API platform header；
-- public `d229441`：统一 scan-result tree 布局；
-- public `93e1af5`：在 TX descriptor 中携带 shared-RAM pool 引用；
-- public `7369603`：暴露 TX pool 状态；
-- private `b86b33e`：把 host TX frame 放入 Wi-Fi shared RAM；
-- private `2fee8fe`：加固 shared TX pool；
-- private `089097b`：pool 暂时不可用时进行 backpressure。
+- public `38a8fb9`：保留 BSD queue/tree 兼容头；
+- public `4f85514`：NuttX 下使用 `sys/queue.h`，scan-result tree 统一使用 vendored `tree.h`；
+- public `0b1e062`：修正 NuttX host port（`nuttx.c`、`rtos_al_nuttx.c`）在当前 NuttX 下的编译；
+- public `bf349bc`：`bl_lp.h` 仅在 `CONFIG_LPAPP` 下包含；
+- public `d1d2a8a`：`wifi_mgmr.c` 的 scan-result 读者在锁内复制记录；
+- public `9beb1cf`、`832c94b`、`bf96ed6`：TX descriptor 携带 shared-RAM pool 引用、暴露 TX pool 状态、NuttX TX 完成回调；
+- private `151365a`：BL616CL 按工具链探测 ISA 参数，并增加 `CONFIG_MACSW_SELECT` profile 定义；
+- private `aad7cb5`：空 SSID 上报不再清除已知 SSID；
+- private `d189124`：`wl80211_scan_result_lock/unlock` 基于 `rtos_lock()` 实现，生产者在锁外构造记录；
+- private `cd439d3`、`6aaa8ce`、`15d4edd`：host TX frame 放入 Wi-Fi shared RAM、加固 shared TX pool、pool 暂时不可用时 backpressure。
+
+前 5 个 public 提交和前 3 个 private 提交不依赖 TX pool，按上游顺序排在前面；TX pool 相关提交暂不可上游，排在末尾。
 
 `wl80211.h` 强制使用统一的 tree layout，避免不同 translation unit 对 RB tree entry 的大小和布局理解不一致。这是扫描结果树跨 public header、private core 和 chip adapter 时的 ABI 约束。
+
+scan-result tree 由 private 的 `wl80211_scan_result_lock/unlock` 保护，底层是 `rtos_lock()`（FreeRTOS `vTaskEnterCritical`，NuttX `sched_lock`）。持锁期间不得分配或释放内存、打印、回调或阻塞：WiFi task 在锁外构造记录，锁内只链接或合并；`wifi_mgmr.c` 和 chip adapter 在锁内只计数、复制或摘除节点，内存分配、排序和释放都在锁外进行。NuttX 的 `sched_lock` 只在单核上提供互斥。
 
 ## 7. TX 资源所有权与稳定性修复
 
@@ -308,7 +313,7 @@ vendor 适配层的两笔修复（代码现位于 public `nuttx.c` 与 `chips/bl
 
 - vendor `f112fa0 fix(wifi): correct STA TX ownership`：修正 STA TX buffer 在提交、异步完成和失败路径中的 owner 转移；
 - vendor `62b724f fix(wifi): retry TX after pool release`：TX pool 释放后重新触发可发送路径，避免 pool 恢复后没有新的 poll/notify；
-- wl80211 private `089097b fix(wifi6): backpressure TX pool`（`macsw/tx.c`）：pool 无空闲 slot 时返回 `-EAGAIN` 而不是丢帧，TX IOB 仍由发送方持有并等待重试。
+- wl80211 private `15d4edd fix(wifi6): backpressure TX pool`（`macsw/tx.c`）：pool 无空闲 slot 时返回 `-EAGAIN` 而不是丢帧，TX IOB 仍由发送方持有并等待重试。
 
 macsw `f9b9a8b4` 则恢复 BL616CL 单天线跨扫描流程的 coex plan，保证反复扫描和连接过程中无线协同状态不会被错误地耗尽或遗失。
 
