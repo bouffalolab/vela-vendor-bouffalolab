@@ -421,6 +421,8 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 
 `nsh`、`nsh-peripherals`、`ostest`、`wifi` 都打开 `CONFIG_MEMCPY_VIK=y`。不开时 NuttX 的 `memcpy()` 是逐字节循环，在非 cache 的 `ram_wifi` 上每个字节都是一次总线访问。`CONFIG_RISCV_MEMCPY` 只有在源和目的对齐方式相同时才按字拷贝，而 RX 拷贝的源和目的分别是 4 字节对齐和余 2，所以不采用。
 
+四个配置都使用 TLSF 堆管理器（`CONFIG_MM_TLSF_MANAGER=y`），malloc/free 为 O(1)。每个堆多一个约 3.2 KB 的控制块，malloc 只保证 4 字节对齐（E907 已打开硬件非对齐访问）。实测堆总量减少 3,372 字节（nsh 230,944→227,572，wifi 167,072→163,700）；wifi 的 UDP TX 由约 17 Mbps 升到约 25 Mbps（两次），TCP 吞吐在波动范围内。TLSF 源码是 manifest 中的 `nuttx/mm/tlsf/tlsf` 项目，目录缺失时 NuttX CMake 会改从 GitHub 拉取，离线环境先用 `repo sync -l nuttx/mm/tlsf/tlsf` 从本地对象恢复。
+
 WPA3-SAE 必须有 `/dev/urandom`。supplicant 的 `crypto_ec_point_mul()` 用 mbedTLS `ctr_drbg` 做 EC 点乘，其种子来自 `mbedtls_entropy_func()`；在 NuttX 上它经 `getrandom()` 读取 `/dev/urandom`。缺少该节点时 SAE commit 构造失败，串口打印 `wpa3 build sae pkt failed`，连接以 Authentication failure 结束。supplicant 的 `os_get_random()`（WPA2 SNonce、SAE 随机数）同样经 `getrandom()` 读取 `/dev/urandom`，因此 WPA2 也依赖该节点。`BL616CL_TRNG` 由 chip TRNG adapter 提供 `/dev/random` 和 `/dev/urandom`，详见 `bl616cl-trng.md`。
 
 ## 11. 构建流程
@@ -616,3 +618,4 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 - 测试与串口证据：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/`
 - 既有缺陷修复与故障注入：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST005-existing-defects/work/README.md`
 - RX 拷贝、memcpy 测量与断流复现：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST006-rx-copy-research/work/README.md`
+- TLSF 切换的构建、启动、ostest 与回归：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST011-tlsf-allocator/work/README.md`
