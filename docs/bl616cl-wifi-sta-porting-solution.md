@@ -415,6 +415,7 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 - DHCP、DNS、IPv4、TCP/UDP 和 buffered write；
 - `CONFIG_NETUTILS_IPERF=y`；
 - `CONFIG_IOB_NBUFFERS=60`、`CONFIG_BL616CL_WRAM_SIZE=102`：池和 WRAM 一起缩小，系统堆比池 90、WRAM 128K 时多约 26 KiB，吞吐代价见 12.7；
+- `CONFIG_NET_TCP_SELECTIVE_ACK=y`（会 select `NET_TCP_OUT_OF_ORDER`）、`CONFIG_NET_TCP_OUT_OF_ORDER_BUFSIZE=4096`：TCP RX 受接收侧丢帧限制；有了乱序队列，丢帧后已收到的段会保留，只需重传缺的那段。实测 TCP RX 从 7.0–7.6 升到 11.3–12.1 Mbps，TCP TX 从 13.1 降到 12.7，堆少 448 B。OOO 取 4K 是为了满足 NuttX 小内存建议中的 SEND+RECV+OOO < IOB 总量（16K+16K+4K < 38.4K）；实测 4K 与 8K 效果相同；
 - `CONFIG_NSH_READLINE=y`；
 - `CONFIG_READLINE_TABCOMPLETION=y`；
 - `CONFIG_READLINE_CMD_HISTORY=y`；
@@ -655,3 +656,4 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 - RX 拷贝、memcpy 测量与断流复现：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST006-rx-copy-research/work/README.md`
 - TLSF 切换的构建、启动、ostest 与回归：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST011-tlsf-allocator/work/README.md`
 - WRAM 与 IOB 池缩小（R1）、IOB 用量与分配方案调研：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST009-iob-dynamic-zero-copy/work/README.md`
+- 网络参数扫描（OOO/SACK、池大小、IOB 几何、代码布局敏感性）：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST010-net-throughput/work/README.md` 的 T5 各节
