@@ -69,6 +69,10 @@ CONFIG_BL_OS_FEATURE_TESTS_STACK_CANARY=y
 中。它在 `.data` 搬运前即可读取，因此 `__bl616cl_start`、CPU early init、memory
 early init 和 section load 等早期 C 函数也能使用 stack protector。
 
+例外是 XIP 关闭期间运行的 flash 驱动、时钟源文件和 `bl616cl_flash.c`：它们追加
+`-fno-stack-protector`（清单见 `bl616cl-kasan.md`），因为此时读 flash 中的 guard
+或调用 `__stack_chk_fail()` 都不可靠。
+
 这一实现能检测非定向栈覆盖，但 guard 地址固定且可预测，不能作为高熵、抗定向
 攻击的安全 canary。若以后改为随机 RAM guard，必须先解决 guard 在 section load
 前的初始化顺序，不能直接替换当前对象。

@@ -115,4 +115,12 @@ endif()
 
 target_sources(arch PRIVATE ${SRCS})
 
+# Flash clock calibration runs while XIP is off; keep sanitizer and stack
+# protector calls (flash-resident runtime) out of it.
+set_property(
+  SOURCE ${CMAKE_CURRENT_LIST_DIR}/bl616cl_flash.c
+  TARGET_DIRECTORY arch
+  APPEND
+  PROPERTY COMPILE_OPTIONS -fno-sanitize=all -fno-stack-protector)
+
 target_compile_definitions(arch PRIVATE BL616CL)

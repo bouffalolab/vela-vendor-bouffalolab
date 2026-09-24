@@ -58,3 +58,14 @@ target_include_directories(
 
 target_compile_definitions(bl_std PRIVATE ARCH_RISCV=1 BL616CL
                                           CONFIG_IRQ_NUM=83)
+
+# Clock switching and delays used while XIP is off (flash init and clock
+# calibration). Keep sanitizer and stack protector calls, which would jump
+# into flash, out of these sources.
+set_property(
+  SOURCE ${BL616CL_STD_DIR}/src/bl616cl_clock.c
+         ${BL616CL_STD_DIR}/src/bl616cl_common.c
+         ${BL616CL_STD_DIR}/src/bl616cl_glb.c
+         ${BL616CL_STD_DIR}/src/bl616cl_hbn.c
+  APPEND
+  PROPERTY COMPILE_OPTIONS -fno-sanitize=all -fno-stack-protector)
