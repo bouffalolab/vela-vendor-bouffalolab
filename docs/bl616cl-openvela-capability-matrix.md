@@ -32,7 +32,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | RISC-V | RV32IMAF+C、FPU、软件错位访问、stack dump、backtrace、CPU/TCB info | `chips/bl616cl/Kconfig`；`nuttx/arch/risc-v/src/common/` |
 | 时钟 | 1 kHz OS tick；MTimer alarm lower-half；通用 `up_perf_*` 纳秒接口 | `bl616cl_timerisr.c`；`nuttx/drivers/timers/arch_alarm.c` |
 | 内存 | 内部 SRAM 单 heap、默认 allocator、procfs meminfo | `bl616cl_allocateheap.c`；`nuttx/mm/` |
-| 启动 | chip early init、board late init、ROMFS/NSH | `chips/bl616cl/bl616cl_start.c`；`boards/bl616cl/common/` |
+| 启动 | chip early init（含 XIP flash 80 MHz 采样校准）、board late init、ROMFS/NSH | `chips/bl616cl/bl616cl_start.c`、`bl616cl_flash.c`；`boards/bl616cl/common/` |
 | 外设 | UART0/UART1、GPIO、timer0/TIMER1、oneshot、watchdog、TRNG、RTC、DMA0；I2C/SPI/PWM 软件路径按实物边界声明 | `chips/bl616cl/`；`boards/bl616cl/`；`cmake/bl616cl_lhal.cmake` |
 | 诊断 | assertions、stack/backtrace、CPU/IRQ/critical monitor、MM record、stack canary、coredump、Note RAM trace、generic KASAN、UBSAN runtime | `configs/nsh/defconfig`；`vendor/bouffalolab/docs/` |
 
