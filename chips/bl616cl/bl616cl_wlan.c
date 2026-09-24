@@ -490,7 +490,13 @@ static int wlan_rx_done(struct wlan_priv_s *priv,
       goto out;
     }
 
-  iob = iob_tryalloc(true);
+  /* Unthrottled, as netdev_upperhalf RX: TCP write buffers allocate
+   * throttled, so the last CONFIG_IOB_THROTTLE IOBs stay available here.
+   * A throttled RX allocation starves the ACKs a full send buffer waits
+   * for, and the connection never recovers.
+   */
+
+  iob = iob_tryalloc(false);
   if (iob == NULL)
     {
       // wlwarn("ERROR: Failed to alloc iob\n");

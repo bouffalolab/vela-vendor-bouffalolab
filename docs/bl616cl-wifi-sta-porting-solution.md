@@ -575,6 +575,7 @@ TCP RX 在同一套复制代码上也曾测得 3.51–5.09，差异在波动范�
 | 兜底 MAC 前缀写成转义文本（`5c:78:30`） | 改为 `02:e0:4c` | 出厂 MAC 修复前的镜像显示 `02:e0:4c:00:01:02` |
 | MAC 读取用 BL616 efuse 布局，所有 BL616CL 板都落到兜底地址 | 改用 `mfg_media_read_macaddr_with_lock()` | 显示出厂地址 `c8:e7:13:7e:0c:11` |
 | 原生 `lwip.c` raw 发送失败时先调回调、调用者再释放 | 失败路径清除回调 | 原生 macsw_bare 注入 M4 发送失败：修复前 `tlsf_free` 断言 `block already marked as free`；修复后 3 次连接均成功、ping 4/4 |
+| RX 用节流分配 IOB，TCP 写缓冲占到节流线后丢掉所有 RX（包括 ACK），连接永久卡死 | 改为非节流分配，与 netdev_upperhalf 相同 | 两个并发 TCP 发送：修复前第 1 轮卡死（nfree 24/90，ping 不通）；修复后 3/3 轮通过，IOB 回到 90/90 |
 
 ### 12.6 memcpy 优化
 
