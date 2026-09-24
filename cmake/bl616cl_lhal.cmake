@@ -89,3 +89,18 @@ target_include_directories(
 target_compile_definitions(
   bl_lhal PRIVATE APP_VER_X=0 APP_VER_Y=0 APP_VER_Z=0 ARCH_RISCV=1 BL616CL
                   CONFIG_IRQ_NUM=83)
+
+# Flash command and XIP control code runs while XIP is off. Sanitizer and
+# stack protector calls there would jump into their flash-resident runtime,
+# so these sources are built without them.
+set_property(
+  SOURCE ${BL616CL_LHAL_DIR}/src/bflb_common.c
+         ${BL616CL_LHAL_DIR}/src/bflb_flash.c
+         ${BL616CL_LHAL_DIR}/src/flash/bflb_sf_cfg.c
+         ${BL616CL_LHAL_DIR}/src/flash/bflb_xip_sflash.c
+         ${BL616CL_LHAL_DIR}/src/flash/bflb_sflash.c
+         ${BL616CL_LHAL_DIR}/src/flash/bflb_sf_ctrl.c
+         ${BL616CL_LHAL_DIR}/src/flash/bflb_flash_secreg_port.c
+         ${BL616CL_LHAL_DIR}/src/flash/bflb_flash_secreg.c
+  APPEND
+  PROPERTY COMPILE_OPTIONS -fno-sanitize=all -fno-stack-protector)

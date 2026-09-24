@@ -115,6 +115,14 @@ nx_start()
 避免 runtime 自插桩和生成源污染。最终 ELF 必须同时满足：普通目标存在插桩调用、
 `mm/libmm.a` 提供对应 `__asan_*` 定义、最终 ELF 没有未解析 sanitizer 符号。
 
+XIP 关闭期间运行的源文件也不插桩。flash 初始化和 80 MHz 时钟校准会关闭 XIP，
+此时跳到 flash 中的 `__asan_*` 可能取指失败：打开校准后 nsh-peripherals 在启动
+早期无输出卡死。`cmake/bl616cl_lhal.cmake`（`bflb_common.c`、`bflb_flash.c` 和
+`src/flash/` 下的驱动）、`cmake/bl616cl_std.cmake`（`bl616cl_clock.c`、
+`bl616cl_common.c`、`bl616cl_glb.c`、`bl616cl_hbn.c`）和
+`chips/bl616cl/CMakeLists.txt`（`bl616cl_flash.c`）为这些源文件追加
+`-fno-sanitize=all -fno-stack-protector`。
+
 ### BL616CL warm reset 约束
 
 BL616CL 的 `__bl616cl_start()` 在 `bl616cl_section_load()` 清零/装载 section 之前
