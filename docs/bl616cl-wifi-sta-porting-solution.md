@@ -275,6 +275,8 @@ ram_wifi ORIGIN = 0x21020000 - CONFIG_BL616CL_WRAM_SIZE KiB
 
 WRAM 和 BLE EM 的划分沿用原生 `bl616cl_common.ld.in`：EM 从 WRAM 顶部划走，启动时 `bl616cl_em_select()` 按 `__LD_CONFIG_EM_SEL` 设置 GLB EM_SEL，系统 RAM 为 `384K - 1K - WRAM`。Kconfig 默认 EM 为 0、WRAM 为 128K；选 EM 16K/32K 时 WRAM 默认改为 144K/160K，`ram_wifi` 保持 128K，多出的部分从系统 RAM 让出（EM 32K 时系统 RAM 由 255K 降为 223K）。NuttX CMake 不会因配置变化重新预处理链接脚本，改这两项后要先 `vela clean`。
 
+各配置的 WRAM 取值：`wifi` 设 102K（IOB 池 60，`.wifibss` 之外约留 1.3 KiB 余量）；`nsh`、`nsh-peripherals`、`ostest` 不用 Wi-Fi，`.wifibss` 为空，设为 Kconfig 下限 64K，系统 RAM 为 319K。defconfig 显式写了 WRAM 之后，再选 EM 不会自动加大 WRAM，需要手动把它改为原值加 EM（例如 `wifi` 选 EM 32K 时设为 134K）。
+
 `.wifibss` 将以下对象放入 Wi-Fi 可见区域：
 
 - `SHAREDRAMIPC` / `SHAREDRAM`，其中包括 NuttX IOB 固定池（wifi defconfig `CONFIG_IOB_SECTION="SHAREDRAM"`，与 BL4 相同）；
@@ -289,6 +291,8 @@ TX 零拷贝镜像中（EM 0、WRAM 128K；EM 32K 时起始地址为 `0x20ff8000
 - 区域大小为 `0x20000`；
 - `.wifibss` 使用 `0x1df00`（其中 IOB 池 `g_iob_buffer` 58,683 字节）；
 - 剩余 8,448 字节。
+
+当前 `wifi` 镜像（WRAM 102K、IOB 池 60）：`ram_wifi` 起始地址为 `0x21006800`，大小为 `0x19800`；`.wifibss` 使用 `0x192a0`，剩余 1,376 字节。
 
 `ram_wifi` 链接在 nocache 别名上，协议栈对 IOB 的读写都不经 cache；原生 SDK 的 lwIP 内存同样从这里分配。改为零拷贝前，`.wifibss` 为 `0x1ab30`，其中 45,408 字节是 wl80211 private 的 TX pool；IOB 池移出后系统堆增加约 58.7 KB。`.wifibss` 为 NOLOAD 且启动时不清零；`CONFIG_IOB_ALLOC` 关闭时 `iob_initialize()` 写入每个节点的链表指针、分配时重置长度与偏移，不依赖清零。
 
@@ -410,6 +414,7 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 - WAPI、WEXT、无线 driver；
 - DHCP、DNS、IPv4、TCP/UDP 和 buffered write；
 - `CONFIG_NETUTILS_IPERF=y`；
+- `CONFIG_IOB_NBUFFERS=60`、`CONFIG_BL616CL_WRAM_SIZE=102`：池和 WRAM 一起缩小，系统堆比池 90、WRAM 128K 时多约 26 KiB，吞吐代价见 12.7；
 - `CONFIG_NSH_READLINE=y`；
 - `CONFIG_READLINE_TABCOMPLETION=y`；
 - `CONFIG_READLINE_CMD_HISTORY=y`；
@@ -594,6 +599,28 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 
 已知问题：主机不限速、连续多轮 TCP RX 时，MAC 会停止接收，最后以 `ap beacon loss` 断开。开 VIK 之前的镜像也能复现；开 VIK 后，4 次回归中有 2 次在 TCP RX 一步触发。原因未定位，暂缓处理。
 
+### 12.7 WRAM 与 IOB 池缩小
+
+四个配置都用 TLSF，`free` 显示的堆总量（字节）：
+
+| 配置 | WRAM 128K | 调整后 | 验证 |
+| --- | --- | --- | --- |
+| `nsh` | 227,572 | 293,108（WRAM 64K） | 启动、`free`、`ps`；临时加 ramtest，对 0x60fcae84 起 275,000 字节做 32 位和 8 位测试，覆盖新增的 0x61000000–0x6100e0bc，全部通过 |
+| `ostest` | 216,948 | 282,484（WRAM 64K） | 退出码 0 |
+| `nsh-peripherals` | 4,213,724 | 4,277,212（WRAM 64K） | 启动、`free`、`ps`；KASAN 影子区占去新增部分中的 2 KiB |
+| `wifi` | 163,700 | 190,564（WRAM 102K、池 60） | 连接后空闲 146,844→173,752；WPA3 单轮、10 轮连接、iperf 四方向各 30 秒 PASS；两个并发 TCP 发送 3/3 轮通过，IOB 回到 60/60 |
+
+`wifi` 池 90 与池 60 的 30 秒 iperf（Mbps）：
+
+| 方向 | 池 90 | 池 60 |
+| --- | --- | --- |
+| TCP TX | 13.3 | 12.3 |
+| UDP TX | 24.8、25.0 | 19.1 |
+| TCP RX | 7.93 | 8.53 |
+| 两个并发 TCP TX 合计 | 约 12–13 | 约 11.9 |
+
+池 60 时 UDP TX 最多占用 36 个 IOB，正好是池减去节流线 24，说明发送深度受池限制。换 TLSF 之前 UDP TX 受 CPU 限制，池 60 与池 90 只差约 4%；换 TLSF 之后 CPU 不再是瓶颈，池大小的影响就显出来了。
+
 ## 13. 后续发布门禁
 
 在将本方案用于正式 SDK release 前，还应完成：
@@ -619,3 +646,4 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 - 既有缺陷修复与故障注入：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST005-existing-defects/work/README.md`
 - RX 拷贝、memcpy 测量与断流复现：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST006-rx-copy-research/work/README.md`
 - TLSF 切换的构建、启动、ostest 与回归：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST011-tlsf-allocator/work/README.md`
+- WRAM 与 IOB 池缩小（R1）、IOB 用量与分配方案调研：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST009-iob-dynamic-zero-copy/work/README.md`
