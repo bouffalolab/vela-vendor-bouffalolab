@@ -417,6 +417,10 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 
 此前 `1c95e7b feat(bl616): enable WiFi in nsh` 将 Wi-Fi 选项错误地加入 `nsh`。本次配置收尾已恢复 `nsh`，并将 Wi-Fi、iperf、Tab 补全和命令历史集中到 `wifi/defconfig`。defconfig 应继续通过 menuconfig/savedefconfig 生成，不能直接维护生成的 `.config`。
 
+### 10.3 所有配置共用
+
+`nsh`、`nsh-peripherals`、`ostest`、`wifi` 都打开 `CONFIG_MEMCPY_VIK=y`。不开时 NuttX 的 `memcpy()` 是逐字节循环，在非 cache 的 `ram_wifi` 上每个字节都是一次总线访问。`CONFIG_RISCV_MEMCPY` 只有在源和目的对齐方式相同时才按字拷贝，而 RX 拷贝的源和目的分别是 4 字节对齐和余 2，所以不采用。
+
 WPA3-SAE 必须有 `/dev/urandom`。supplicant 的 `crypto_ec_point_mul()` 用 mbedTLS `ctr_drbg` 做 EC 点乘，其种子来自 `mbedtls_entropy_func()`；在 NuttX 上它经 `getrandom()` 读取 `/dev/urandom`。缺少该节点时 SAE commit 构造失败，串口打印 `wpa3 build sae pkt failed`，连接以 Authentication failure 结束。supplicant 的 `os_get_random()`（WPA2 SNonce、SAE 随机数）同样经 `getrandom()` 读取 `/dev/urandom`，因此 WPA2 也依赖该节点。`BL616CL_TRNG` 由 chip TRNG adapter 提供 `/dev/random` 和 `/dev/urandom`，详见 `bl616cl-trng.md`。
 
 ## 11. 构建流程
@@ -572,6 +576,21 @@ TCP RX 在同一套复制代码上也曾测得 3.51–5.09，差异在波动范�
 | MAC 读取用 BL616 efuse 布局，所有 BL616CL 板都落到兜底地址 | 改用 `mfg_media_read_macaddr_with_lock()` | 显示出厂地址 `c8:e7:13:7e:0c:11` |
 | 原生 `lwip.c` raw 发送失败时先调回调、调用者再释放 | 失败路径清除回调 | 原生 macsw_bare 注入 M4 发送失败：修复前 `tlsf_free` 断言 `block already marked as free`；修复后 3 次连接均成功、ping 4/4 |
 
+### 12.6 memcpy 优化
+
+同一模组、同一 `ax86u`，30 秒 iperf（Mbps，主机端）：
+
+| 方向 | 逐字节 memcpy | `MEMCPY_VIK` |
+| --- | --- | --- |
+| TCP TX | 12.2 | 13.6–13.7 |
+| UDP TX | 14.2 | 17.1 |
+| TCP RX | 4.5 | 6.3–7.3 |
+| UDP RX（主机 `-b` 限速逐档加压） | CPU 在约 10.6 时跑满，发 30M 时活锁 | 29.8，丢包约 0.7% |
+
+RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降到约 1.44 万 cycle（CPU 320 MHz）。
+
+已知问题：主机不限速、连续多轮 TCP RX 时，MAC 会停止接收，最后以 `ap beacon loss` 断开。开 VIK 之前的镜像也能复现；开 VIK 后，4 次回归中有 2 次在 TCP RX 一步触发。原因未定位，暂缓处理。
+
 ## 13. 后续发布门禁
 
 在将本方案用于正式 SDK release 前，还应完成：
@@ -595,3 +614,4 @@ TCP RX 在同一套复制代码上也曾测得 3.51–5.09，差异在波动范�
 - 原始调研：`vendor/bouffalolab/docs/bl616cl-wifi-sta-porting-research.md`
 - 测试与串口证据：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/`
 - 既有缺陷修复与故障注入：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST005-existing-defects/work/README.md`
+- RX 拷贝、memcpy 测量与断流复现：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST006-rx-copy-research/work/README.md`
