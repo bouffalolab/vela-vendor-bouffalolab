@@ -83,6 +83,10 @@ if(CONFIG_BL616CL_TIMER)
   list(APPEND SRCS bl616cl_tim.c)
 endif()
 
+if(CONFIG_NET_ARCH_CHKSUM)
+  list(APPEND SRCS bl616cl_chksum.c)
+endif()
+
 # Wi-Fi STA port on top of the wl80211 component: netdev, adapter, efuse MAC
 # and macsw platform hooks.
 if(CONFIG_BL_COMPONENT_WL80211)
