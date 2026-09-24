@@ -172,6 +172,11 @@ SECTIONS
      */
 
     *bflb_sflash.c.o(.rodata .rodata.* .srodata .srodata.*)
+
+    /* Flash clock calibration switches clocks with XIP disabled. */
+
+    *libbl_std.a:bl616cl_glb.c.o(.rodata .rodata.* .srodata .srodata.*)
+    *libbl_std.a:bl616cl_clock.c.o(.rodata .rodata.* .srodata .srodata.*)
     . = ALIGN(4);
   } > ram AT > flash
 

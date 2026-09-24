@@ -437,6 +437,12 @@ NuttX 需要带上 `fix(net): declare checksum() for NET_ARCH_CHKSUM`。否则 `
 
 四个配置都使用 TLSF 堆管理器（`CONFIG_MM_TLSF_MANAGER=y`），malloc/free 为 O(1)。每个堆多一个约 3.2 KB 的控制块，malloc 只保证 4 字节对齐（E907 已打开硬件非对齐访问）。实测堆总量减少 3,372 字节（nsh 230,944→227,572，wifi 167,072→163,700）；wifi 的 UDP TX 由约 17 Mbps 升到约 25 Mbps（两次），TCP 吞吐在波动范围内。TLSF 源码是 manifest 中的 `nuttx/mm/tlsf/tlsf` 项目，目录缺失时 NuttX CMake 会改从 GitHub 拉取，离线环境先用 `repo sync -l nuttx/mm/tlsf/tlsf` 从本地对象恢复。
 
+四个配置启动时都把 XIP flash 时钟从 XTAL 40 MHz 提到 80 MHz。`bl616cl_flash_initialize()` 在 `bflb_flash_init()` 之后移植了原生 `board_set_flash_hs(GLB_SFLASH_CLK_MUXPLL_80M)`：关闭 XIP，按 29 档 WIFIPLL 频率扫描 flash 时钟，每档读 boot2 头并校验 CRC，找到采样失效点；再按它落在 1.5T、1T 还是两者之间，设置 `clk_delay`、`rx_clk_invert` 和 pad 延时，切到 MUXPLL 80M。没有合适的窗口时恢复启动时的配置。测试模组的校准值为 55（1T 窗口），20 次复位结果一致，`GLB_SF_CFG0` 由 `0x4800` 变为 `0xd800`。
+
+校准期间 XIP 关闭，经过的代码和常量都必须在 RAM 里：`ld.script` 把 `bl616cl_glb.c`、`bl616cl_clock.c` 的 `.rodata`（`switch` 跳转表和查表）放进 `.ram_rodata`，与原生链接脚本相同；这些源文件、LHAL flash 驱动和 `bl616cl_flash.c` 不做 sanitizer 与 stack protector 插桩（见 `bl616cl-kasan.md`）。RAM 代价：wifi、nsh、ostest 的 `.ram_code` 多 1.6 KB、`.ram_rodata` 多 1.0 KB，wifi 堆 213,860→211,236，ostest 294,068→291,380；nsh-peripherals 的 RAM 代码因为去掉插桩反而少了约 5 KB，堆 4,290,044→4,295,128。
+
+两个布局相同、只差这一开关的 wifi 镜像交替测两轮（每轮 3×20 秒，中位数，Mbps）：TCP TX 13.2→20.4，UDP TX 22.3→37.7，TCP RX 12.1→18.3；UDP RX 以 60 Mbps 灌包时由 17.0 升到 36.6。I-cache 缺失率不变（1.2%–1.5%），提升来自每次缺失时 flash 读得更快。正式 wifi 镜像回归 PASS，3 轮 TCP TX 19.9–20.0、UDP TX 35.6–36.6、TCP RX 17.0–18.1。
+
 WPA3-SAE 必须有 `/dev/urandom`。supplicant 的 `crypto_ec_point_mul()` 用 mbedTLS `ctr_drbg` 做 EC 点乘，其种子来自 `mbedtls_entropy_func()`；在 NuttX 上它经 `getrandom()` 读取 `/dev/urandom`。缺少该节点时 SAE commit 构造失败，串口打印 `wpa3 build sae pkt failed`，连接以 Authentication failure 结束。supplicant 的 `os_get_random()`（WPA2 SNonce、SAE 随机数）同样经 `getrandom()` 读取 `/dev/urandom`，因此 WPA2 也依赖该节点。`BL616CL_TRNG` 由 chip TRNG adapter 提供 `/dev/random` 和 `/dev/urandom`，详见 `bl616cl-trng.md`。
 
 ## 11. 构建流程
@@ -657,3 +663,4 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 - TLSF 切换的构建、启动、ostest 与回归：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST011-tlsf-allocator/work/README.md`
 - WRAM 与 IOB 池缩小（R1）、IOB 用量与分配方案调研：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST009-iob-dynamic-zero-copy/work/README.md`
 - 网络参数扫描（OOO/SACK、池大小、IOB 几何、代码布局敏感性）：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST010-net-throughput/work/README.md` 的 T5 各节
+- 热点采样与 flash 80 MHz A/B、复位、KASAN 启动排查：同一 README 的“热点代码布局”各节，数据在 `work/prof/`、`work/fhs/`
