@@ -269,9 +269,11 @@ TX/RX 的关键原则是：
 BL616CL linker 在 `boards/bl616cl/ai-m64l-32s-kit/scripts/ld.script` 中为 Wi-Fi 保留独立的 `ram_wifi`：
 
 ```text
-ram_wifi ORIGIN = 0x21020000 - 128K
-         LENGTH = 128K
+ram_wifi ORIGIN = 0x21020000 - CONFIG_BL616CL_WRAM_SIZE KiB
+         LENGTH = (CONFIG_BL616CL_WRAM_SIZE - CONFIG_BL616CL_EM_SIZE) KiB
 ```
+
+WRAM 和 BLE EM 的划分沿用原生 `bl616cl_common.ld.in`：EM 从 WRAM 顶部划走，启动时 `bl616cl_em_select()` 按 `__LD_CONFIG_EM_SEL` 设置 GLB EM_SEL，系统 RAM 为 `384K - 1K - WRAM`。Kconfig 默认 EM 为 0、WRAM 为 128K；选 EM 16K/32K 时 WRAM 默认改为 144K/160K，`ram_wifi` 保持 128K，多出的部分从系统 RAM 让出（EM 32K 时系统 RAM 由 255K 降为 223K）。NuttX CMake 不会因配置变化重新预处理链接脚本，改这两项后要先 `vela clean`。
 
 `.wifibss` 将以下对象放入 Wi-Fi 可见区域：
 
@@ -281,7 +283,7 @@ ram_wifi ORIGIN = 0x21020000 - 128K
 - MFP、MIC 和其他 Wi-Fi shared/common 对象；
 - `wifi_ram*` 区段。
 
-TX 零拷贝镜像中：
+TX 零拷贝镜像中（EM 0、WRAM 128K；EM 32K 时起始地址为 `0x20ff8000`，其余相同）：
 
 - `ram_wifi` 起始地址为 `0x21000000`；
 - 区域大小为 `0x20000`；

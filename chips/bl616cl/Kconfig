@@ -30,6 +30,50 @@ config ARCH_CHIP_BL616CL
 
 endchoice
 
+menu "BL616CL Memory Layout"
+
+choice
+	prompt "BLE exchange memory (EM)"
+	default BL616CL_EM_NONE
+	---help---
+		EM is carved from the top of WRAM for the BLE controller. The boot
+		code programs GLB EM_SEL to match, and the linker script shrinks
+		ram_wifi by the same amount. The CMake build does not regenerate
+		the linker script when only the configuration changes, so run
+		"vela clean" after changing this or BL616CL_WRAM_SIZE.
+
+config BL616CL_EM_NONE
+	bool "None"
+
+config BL616CL_EM_16K
+	bool "16 KiB"
+
+config BL616CL_EM_32K
+	bool "32 KiB"
+
+endchoice
+
+config BL616CL_EM_SIZE
+	int
+	default 32 if BL616CL_EM_32K
+	default 16 if BL616CL_EM_16K
+	default 0
+
+config BL616CL_WRAM_SIZE
+	int "WRAM size (KiB)"
+	range 64 160
+	default 160 if BL616CL_EM_32K
+	default 144 if BL616CL_EM_16K
+	default 128
+	---help---
+		WRAM is taken from the top of the 384 KiB OCRAM+WRAM window and the
+		rest is system RAM. ram_wifi is WRAM minus EM and holds .wifibss
+		(macsw shared data, wl80211 RX buffers and the IOB pool). The
+		defaults keep ram_wifi at 128 KiB for every EM size, as the
+		Bouffalo SDK does by carving EM out of a larger WRAM.
+
+endmenu
+
 menu "BL616CL Peripheral Support"
 
 config BL616CL_CACHE

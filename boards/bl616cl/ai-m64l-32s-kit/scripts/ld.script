@@ -23,13 +23,15 @@
 OUTPUT_ARCH(riscv)
 ENTRY(__start)
 
-/* WRAM and EM share the upper 160 KiB. Enlarged to 128K so the NuttX IOB
- * pool (CONFIG_IOB_SECTION="SHAREDRAM"), which the MAC transmits from
- * directly, fits next to the macsw shared objects.
+/* WRAM (CONFIG_BL616CL_WRAM_SIZE) sits at the top of the OCRAM+WRAM
+ * window and BLE EM (CONFIG_BL616CL_EM_SIZE) is carved from its top, as in
+ * the Bouffalo SDK bl616cl_common.ld.in. The rest is ram_wifi: the macsw
+ * shared objects and the NuttX IOB pool (CONFIG_IOB_SECTION="SHAREDRAM"),
+ * which the MAC transmits from directly.
  */
 
-__bl616cl_wram_size = 128K;
-__LD_CONFIG_EM_SEL = 0;
+__bl616cl_wram_size = CONFIG_BL616CL_WRAM_SIZE * 1024;
+__LD_CONFIG_EM_SEL = CONFIG_BL616CL_EM_SIZE * 1024;
 __bl616cl_ram_size = 224K - 1K + 160K - __bl616cl_wram_size;
 
 MEMORY
