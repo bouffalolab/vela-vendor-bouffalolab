@@ -379,6 +379,7 @@ SECTIONS
     *(.text .text.*)
     *(.gnu.linkonce.t.*)
     . = ALIGN(4);
+    __bl616cl_text_end = ABSOLUTE(.);
   } > flash
 
   .rodata :

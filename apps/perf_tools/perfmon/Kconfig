@@ -1,0 +1,28 @@
+config BL_PERF_TOOLS_PERFMON
+	tristate "BL616CL perfmon command"
+	default n
+	depends on BL616CL_PERFMON
+	---help---
+		NSH command that measures a time window: "perfmon stat" prints
+		E907 counters (IPC, I-cache, D-cache and branch statistics) and
+		the time spent in each interrupt; "perfmon prof" samples the PC
+		on every tick and lists the hottest functions, or dumps the raw
+		histogram for host tools with -r.  Start it in the background
+		next to the workload, for example "perfmon stat -t 20 &" before
+		iperf.
+
+if BL_PERF_TOOLS_PERFMON
+
+config BL_PERF_TOOLS_PERFMON_PROGNAME
+	string "Program name"
+	default "perfmon"
+
+config BL_PERF_TOOLS_PERFMON_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_PERF_TOOLS_PERFMON_STACKSIZE
+	int "Stack size"
+	default 4096
+
+endif

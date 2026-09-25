@@ -30,6 +30,10 @@
 
 #include "riscv_internal.h"
 
+#ifdef CONFIG_BL616CL_PERFMON
+#  include "bl616cl_perfmon_internal.h"
+#endif
+
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
@@ -44,5 +48,9 @@ void *riscv_dispatch_irq(uintreg_t mcause, uintreg_t *regs)
     }
 
   riscv_ack_irq(irq);
+#ifdef CONFIG_BL616CL_PERFMON
+  return bl616cl_perfmon_dispatch(irq, regs);
+#else
   return riscv_doirq(irq, regs);
+#endif
 }
