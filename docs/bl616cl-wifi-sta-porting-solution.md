@@ -15,7 +15,7 @@ BL616CL netdev / adapter（chips/bl616cl）
     |       +--> wl80211 core archive
     |       |       |
     |       |       +--> net80211 / STA / scan / connect
-    |       |       +--> macsw BL616CL/default
+    |       |       +--> macsw BL616CL/vela_bl616cl
     |       |       +--> WPA supplicant
     |       |
     |       +--> BL616CL adapter / IRQ / worker / RF 参数
@@ -45,7 +45,7 @@ WPA3-SAE 已完成 100 轮连接循环和四方向 100 秒压力，尚未做 500
 | `vela-manifest` | 通过 repo 固定 wireless 子仓路径和远端 | `884c975`，增加 `blgerrit` remote 及 macsw、wl80211 public/private、supplicant 项目 |
 | `vela-nuttx` | NuttX 网络栈和 OS 基座 | `97496437931`，修复 buffered send 唤醒竞态 |
 | `vela-vendor-bouffalolab` | OpenVela wrapper、BL616CL glue、板级、linker、配置 | `6365c1f`、`4f56261`、`7069305`、`71bd08b`、`f112fa0`、`62b724f`、`253c8a0` 等 |
-| `macsw` | Wi-Fi MAC/协议数据路径和 BL616CL/default 配置库 | `f9b9a8b4`，恢复单天线扫描间的 coex plan |
+| `macsw` | Wi-Fi MAC/协议数据路径和 BL616CL/vela_bl616cl 配置库 | `f9b9a8b4`，恢复单天线扫描间的 coex plan；本地 `5245e902`，增加 `vela_bl616cl` profile（未推送） |
 | `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | 当前本地 `1f98b57` |
 | `wl80211/private` | wl80211/net80211 core，单独生成 `libwl80211_bl616cl.a` | 当前本地 `d189124` |
 | `bl_wpa_supplicant` | WPA/WPA2/WPA3 认证相关源码 | `de35a74`（`ffc9839` rebase 到 2.3.35），增加 NuttX OS port 和 mbedTLS PBKDF2；`36e4c44`，`os_get_random()` 改用 `getrandom()` |
@@ -107,14 +107,14 @@ components/wireless/
 
 `components/wireless/wifi/macsw/CMakeLists.txt` 的职责是：
 
-1. 只接受 `CONFIG_ARCH_CHIP_BL616CL` 和 `CONFIG_MACSW_SELECT="default"`；
+1. 只接受 `CONFIG_ARCH_CHIP_BL616CL` 和 `CONFIG_MACSW_SELECT="vela_bl616cl"`（Kconfig 默认值）；
 2. 进入 macsw 独立 CMake 工程，使用与 Vela 相同的交叉工具链；
-3. 输出 `libmacsw_bl616cl.a` 和 `libmacsw_config_bl616cl_default.a`；
+3. 输出 `libmacsw_bl616cl.a` 和 `libmacsw_config_bl616cl_vela_bl616cl.a`；
 4. 删除 Vela GCC 不支持的 `-mtune=e907`、`-march=rv32imafc_xtheade`；
 5. 使用标准 ISA `-march=rv32imafc_zicsr_zifencei`，并关闭不适用于该源码的局部告警；
 6. 以 external kernel library 方式交给 NuttX 最终链接。
 
-`default` 是 macsw 的功能/资源 profile，不是工具链或 ABI 标识。芯片、profile、工具链必须作为一组输入锁定。
+`vela_bl616cl` 是 macsw 的功能/资源 profile，不是工具链或 ABI 标识。它对应 macsw 仓的 `inc/macsw_vela_bl616cl_config.h`：在 `macsw_default_config.h` 基础上把 `CFG_RXL_BUFFER1_AMSDU_CNT` 从 1 改为 2、`CFG_REORD_BUF` 从 12 改为 8，原因见 12.8。芯片、profile、工具链必须作为一组输入锁定。
 
 ### 4.3 wl80211 core、host port 与 chip 适配分界
 
@@ -131,7 +131,7 @@ wl80211/wl80211/src
 子构建显式接收：
 
 - `CHIP=bl616cl`；
-- `CONFIG_MACSW_SELECT=default`；
+- `CONFIG_MACSW_SELECT`（与 macsw wrapper 相同，为 `vela_bl616cl`）；
 - PHYRF include；
 - macsw include；
 - supplicant include；
@@ -275,7 +275,7 @@ ram_wifi ORIGIN = 0x21020000 - CONFIG_BL616CL_WRAM_SIZE KiB
 
 WRAM 和 BLE EM 的划分沿用原生 `bl616cl_common.ld.in`：EM 从 WRAM 顶部划走，启动时 `bl616cl_em_select()` 按 `__LD_CONFIG_EM_SEL` 设置 GLB EM_SEL，系统 RAM 为 `384K - 1K - WRAM`。Kconfig 默认 EM 为 0、WRAM 为 128K；选 EM 16K/32K 时 WRAM 默认改为 144K/160K，`ram_wifi` 保持 128K，多出的部分从系统 RAM 让出（EM 32K 时系统 RAM 由 255K 降为 223K）。NuttX CMake 不会因配置变化重新预处理链接脚本，改这两项后要先 `vela clean`。
 
-各配置的 WRAM 取值：`wifi` 设 102K（IOB 池 60，`.wifibss` 之外约留 1.3 KiB 余量）；`nsh`、`nsh-peripherals`、`ostest` 不用 Wi-Fi，`.wifibss` 为空，设为 Kconfig 下限 64K，系统 RAM 为 319K。defconfig 显式写了 WRAM 之后，再选 EM 不会自动加大 WRAM，需要手动把它改为原值加 EM（例如 `wifi` 选 EM 32K 时设为 134K）。
+各配置的 WRAM 取值：`wifi` 设 102K（IOB 池 60，`.wifibss` 之外约留 5.6 KiB 余量）；`nsh`、`nsh-peripherals`、`ostest` 不用 Wi-Fi，`.wifibss` 为空，设为 Kconfig 下限 64K，系统 RAM 为 319K。defconfig 显式写了 WRAM 之后，再选 EM 不会自动加大 WRAM，需要手动把它改为原值加 EM（例如 `wifi` 选 EM 32K 时设为 134K）。
 
 `.wifibss` 将以下对象放入 Wi-Fi 可见区域：
 
@@ -292,7 +292,7 @@ TX 零拷贝镜像中（EM 0、WRAM 128K；EM 32K 时起始地址为 `0x20ff8000
 - `.wifibss` 使用 `0x1df00`（其中 IOB 池 `g_iob_buffer` 58,683 字节）；
 - 剩余 8,448 字节。
 
-当前 `wifi` 镜像（WRAM 102K、IOB 池 60）：`ram_wifi` 起始地址为 `0x21006800`，大小为 `0x19800`；`.wifibss` 使用 `0x192a0`，剩余 1,376 字节。
+当前 `wifi` 镜像（WRAM 102K、IOB 池 60）：`ram_wifi` 起始地址为 `0x21006800`，大小为 `0x19800`；`.wifibss` 使用 `0x18170`，剩余 5,776 字节（换用 `vela_bl616cl` profile 前为 `0x192a0`、剩余 1,376 字节，见 12.8）。
 
 `ram_wifi` 链接在 nocache 别名上，协议栈对 IOB 的读写都不经 cache；原生 SDK 的 lwIP 内存同样从这里分配。改为零拷贝前，`.wifibss` 为 `0x1ab30`，其中 45,408 字节是 wl80211 private 的 TX pool；IOB 池移出后系统堆增加约 58.7 KB。`.wifibss` 为 NOLOAD 且启动时不清零；`CONFIG_IOB_ALLOC` 关闭时 `iob_initialize()` 写入每个节点的链表指针、分配时重置长度与偏移，不依赖清零。
 
@@ -636,6 +636,28 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 
 池 60 时 UDP TX 最多占用 36 个 IOB，正好是池减去节流线 24，说明发送深度受池限制。池 60 的三个 UDP TX 数据来自三个镜像：本节 R1 镜像，以及其后只改 `g_allsyms` 段位置、只开字符串优化的两个镜像；后两项改动不涉及发送路径。三次结果在 19–27 Mbps 之间，所以还不能确定池 60 相对池 90 的 UDP TX 代价，需要多次重复测量。
 
+### 12.8 RX 硬件缓冲与 macsw profile
+
+原生默认配置（`CFG_AMSDU_4K`、`CFG_RXL_BUFFER1_AMSDU_CNT` 1）下，MAC 的 RX 硬件缓冲 `rxl_hw_buffer1` 只有 8,504 B。TCP RX 不限速时，它最高填到 8,460 B，20 秒内 MAC 因 RX FIFO 溢出丢掉约 10% 的 MPDU（MIB `rd_fifo_overflow_count`）；host 侧空闲 RX 缓冲最少仍有 15/26 个，没有耗尽。
+
+`vela_bl616cl` profile 因此把 `CFG_RXL_BUFFER1_AMSDU_CNT` 改为 2（缓冲 17,008 B），同时把 `CFG_REORD_BUF` 从 12 改为 8。host RX 缓冲数按 `CFG_BARX × CFG_REORD_BUF + 2` 计算，从 26 个降为 18 个，所以 `.wifibss` 反而少 4,400 B，WRAM 仍为 102K，堆不变。`CFG_AMSDU_8K` 也能加大缓冲，但它同时向 AP 宣告 7935 B 的 A-MSDU，UDP RX 下降约 17%，所以没有采用。
+
+同一时段、同一 AP 的 3×20 秒 iperf（Mbps，UDP RX 为主机 `-b 60M` 过载发送；括号内为主机 TCP 重传次数）：
+
+| 镜像 | AP | TCP TX | UDP TX | TCP RX | UDP RX |
+| --- | --- | --- | --- | --- | --- |
+| 原生默认 | WPA3 | 20.1–20.2 | 35.6–36.6 | 17.4–17.7（309–396） | 30.2–30.8 |
+| `vela_bl616cl` | WPA3 | 20.1 | 35.5–36.5 | 20.1（7–60） | 24.0–26.5 |
+| 原生默认 | open | 20.4–20.6 | 37.1–38.4 | 18.1–18.5（278–329） | 32.3–32.4 |
+| 只改缓冲（REORD 12，WRAM 110） | open | 20.2–20.6 | 37.3–38.4 | 20.6–20.8（0–17） | 31.1–31.6 |
+| 只改 REORD 8 | open | 20.4–20.5 | 37.4–38.2 | 19.6–20.2（135–219） | 26.2–26.6 |
+| `vela_bl616cl` | open | 20.4–20.5 | 36.9–38.1 | 20.6–20.7（1–51） | 28.1–28.3 |
+
+- 缓冲加倍后，MAC 溢出几乎为零（诊断镜像中 TCP RX 0 次，UDP RX 60M 1 次），TCP RX 提高约 13–14%，主机重传从约 300 次降到几十次以内。
+- UDP RX 过载时均值下降 13–18%，来自 `CFG_REORD_BUF` 8：只改缓冲时仅降约 3%。主机按 30M 发送时，`vela_bl616cl` 收满 29.95–29.98，与原生默认相同，所以这只影响过载时的吞吐。
+- 改 REORD 会改变 `rxu_cntrl_reord_*` 的代码大小，macsw 的 358 个函数随之移位；带 `mw` 命令的另一种布局下，两次测得 UDP RX 过载时分别下降 0% 和 11%。窗口本身和代码布局各占多少，还没有区分。
+- 单轮 WPA3 回归中，connect-10、iperf-30s 通过；single 因 ping 9/10 判为失败：seq 2 的回复超过 1 秒才到。2026-09-02 旧配置的 `getrandom-wpa3-ax86u-single.log` 中也出现过同样现象（同为 seq 2），不是本次改动引入的。
+
 ## 13. 后续发布门禁
 
 在将本方案用于正式 SDK release 前，还应完成：
@@ -664,3 +686,4 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 - WRAM 与 IOB 池缩小（R1）、IOB 用量与分配方案调研：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST009-iob-dynamic-zero-copy/work/README.md`
 - 网络参数扫描（OOO/SACK、池大小、IOB 几何、代码布局敏感性）：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST010-net-throughput/work/README.md` 的 T5 各节
 - 热点采样与 flash 80 MHz A/B、复位、KASAN 启动排查：同一 README 的“热点代码布局”各节，数据在 `work/prof/`、`work/fhs/`
+- RX 硬件缓冲与 `vela_bl616cl` profile：同一 README 的“RX 硬件缓冲”两节，数据在 `work/rxdiag/`、`work/rxcfg/`
