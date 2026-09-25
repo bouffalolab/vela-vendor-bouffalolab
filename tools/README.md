@@ -14,8 +14,8 @@
 - `bl616cl/postprocess_bl616cl.sh`：Ai-M64L-32S-Kit 的 CMake postbuild
   wrapper；在临时目录生成处理后的 app 和 4 MiB whole image。
 - `bl616cl/perf/`：Wi-Fi 性能与热函数布局工具。`layout_check.py` 在 Wi-Fi
-  镜像链接后检查 `ld.script` 热函数列表；`wifi_bench.py` 跑四方向 iperf 并可
-  同时采集板上 `perfmon`；`perfmon_report.py` 汇总计数和热点；
+  镜像链接后检查 `ld.script` 热函数列表；`perf_build.sh` 生成带 `perfmon` 的
+  临时镜像；`wifi_bench.py` 跑四方向 iperf 并可同时采集板上 `perfmon`；`perfmon_report.py` 汇总计数和热点；
   `layout_ab.sh` 做布局 A/B。用法见 `docs/bl616cl-hot-code-layout.md`。
 - `vendor/bouffalolab/apps/os_feature_tests/ubsan/ubsan_validate.py`：在单一
   USB-UART fd 中完成 BL616CL UBSAN

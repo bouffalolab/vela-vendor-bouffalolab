@@ -40,7 +40,8 @@
 
 ## 构建时检查
 
-打开 `BL_COMPONENT_WL80211` 的配置在链接后运行 `layout_check.py`，输出一行：
+打开 `BL_COMPONENT_WL80211` 的配置在链接后运行 `layout_check.py`，目前只有
+`wifi`；其他配置没有 Wi-Fi 代码，列表匹配不到任何函数，不做检查。输出一行：
 
 ```text
 bl616cl layout: 98/98 Wi-Fi hot entries placed at 0x80008000, 34.9 KiB (I-cache 32 KiB)
@@ -76,9 +77,11 @@ vendor/bouffalolab/vela build ai-m64l-32s-kit/wifi
 
 ### 2. 采样
 
+`wifi` 默认不带 perfmon，先用 `perf_build.sh` 生成带 perfmon 的临时镜像：
+
 ```sh
-vendor/bouffalolab/vela flash \
-  --config cmake_out/ai-m64l-32s-kit_wifi/flash_prog_cfg.ini \
+vendor/bouffalolab/tools/bl616cl/perf/perf_build.sh <out>/img
+vendor/bouffalolab/vela flash --config <out>/img/flash_prog_cfg.ini \
   --port /dev/ttyUSB3 --baudrate 1000000
 python3 vendor/bouffalolab/tools/bl616cl/perf/wifi_bench.py <out>/prof \
   --reps 1 --time 20 --udp-rx 60 --perfmon prof
@@ -91,9 +94,7 @@ python3 vendor/bouffalolab/tools/bl616cl/perf/wifi_bench.py <out>/prof \
 
 ```sh
 python3 vendor/bouffalolab/tools/bl616cl/perf/perfmon_report.py \
-  --map cmake_out/ai-m64l-32s-kit_wifi/nuttx.map \
-  --elf cmake_out/ai-m64l-32s-kit_wifi/final_nuttx \
-  --hot wifi \
+  --map <out>/img/nuttx.map --elf <out>/img/final_nuttx --hot wifi \
   --ld-script vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/scripts/ld.script \
   <out>/prof/*.perfmon
 ```
@@ -132,9 +133,9 @@ vendor/bouffalolab/tools/bl616cl/perf/layout_ab.sh -b <out>/ab
 
 - 三种填充下，`hot` 的 UDP TX 和 UDP RX 中位数都高于 `base`；
 - TCP TX、TCP RX 不低于 `base`（差值在 ±2% 内视为持平）；
-- 需要时在 `hot-0` 和 `base-0` 上各跑一次
-  `wifi_bench.py --perfmon stat`，确认 `hot` 的 I-cache 缺失率和 IRQ 86
-  每次的周期数不高于 `base`。
+- 需要看 I-cache 缺失率时，加 `-p` 让六个镜像都带 perfmon，再在 `hot-0`
+  和 `base-0` 上各跑一次 `wifi_bench.py --perfmon stat`，确认 `hot` 的缺失率
+  和 IRQ 86 每次的周期数不高于 `base`。带 `-p` 的镜像只和带 `-p` 的比较。
 
 达不到标准时，先检查第 1 步的缺失项和第 3 步的 `NEW` 函数，再重复第 4 步。
 
@@ -159,6 +160,7 @@ vendor/bouffalolab/tools/bl616cl/perf/layout_ab.sh -b <out>/ab
 | 文件 | 作用 |
 | --- | --- |
 | `tools/bl616cl/perf/layout_check.py` | 链接后检查列表与 map，构建自动运行 |
+| `tools/bl616cl/perf/perf_build.sh` | 生成带 perfmon 的临时 `wifi` 镜像 |
 | `tools/bl616cl/perf/wifi_bench.py` | 复位、连接、四方向 iperf，可同时运行 perfmon |
 | `tools/bl616cl/perf/perfmon_report.py` | 汇总计数、IRQ 占比、模块/函数样本，`--hot` 列候选 |
 | `tools/bl616cl/perf/layout_ab.sh` | `hot`/`base` × 填充的构建和测试 |
