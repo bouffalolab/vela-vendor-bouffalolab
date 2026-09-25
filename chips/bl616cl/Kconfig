@@ -177,6 +177,28 @@ config BL616CL_TRNG
 		standard /dev/random device. DEV_URANDOM remains independent and
 		uses the same hardware when DEV_URANDOM_ARCH is selected.
 
+config BL616CL_PERFMON
+	bool "Performance monitor"
+	default n
+	---help---
+		Count E907 events (I-cache and D-cache accesses and misses,
+		conditional branches and mispredicts) with the hardware
+		performance counters, and the calls and mcycle of every interrupt
+		and exception in riscv_dispatch_irq().  Applications read them
+		through arch/chip/bl616cl_perfmon.h; see the perfmon app.  It costs
+		about 1.2 KiB of RAM and two CSR reads per interrupt.
+
+config BL616CL_PERFMON_PCSAMPLE
+	bool "Tick PC sampling"
+	default y
+	depends on BL616CL_PERFMON
+	---help---
+		On every machine timer interrupt, count the interrupted PC in a
+		histogram that the caller provides, or count an idle tick when
+		the idle task was interrupted.  Code that runs with interrupts
+		disabled, other interrupt handlers included, is never sampled;
+		its time lands on the code that runs next.
+
 config BL616CL_DMA0
 	bool "DMA0 generic DMA adapter"
 	default n

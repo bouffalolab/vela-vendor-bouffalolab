@@ -55,6 +55,10 @@ if(CONFIG_BL616CL_TRNG)
   list(APPEND SRCS bl616cl_rng.c)
 endif()
 
+if(CONFIG_BL616CL_PERFMON)
+  list(APPEND SRCS bl616cl_perfmon.c)
+endif()
+
 if(CONFIG_BL616CL_I2C0 OR CONFIG_BL616CL_I2C1)
   list(APPEND SRCS bl616cl_i2c.c)
 endif()

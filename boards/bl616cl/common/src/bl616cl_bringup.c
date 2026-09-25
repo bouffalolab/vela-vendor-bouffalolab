@@ -56,6 +56,10 @@
 #  include "bl616cl_rtc.h"
 #endif
 
+#ifdef CONFIG_BL616CL_PERFMON
+#  include "bl616cl_perfmon_internal.h"
+#endif
+
 #include "bl616cl_board_common.h"
 
 /****************************************************************************
@@ -77,6 +81,10 @@ int bl616cl_bringup(void)
 
 #ifdef CONFIG_BOARDCTL_RESET_CAUSE
   bl616cl_reset_reason_initialize();
+#endif
+
+#ifdef CONFIG_BL616CL_PERFMON
+  bl616cl_perfmon_initialize();
 #endif
 
   ret = bl616cl_bod_initialize();

@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+
+if(CONFIG_BL_PERF_TOOLS_PERFMON)
+  nuttx_add_application(
+    NAME
+    ${CONFIG_BL_PERF_TOOLS_PERFMON_PROGNAME}
+    PRIORITY
+    ${CONFIG_BL_PERF_TOOLS_PERFMON_PRIORITY}
+    STACKSIZE
+    ${CONFIG_BL_PERF_TOOLS_PERFMON_STACKSIZE}
+    MODULE
+    ${CONFIG_BL_PERF_TOOLS_PERFMON}
+    SRCS
+    perfmon_main.c)
+endif()
