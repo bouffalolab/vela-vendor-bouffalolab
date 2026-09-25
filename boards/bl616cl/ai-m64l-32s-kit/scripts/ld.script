@@ -262,6 +262,7 @@ SECTIONS
   .text ALIGN(LOADADDR(.data) + SIZEOF(.data), 32K) :
   {
     _stext = ABSOLUTE(.);
+    __bl616cl_wifi_hot_start = ABSOLUTE(.);
 
     /* Wi-Fi hot paths in call order, so that they stay in few I-cache
      * sets and no cold code sits between them.  Derived from
@@ -375,6 +376,7 @@ SECTIONS
     *(.text.wl80211_mac_rx_free .text.wl80211_mac_rx_free.*)
     *(.text.wl80211_tcpip_input .text.wl80211_tcpip_input.*)
     *(.text.wlan_sta_rx_done .text.wlan_sta_rx_done.*)
+    __bl616cl_wifi_hot_end = ABSOLUTE(.);
 
     *(.text .text.*)
     *(.gnu.linkonce.t.*)

@@ -294,7 +294,7 @@ TX 零拷贝镜像中（EM 0、WRAM 128K；EM 32K 时起始地址为 `0x20ff8000
 
 当前 `wifi` 镜像（WRAM 102K、IOB 池 60）：`ram_wifi` 起始地址为 `0x21006800`，大小为 `0x19800`；`.wifibss` 使用 `0x18170`，剩余 5,776 字节（换用 `vela_bl616cl` profile 前为 `0x192a0`、剩余 1,376 字节，见 12.8）。
 
-XIP 代码段 `.text` 的起点对齐到 32 KiB（I-cache 大小），RAM 段的 flash 镜像变大或变小时，代码的 cache set 不再跟着移动。`.text` 开头按调用顺序排列 Wi-Fi 热函数，分为任务循环、TX、TX 确认、RX 四组，共约 35 KB，让这些函数集中在少数 cache set 里，中间不夹冷代码。列表以 macsw 的 `macsw_cache_affinity.ld.in` 为起点：其中 147 个函数名只有 75 个在本构建的 LTO 输出中仍是独立函数；再加上 80 MHz tick 采样里同一路径上的任务循环、host port 和 glue 函数。LTO 会给局部函数加 `.lto_priv/.isra/.constprop` 后缀，所以每个名字都同时匹配 `.text.fn` 和 `.text.fn.*`。列表直接写在 `ld.script` 中，因为 NuttX CMake 预处理链接脚本时不跟踪被 include 的文件。效果见 12.9。
+XIP 代码段 `.text` 的起点对齐到 32 KiB（I-cache 大小），RAM 段的 flash 镜像变大或变小时，代码的 cache set 不再跟着移动。`.text` 开头按调用顺序排列 Wi-Fi 热函数，分为任务循环、TX、TX 确认、RX 四组，共约 35 KB，让这些函数集中在少数 cache set 里，中间不夹冷代码。列表以 macsw 的 `macsw_cache_affinity.ld.in` 为起点：其中 147 个函数名只有 75 个在本构建的 LTO 输出中仍是独立函数；再加上 80 MHz tick 采样里同一路径上的任务循环、host port 和 glue 函数。LTO 会给局部函数加 `.lto_priv/.isra/.constprop` 后缀，所以每个名字都同时匹配 `.text.fn` 和 `.text.fn.*`。列表直接写在 `ld.script` 中，因为 NuttX CMake 预处理链接脚本时不跟踪被 include 的文件。效果见 12.9；组件更新后的检查和回归步骤见 [bl616cl-hot-code-layout.md](bl616cl-hot-code-layout.md)。
 
 `ram_wifi` 链接在 nocache 别名上，协议栈对 IOB 的读写都不经 cache；原生 SDK 的 lwIP 内存同样从这里分配。改为零拷贝前，`.wifibss` 为 `0x1ab30`，其中 45,408 字节是 wl80211 private 的 TX pool；IOB 池移出后系统堆增加约 58.7 KB。`.wifibss` 为 NOLOAD 且启动时不清零；`CONFIG_IOB_ALLOC` 关闭时 `iob_initialize()` 写入每个节点的链表指针、分配时重置长度与偏移，不依赖清零。
 
@@ -690,6 +690,17 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 - `nsh`、`nsh-peripherals` 各启动 3 次通过，后者启动仍需 21.5 秒；`ostest` 退出码为 0。
 - AP 改回 WPA3 之前，没有跑 WPA3 回归。
 
+之后用回归工具 `tools/bl616cl/perf/layout_ab.sh -b` 在打开 perfmon 的 `wifi` 上重跑一次：`hot` 为当前列表，`base` 删掉列表，其余相同，每个镜像 3×20 秒，表中为中位数（Mbps）。
+
+| 场景 | base（填充 0 / 0x1e0 / 0x9a0） | hot（填充 0 / 0x1e0 / 0x9a0） |
+| --- | --- | --- |
+| TCP TX | 19.9 / 19.9 / 20.2 | 20.9 / 21.1 / 20.7 |
+| UDP TX | 35.1 / 35.4 / 36.0 | 45.3 / 48.8 / 48.5 |
+| TCP RX | 20.4 / 20.3 / 20.8 | 21.4 / 21.5 / 21.6 |
+| UDP RX | 32.5 / 33.5 / 33.6 | 41.1 / 41.5 / 38.3 |
+
+三种填充下 `hot` 都更好：UDP TX +29%～+38%，UDP RX +14%～+26%，TCP +2%～+6%，满足 [bl616cl-hot-code-layout.md](bl616cl-hot-code-layout.md) 的验收标准。组件更新后按该文档重跑。
+
 ## 13. 后续发布门禁
 
 在将本方案用于正式 SDK release 前，还应完成：
@@ -718,5 +729,6 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 - WRAM 与 IOB 池缩小（R1）、IOB 用量与分配方案调研：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST009-iob-dynamic-zero-copy/work/README.md`
 - 网络参数扫描（OOO/SACK、池大小、IOB 几何、代码布局敏感性）：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST010-net-throughput/work/README.md` 的 T5 各节
 - 热点采样与 flash 80 MHz A/B、复位、KASAN 启动排查：同一 README 的“热点代码布局”各节，数据在 `work/prof/`、`work/fhs/`
+- Wi-Fi 热函数布局实验、perfmon 验证与回归工具首次运行：同一 README 的“热点代码布局 Stage 2”和“perfmon 与布局回归工具”两节，数据在 `work/layout/`、`work/perfmon/`
 - RX 硬件缓冲与 `vela_bl616cl` profile：同一 README 的“RX 硬件缓冲”两节，数据在 `work/rxdiag/`、`work/rxcfg/`
 - Wi-Fi 热函数布局：同一 README 的“热点代码布局 Stage 2”一节，数据在 `work/layout/`
