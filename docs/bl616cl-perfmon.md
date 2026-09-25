@@ -22,9 +22,22 @@ CONFIG_BL616CL_PERFMON_PCSAMPLE=y  # chip：tick PC 采样，默认随上项打�
 CONFIG_BL_PERF_TOOLS_PERFMON=y     # apps：perfmon 命令
 ```
 
-`wifi` defconfig 打开 `BL616CL_PERFMON` 和 `BL_PERF_TOOLS_PERFMON`，其他配置
-不打开。关闭 `BL616CL_PERFMON` 时 `riscv_dispatch_irq()` 直接调用
+`nsh-peripherals` defconfig 打开 `BL616CL_PERFMON` 和 `BL_PERF_TOOLS_PERFMON`，
+其他配置不打开。关闭 `BL616CL_PERFMON` 时 `riscv_dispatch_irq()` 直接调用
 `riscv_doirq()`，镜像里没有 perfmon 的代码和数据。
+
+`wifi` 不默认打开：打开会挪动 Wi-Fi 以外的代码，UDP TX 会随之变化（见“验证”）。
+要在 Wi-Fi 负载下测量时，用 `tools/bl616cl/perf/perf_build.sh` 生成一个临时
+镜像，它复制 `configs/wifi`、加上上面两项、构建并把镜像放到指定目录，然后删除
+临时配置：
+
+```sh
+vendor/bouffalolab/tools/bl616cl/perf/perf_build.sh <out>/img
+vendor/bouffalolab/vela flash --config <out>/img/flash_prog_cfg.ini \
+  --port /dev/ttyUSB3 --baudrate 1000000
+```
+
+第二个参数可以换成其他配置名。
 
 打开后常驻 RAM 为两个按 IRQ 号索引的数组，`NR_IRQS` 为 99 时共 1,188 字节，
 PC 采样另有几个字。`perfmon prof` 运行时从堆申请直方图，大小为
@@ -101,7 +114,8 @@ perfmon: 16.00 s, 5121175448 cycles, 459553079 instructions, IPC 0.089 (idle inc
 ```
 
 `-d` 是窗口开始前的等待，用来跳过 TCP 慢启动；`-t` 是窗口长度，默认
-10 秒。`mcycle` 在 WFI 中继续计数，所以 IPC 含 idle 时间，只能在相同负载
+10 秒。`perfmon` 的优先级是 100，同优先级或更高优先级的任务一直占着 CPU 时，
+它醒来得晚，窗口会变长；以输出的秒数为准。`mcycle` 在 WFI 中继续计数，所以 IPC 含 idle 时间，只能在相同负载
 之间比较。IRQ 表按周期数取前 8 项，`share` 是占整个窗口周期的比例。
 
 ### perfmon prof
@@ -148,18 +162,29 @@ python3 vendor/bouffalolab/tools/bl616cl/perf/wifi_bench.py <out> \
   --reps 1 --time 20 --udp-rx 60 --perfmon prof
 ```
 
-`perfmon_report.py` 汇总这些文件；给出镜像的 `nuttx.map` 和 `final_nuttx`
-后，还会按模块和函数归类样本：
+镜像要带 perfmon，即上面 `perf_build.sh` 生成的镜像。`perfmon_report.py`
+汇总这些文件；给出该镜像的 `nuttx.map` 和 `final_nuttx` 后，还会按模块和
+函数归类样本：
 
 ```sh
 python3 vendor/bouffalolab/tools/bl616cl/perf/perfmon_report.py \
-  --map cmake_out/ai-m64l-32s-kit_wifi/nuttx.map \
-  --elf cmake_out/ai-m64l-32s-kit_wifi/final_nuttx <out>/*.perfmon
+  --map <out>/img/nuttx.map --elf <out>/img/final_nuttx <out>/*.perfmon
 ```
 
 ## 验证
 
-在 `wifi` 配置上完成：
+`nsh-peripherals`（默认打开）：
+
+- 空闲 3 秒：`mcycle` 增加 960,351,299（320 MHz × 3 s），tick 全部计入 idle。
+  MTIMER 每次约 10.7k cycle，占 3.3%，是 `wifi` 的 6 倍，差别来自 KASAN 和
+  stack canary 插桩。
+- 演示负载 `perfmon prof -t 5 -n 8 &` 后接
+  `dd if=/dev/zero of=/dev/null bs=512 count=200000`：IPC 0.74，idle 2.4%，
+  热点前几位是 `kasan_check_report`（41%）、`__asan_store2_noabort`（10%）等
+  KASAN 检查。`dd` 与 `perfmon` 同为优先级 100，`dd` 一直占着 CPU，窗口从
+  5 秒拉长到 12.1 秒；输出的秒数是实际窗口。
+
+Wi-Fi 数据取自打开 perfmon 的 `wifi` 镜像，与 `perf_build.sh` 生成的相同：
 
 - 空闲 3 秒：`mcycle` 增加 960,181,069（320 MHz × 3 s），MTIMER 3,001 次，
   tick 全部计入 idle。
@@ -185,8 +210,9 @@ python3 vendor/bouffalolab/tools/bl616cl/perf/perfmon_report.py \
   20.4–20.5、UDP TX 47.7–48.0、TCP RX 21.1–21.2、UDP RX 41.2–41.9。打开
   perfmon 后 UDP TX 低 5%，另外三项持平或略高；最吃 CPU 的 UDP RX（idle
   8%）没有变慢，说明差异来自 Wi-Fi 以外代码的位移，不是 perfmon 的运行开销。
-- `nsh`、`nsh-peripherals`、`ostest` 不打开本功能，构建产物中没有 perfmon
-  符号；关闭 `BL616CL_PERFMON_PCSAMPLE` 的 `wifi` 变体编译通过。
+  为了不让 `wifi` 的吞吐基线随它变化，`wifi` 默认不打开。
+- `nsh`、`ostest`、`wifi` 不打开本功能，构建产物中没有 perfmon 符号；关闭
+  `BL616CL_PERFMON_PCSAMPLE` 的变体编译通过。
 
 数据在 `.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST010-net-throughput/work/perfmon/`。
 

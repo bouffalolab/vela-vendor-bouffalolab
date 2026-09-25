@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # A/B check of the Wi-Fi hot code layout that is robust to unrelated moves.
 #
-# Usage: [WIFI_TEST_PSK=...] layout_ab.sh [-b] <out-dir> [pad...]
+# Usage: [WIFI_TEST_PSK=...] layout_ab.sh [-b] [-p] <out-dir> [pad...]
 #
 # Builds configs/wifi with the ld.script hot list ("hot") and without it
 # ("base"), each with a filler of every given size (default 0 0x1e0 0x9a0)
@@ -11,7 +11,9 @@
 # a gain that holds for every filler counts.  Images go to
 # <out-dir>/img-<variant>.  With -b each image is then flashed and benched
 # (wifi_bench.py, 3 x 20 s, UDP RX offered at 60M) into <out-dir>/<variant>
-# and a min-max table per case is printed.
+# and a min-max table per case is printed.  -p adds perfmon to every image
+# (wifi_bench.py --perfmon then works on them); it moves the code behind
+# the Wi-Fi list, so compare -p images only with each other.
 #
 # The board ld.script is edited in place and restored on exit; do not build
 # other configs meanwhile.  See docs/bl616cl-hot-code-layout.md.
@@ -19,11 +21,13 @@
 set -euo pipefail
 
 BENCH=0
-if [ "${1:-}" = -b ]; then
-  BENCH=1
+PERFMON=0
+while [ "${1:-}" = -b ] || [ "${1:-}" = -p ]; do
+  [ "$1" = -b ] && BENCH=1
+  [ "$1" = -p ] && PERFMON=1
   shift
-fi
-[ $# -ge 1 ] || { sed -n '3,17p' "$0"; exit 1; }
+done
+[ $# -ge 1 ] || { sed -n '3,20p' "$0"; exit 1; }
 
 TOOLS=$(cd "$(dirname "$0")" && pwd -P)
 VENDOR=$(cd "$TOOLS/../../.." && pwd -P)
@@ -47,6 +51,10 @@ trap cleanup EXIT
 
 rm -rf "$BOARD/configs/$CFG" "$ROOT/cmake_out/ai-m64l-32s-kit_$CFG"
 cp -r "$BOARD/configs/wifi" "$BOARD/configs/$CFG"
+if [ $PERFMON = 1 ]; then
+  printf 'CONFIG_BL616CL_PERFMON=y\nCONFIG_BL_PERF_TOOLS_PERFMON=y\n' \
+    >> "$BOARD/configs/$CFG/defconfig"
+fi
 BUILD=$ROOT/cmake_out/ai-m64l-32s-kit_$CFG
 
 VARIANTS=

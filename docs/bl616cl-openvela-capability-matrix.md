@@ -336,7 +336,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | D05 | syslog coredump：`COREDUMP`、`BOARD_COREDUMP_SYSLOG` | 已验证（ST010） | 单触发线程、无 full/compression/base64；零长度 memory range 哨兵；关闭彩色 syslog；负测 app 默认关闭 | USB2 完整 HEX 转换为 ELF32 RISC-V CORE；准确负测 ELF 恢复 LWP 9、PC/SP 和触发栈；最终产品裁剪与外设回归成立 |
 | D06 | stack/cpu/resource monitor 工具 | 可直接开启，P1 | 分别依赖 coloration、cpuload、procfs；工具本身也消耗资源 | 启停、周期、输出和自身 CPU/stack 开销 |
 | D07 | EXTCLK CPU load | 需要资源重构，P2 | TIMER1 当前由 `/dev/oneshot` 独占；必须用 choice 确定 owner | 与 SYSCLK 对照；异步采样；不能同时注册同一 lower-half |
-| D08 | E907 hardware perf/perf-tools | 部分已验证（ST010 perfmon） | BL616CL 私有 `BL616CL_PERFMON` 已接入 I/D-cache、分支事件、按 IRQ 计时和 tick PC 采样，`perfmon` 命令仅 `wifi` 配置打开；通用 `SCHED_PERF_EVENTS`/perf-tools 仍未接入，依赖 A08 | perfmon：空闲 cycle 与 320 MHz 对时、四方向 iperf 下计数与 IRQ 表、裁剪（见 `bl616cl-perfmon.md`）；通用框架待 A08 |
+| D08 | E907 hardware perf/perf-tools | 部分已验证（ST010 perfmon） | BL616CL 私有 `BL616CL_PERFMON` 已接入 I/D-cache、分支事件、按 IRQ 计时和 tick PC 采样，`perfmon` 命令在 `nsh-peripherals` 默认打开，Wi-Fi 负载用 `perf_build.sh` 临时镜像；通用 `SCHED_PERF_EVENTS`/perf-tools 仍未接入，依赖 A08 | perfmon：空闲 cycle 与 320 MHz 对时、四方向 iperf 下计数与 IRQ 表、裁剪（见 `bl616cl-perfmon.md`）；通用框架待 A08 |
 
 Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启用，
 因为 ring buffer 自身进入 critical section，会形成 instrumentation 递归。D04 的
