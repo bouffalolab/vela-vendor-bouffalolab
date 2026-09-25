@@ -294,6 +294,8 @@ TX 零拷贝镜像中（EM 0、WRAM 128K；EM 32K 时起始地址为 `0x20ff8000
 
 当前 `wifi` 镜像（WRAM 102K、IOB 池 60）：`ram_wifi` 起始地址为 `0x21006800`，大小为 `0x19800`；`.wifibss` 使用 `0x18170`，剩余 5,776 字节（换用 `vela_bl616cl` profile 前为 `0x192a0`、剩余 1,376 字节，见 12.8）。
 
+XIP 代码段 `.text` 的起点对齐到 32 KiB（I-cache 大小），RAM 段的 flash 镜像变大或变小时，代码的 cache set 不再跟着移动。`.text` 开头按调用顺序排列 Wi-Fi 热函数，分为任务循环、TX、TX 确认、RX 四组，共约 35 KB，让这些函数集中在少数 cache set 里，中间不夹冷代码。列表以 macsw 的 `macsw_cache_affinity.ld.in` 为起点：其中 147 个函数名只有 75 个在本构建的 LTO 输出中仍是独立函数；再加上 80 MHz tick 采样里同一路径上的任务循环、host port 和 glue 函数。LTO 会给局部函数加 `.lto_priv/.isra/.constprop` 后缀，所以每个名字都同时匹配 `.text.fn` 和 `.text.fn.*`。列表直接写在 `ld.script` 中，因为 NuttX CMake 预处理链接脚本时不跟踪被 include 的文件。效果见 12.9。
+
 `ram_wifi` 链接在 nocache 别名上，协议栈对 IOB 的读写都不经 cache；原生 SDK 的 lwIP 内存同样从这里分配。改为零拷贝前，`.wifibss` 为 `0x1ab30`，其中 45,408 字节是 wl80211 private 的 TX pool；IOB 池移出后系统堆增加约 58.7 KB。`.wifibss` 为 NOLOAD 且启动时不清零；`CONFIG_IOB_ALLOC` 关闭时 `iob_initialize()` 写入每个节点的链表指针、分配时重置长度与偏移，不依赖清零。
 
 wl80211 public/private 侧的配套修改包括：
@@ -658,6 +660,36 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 - 改 REORD 会改变 `rxu_cntrl_reord_*` 的代码大小，macsw 的 358 个函数随之移位；带 `mw` 命令的另一种布局下，两次测得 UDP RX 过载时分别下降 0% 和 11%。窗口本身和代码布局各占多少，还没有区分。
 - 单轮 WPA3 回归中，connect-10、iperf-30s 通过；single 因 ping 9/10 判为失败：seq 2 的回复超过 1 秒才到。2026-09-02 旧配置的 `getrandom-wpa3-ax86u-single.log` 中也出现过同样现象（同为 seq 2），不是本次改动引入的。
 
+### 12.9 Wi-Fi 热函数布局
+
+同一 open AP、每个镜像 3×20 秒（Mbps，UDP RX 为主机 `-b 60M` 过载发送）。B1 只把 `.text` 起点对齐到 32 KiB，W1 再加 Wi-Fi 热函数排序；两者都在 Wi-Fi 代码之后插入 0、0x1e0、0x9a0 字节的填充，把其余代码整体挪位，以模拟无关改动。这些实验镜像都带采样补丁。
+
+| 场景 | B1（三种填充） | W1（三种填充） |
+| --- | --- | --- |
+| TCP TX | 18.0–20.1 | 20.4–21.1 |
+| UDP TX | 34.1–35.0 | 41.0–46.0 |
+| TCP RX | 19.2–20.5 | 20.9–21.5 |
+| UDP RX | 28.8–33.0 | 39.8–47.8 |
+
+- 三种填充下 W1 都更好，按中位数计：TCP TX +2%～+14%，UDP TX +20%～+32%，TCP RX +4%～+9%，UDP RX +24%～+46%。
+- I-cache 缺失率：UDP TX 从 1.50% 降到 1.22%，TCP RX 从 1.28% 降到 1.15%。
+- Wi-Fi 中断（`interrupt0_handler`）每次的耗时，在 UDP TX 时从约 16.7k 降到 9.3k cycle。这部分时间 tick 采样看不到，是在 IRQ 分发处按 mcycle 统计得到的。
+- W1 的 UDP 吞吐仍随其余代码的位置变化，说明 net、memcpy、调度代码的位置还有影响，需要按模块继续排列。
+
+正式镜像（不带采样补丁）与上一版 `wifi`（`vela_bl616cl` profile，同为 open AP）对比如下，单位 Mbps：
+
+| 场景 | 排序前 | 排序后 |
+| --- | --- | --- |
+| TCP TX | 20.4–20.5 | 20.3–20.4 |
+| UDP TX | 36.9–38.1 | 47.8–48.0 |
+| TCP RX | 20.6–20.7 | 21.1–21.2 |
+| UDP RX | 28.1–28.3 | 41.1–41.2 |
+
+- 堆仍为 211,364 字节。对齐只多占 flash：`wifi` 的 `nuttx.bin` 从 747,552 增加到 750,304 字节。
+- open AP 下四个方向 iperf 各 30 秒通过。
+- `nsh`、`nsh-peripherals` 各启动 3 次通过，后者启动仍需 21.5 秒；`ostest` 退出码为 0。
+- AP 改回 WPA3 之前，没有跑 WPA3 回归。
+
 ## 13. 后续发布门禁
 
 在将本方案用于正式 SDK release 前，还应完成：
@@ -687,3 +719,4 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 - 网络参数扫描（OOO/SACK、池大小、IOB 几何、代码布局敏感性）：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST010-net-throughput/work/README.md` 的 T5 各节
 - 热点采样与 flash 80 MHz A/B、复位、KASAN 启动排查：同一 README 的“热点代码布局”各节，数据在 `work/prof/`、`work/fhs/`
 - RX 硬件缓冲与 `vela_bl616cl` profile：同一 README 的“RX 硬件缓冲”两节，数据在 `work/rxdiag/`、`work/rxcfg/`
+- Wi-Fi 热函数布局：同一 README 的“热点代码布局 Stage 2”一节，数据在 `work/layout/`
