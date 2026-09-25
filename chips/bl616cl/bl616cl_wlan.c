@@ -31,6 +31,7 @@
 #include <debug.h>
 #include <errno.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/endian.h>
 
 #include <nuttx/arch.h>
@@ -55,6 +56,10 @@
 #include "bl616cl_wlan.h"
 #include "wl80211_mac.h"
 #include "wifi_mgmr_ext.h"
+
+#ifdef CONFIG_BL616CL_WLAN_RX_ZEROCOPY
+#  include CONFIG_MACSW_SELECT_INCLUDE
+#endif
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -91,6 +96,26 @@
 
 #define WLAN_BUF_SIZE \
   (CONFIG_NET_ETH_PKTSIZE + CONFIG_NET_LL_GUARDSIZE + CONFIG_NET_GUARDSIZE)
+
+#ifdef CONFIG_BL616CL_WLAN_RX_ZEROCOPY
+/* RX frames at least this long stay in their wl80211 host RX slot, which
+ * is wrapped as an IOB, instead of being copied into a pool IOB.  Short
+ * frames are cheap to copy, and TCP ACKs must stay in pool IOBs: the stack
+ * may clone new TCP data into the IOB of a received ACK, and a slot has no
+ * room for the TX header.  lwIP in the Bouffalo SDK uses the same limit.
+ */
+
+#  define WLAN_RX_ZC_MIN    500
+
+/* Slots lent to the stack at a time.  wl80211 has
+ * CFG_BARX * CFG_REORD_BUF + 2 host RX slots; one BA session may hold
+ * CFG_REORD_BUF of them while reordering and two are kept for frames in
+ * hand-over.  When no slot is free the MAC stops taking frames, beacons
+ * included.
+ */
+
+#  define WLAN_RX_ZC_SLOTS  ((CFG_BARX - 1) * CFG_REORD_BUF)
+#endif
 
 struct wlan_priv_s
 {
@@ -165,6 +190,12 @@ struct wlan_ops_s
 
 static uint8_t g_callback_register_ref = 0;
 static struct wlan_priv_s g_wlan_priv[BL616_WLAN_DEVS];
+
+#ifdef CONFIG_BL616CL_WLAN_RX_ZEROCOPY
+/* Host RX slots currently wrapped as IOBs */
+
+static int g_wlan_rx_held;
+#endif
 
 static const struct wlan_ops_s g_sta_ops =
 {
@@ -342,6 +373,123 @@ static struct iob_s *wlan_recvframe(struct wlan_priv_s *priv)
   return iob;
 }
 
+#ifdef CONFIG_BL616CL_WLAN_RX_ZEROCOPY
+/****************************************************************************
+ * Function: wlan_rx_slot_free
+ *
+ * Description:
+ *   io_free callback of a wrapped RX slot: give the slot back to wl80211.
+ *   Runs in whichever thread frees the IOB; wl80211_mac_rx_free() queues
+ *   the slot with interrupts disabled and may be called from any thread.
+ *
+ * Input Parameters:
+ *   iob - The IOB header, which sits on the rx_info of the slot
+ *
+ ****************************************************************************/
+
+static void wlan_rx_slot_free(void *iob)
+{
+  irqstate_t flags = up_irq_save();
+
+  g_wlan_rx_held--;
+  up_irq_restore(flags);
+
+  wl80211_mac_rx_free(iob);
+}
+
+/****************************************************************************
+ * Function: wlan_rx_wrap
+ *
+ * Description:
+ *   Wrap a received frame in its host RX slot as an IOB.  The IOB header
+ *   takes the rx_info of the slot, which wl80211 no longer reads once it
+ *   calls the RX callback; io_offset points at the L3 header, as on the
+ *   copy path, with the Ethernet header in front of it.
+ *
+ * Input Parameters:
+ *   dev    - Reference to the NuttX driver state structure
+ *   rxhdr  - rx_info of the slot, passed to the RX callback as "net"
+ *   buffer - Ethernet frame inside the slot
+ *   len    - Length of the frame
+ *
+ * Returned Value:
+ *   The IOB, or NULL if the frame starts too close to rx_info.
+ *
+ ****************************************************************************/
+
+static struct iob_s *wlan_rx_wrap(struct net_driver_s *dev, void *rxhdr,
+                                  uint8_t *buffer, uint16_t len)
+{
+  struct iob_s *iob;
+  irqstate_t flags;
+
+  if (buffer < (uint8_t *)rxhdr + sizeof(struct iob_s))
+    {
+      return NULL;
+    }
+
+  iob = iob_init_with_data(rxhdr, buffer + len - (uint8_t *)rxhdr,
+                           wlan_rx_slot_free);
+  iob->io_offset = buffer + NET_LL_HDRLEN(dev) - iob->io_data;
+  iob->io_len    = len - NET_LL_HDRLEN(dev);
+  iob->io_pktlen = iob->io_len;
+
+  flags = up_irq_save();
+  g_wlan_rx_held++;
+  up_irq_restore(flags);
+
+  return iob;
+}
+
+/****************************************************************************
+ * Function: wlan_tx_headroom
+ *
+ * Description:
+ *   wl80211_output() writes the TX header in front of the frame, inside
+ *   the CONFIG_NET_LL_GUARDSIZE headroom of the first IOB.  A reply that
+ *   the stack built in a wrapped RX slot has less, so copy it into pool
+ *   IOBs and free the original, which returns the slot.
+ *
+ * Input Parameters:
+ *   iob      - Frame whose first IOB lacks the headroom
+ *   llhdrlen - Link layer header length in front of IOB_DATA()
+ *
+ * Returned Value:
+ *   The copy, or NULL if the pool had no IOB; the frame is then dropped
+ *   and left to retransmission.
+ *
+ ****************************************************************************/
+
+static struct iob_s *wlan_tx_headroom(struct iob_s *iob, uint16_t llhdrlen)
+{
+  struct iob_s *copy = iob_tryalloc(false);
+
+  if (copy != NULL)
+    {
+      iob_reserve(copy, CONFIG_NET_LL_GUARDSIZE);
+      if (iob_clone_partial(iob, iob->io_pktlen, 0, copy, 0,
+                            false, false) < 0)
+        {
+          iob_free_chain(copy);
+          copy = NULL;
+        }
+      else
+        {
+          memcpy(IOB_DATA(copy) - llhdrlen, IOB_DATA(iob) - llhdrlen,
+                 llhdrlen);
+        }
+    }
+
+  if (copy == NULL)
+    {
+      wlwarn("WARNING: No IOB to move a reply out of an RX slot\n");
+    }
+
+  iob_free_chain(iob);
+  return copy;
+}
+#endif
+
 /****************************************************************************
  * Name: wlan_transmit
  *
@@ -379,6 +527,19 @@ static void wlan_transmit(struct wlan_priv_s *priv)
               break;
             }
         }
+
+#ifdef CONFIG_BL616CL_WLAN_RX_ZEROCOPY
+      /* Every TX frame passes here; replies built in RX slots are moved */
+
+      if (iob->io_offset < CONFIG_NET_LL_GUARDSIZE)
+        {
+          iob = wlan_tx_headroom(iob, llhdrlen);
+          if (iob == NULL)
+            {
+              continue;
+            }
+        }
+#endif
 
       /* -EAGAIN (too many frames in flight) leaves ownership with this
        * driver. The completion callback schedules another transmit pass. */
@@ -482,6 +643,24 @@ static int wlan_rx_done(struct wlan_priv_s *priv,
       ret = -EINVAL;
       goto out;
     }
+
+#ifdef CONFIG_BL616CL_WLAN_RX_ZEROCOPY
+  /* Long frames stay in their slot while the budget allows.  Short ones
+   * are dropped as before when the pool is empty: a wrapped ACK makes the
+   * stack build the next TCP segment in the slot, and moving it out then
+   * needs a pool IOB too.
+   */
+
+  if (g_wlan_rx_held < WLAN_RX_ZC_SLOTS && len >= WLAN_RX_ZC_MIN)
+    {
+      iob = wlan_rx_wrap(dev, net, buffer, len);
+      if (iob != NULL)
+        {
+          free_cb = NULL;
+          goto recv_frame;
+        }
+    }
+#endif
 
   if (len > iob_navail(false) * CONFIG_IOB_BUFSIZE)
     {
