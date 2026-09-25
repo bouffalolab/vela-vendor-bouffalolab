@@ -84,9 +84,30 @@ add_custom_command(
   COMMENT "Postprocess BL616CL firmware image"
   VERBATIM)
 
+set(BL616CL_POST_BUILD_OUTPUTS ${BL616CL_POSTPROCESS_STAMP})
+
+# Warn when Wi-Fi hot list entries in ld.script no longer match the image.
+if(CONFIG_BL_COMPONENT_WL80211)
+  set(BL616CL_LAYOUT_CHECK
+      "${BOUFFALOLAB_VENDOR_DIR}/tools/bl616cl/perf/layout_check.py")
+  set(BL616CL_LAYOUT_STAMP "${CMAKE_BINARY_DIR}/nuttx.layout_checked")
+  add_custom_command(
+    OUTPUT ${BL616CL_LAYOUT_STAMP}
+    COMMAND
+      ${Python3_EXECUTABLE} ${BL616CL_LAYOUT_CHECK} --ld-script
+      ${NUTTX_BOARD_ABS_DIR}/scripts/ld.script --map
+      ${CMAKE_BINARY_DIR}/nuttx.map
+    COMMAND ${CMAKE_COMMAND} -E touch ${BL616CL_LAYOUT_STAMP}
+    DEPENDS ${CMAKE_BINARY_DIR}/final_nuttx ${BL616CL_LAYOUT_CHECK}
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    COMMENT "Check BL616CL Wi-Fi hot code layout"
+    VERBATIM)
+  list(APPEND BL616CL_POST_BUILD_OUTPUTS ${BL616CL_LAYOUT_STAMP})
+endif()
+
 add_custom_target(
   nuttx_post_build DEPENDS ${CMAKE_BINARY_DIR}/nuttx.bin ${BL616CL_RAW_IMAGE}
-                           ${BL616CL_POSTPROCESS_STAMP})
+                           ${BL616CL_POST_BUILD_OUTPUTS})
 
 file(GLOB EXTRA_LIBS
      ${NUTTX_BOARD_ABS_DIR}/libs/${CONFIG_ARCH_BOARD_CUSTOM_NAME}/*.a)

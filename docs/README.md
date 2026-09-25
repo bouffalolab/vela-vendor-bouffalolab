@@ -31,6 +31,8 @@
 - [BL616CL Wi-Fi STA 移植方案](bl616cl-wifi-sta-porting-solution.md)：整理本次 STA 移植的仓库修改、组件构建边界、平台 glue、shared RAM/TX ownership、NuttX 修复、配置和验收结果。
 - [BL616CL 性能监视（perfmon）](bl616cl-perfmon.md)：E907 cache/分支计数、按 IRQ
   计时和 tick PC 采样，`perfmon` 命令与宿主汇总工具。
+- [BL616CL Wi-Fi 热函数布局与回归](bl616cl-hot-code-layout.md)：`ld.script` 热函数
+  列表的构成、构建时检查，以及组件更新后重新确认收益的步骤。
 - [BL616CL DMA0](bl616cl-dma.md)：说明 OpenVela generic DMA adapter、八通道
   mem2mem、共享 IRQ、cache ownership、裁剪、实板验证和后续 consumer 边界。
 - [BL616CL 普通 Timer 与 TIMER1 验证](bl616cl-timer.md)：说明 TIMER0/TIMER1
