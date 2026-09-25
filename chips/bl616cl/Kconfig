@@ -199,6 +199,20 @@ config BL616CL_PERFMON_PCSAMPLE
 		disabled, other interrupt handlers included, is never sampled;
 		its time lands on the code that runs next.
 
+config BL616CL_WLAN_RX_ZEROCOPY
+	bool "Wi-Fi RX zero-copy"
+	default n
+	depends on BL_COMPONENT_WL80211
+	select IOB_ALLOC
+	---help---
+		Hand received Wi-Fi frames of 500 bytes or more to the network
+		stack in their wl80211 host RX slot, wrapped as an IOB that
+		returns the slot when freed, instead of copying them into pool
+		IOBs. Slots lent out are capped so that one BA session can still
+		reorder; beyond the cap, and for short frames, frames are copied.
+		A reply that the stack builds in a slot is copied into pool IOBs
+		before it is sent. IOB_ALLOC adds 12 bytes to every pool IOB.
+
 config BL616CL_DMA0
 	bool "DMA0 generic DMA adapter"
 	default n

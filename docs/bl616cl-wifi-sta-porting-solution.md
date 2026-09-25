@@ -264,6 +264,13 @@ TX/RX 的关键原则是：
 - 异步 TX 完成后由明确的 owner 回收资源；
 - 在途帧达到上限时不得丢失可重试的发送机会。
 
+`wifi` 配置打开 RX 零拷贝（`CONFIG_BL616CL_WLAN_RX_ZEROCOPY`）：
+
+- ≥500 B 的帧不再从 wl80211 的 host RX 槽拷进 IOB 池。驱动用 `iob_init_with_data()` 把槽包成 IOB：IOB 头放在槽的 `rx_info` 上（wl80211 调用 RX 回调时已经读完它），`io_offset` 指向 L3，与拷贝路径相同；IOB 释放时 `io_free` 把槽还给 wl80211。短帧照旧拷贝：拷贝便宜，而且收到的 TCP ACK 要留在池 IOB 上，协议栈会在 ACK 的 IOB 上构造下一个数据段。
+- 同时借给协议栈的槽最多 `(CFG_BARX - 1) × CFG_REORD_BUF` 个（`vela_bl616cl` profile 为 8 个，槽共 18 个），其余留给 BA 重排序和交接；借满后照旧拷贝。槽用光时 MAC 连 beacon 也收不到。
+- 协议栈可能在收到的 IOB 上直接构造回复（ICMP echo 等），而槽里只有约 60 B 的 headroom。`wlan_transmit()` 发现首个 IOB 的 `io_offset` 小于 `CONFIG_NET_LL_GUARDSIZE` 时，先把整帧复制进池 IOB 再发送；池里没有 IOB 就丢掉这一帧，由上层重传。
+- 该选项 select `IOB_ALLOC`，每个 IOB 头多 12 B（池 60 时 `.wifibss` 多 720 B）。配套修改：nuttx `c016d23b0d6` 在 `iob_initialize()` 中清零池 IOB 的 `io_free`；wl80211 public `7eb191f` 适配指针形式的 `io_data`；macsw `4da8c811` 给 `GLOBAL_INT_DISABLE/RESTORE` 加 memory clobber，因为 `wl80211_mac_rx_free()` 现在也在网络线程中调用，槽队列的更新必须留在临界区内。
+
 ## 6. Shared RAM、cache 和 linker
 
 BL616CL linker 在 `boards/bl616cl/ai-m64l-32s-kit/scripts/ld.script` 中为 Wi-Fi 保留独立的 `ram_wifi`：
@@ -275,7 +282,7 @@ ram_wifi ORIGIN = 0x21020000 - CONFIG_BL616CL_WRAM_SIZE KiB
 
 WRAM 和 BLE EM 的划分沿用原生 `bl616cl_common.ld.in`：EM 从 WRAM 顶部划走，启动时 `bl616cl_em_select()` 按 `__LD_CONFIG_EM_SEL` 设置 GLB EM_SEL，系统 RAM 为 `384K - 1K - WRAM`。Kconfig 默认 EM 为 0、WRAM 为 128K；选 EM 16K/32K 时 WRAM 默认改为 144K/160K，`ram_wifi` 保持 128K，多出的部分从系统 RAM 让出（EM 32K 时系统 RAM 由 255K 降为 223K）。NuttX CMake 不会因配置变化重新预处理链接脚本，改这两项后要先 `vela clean`。
 
-各配置的 WRAM 取值：`wifi` 设 102K（IOB 池 60，`.wifibss` 之外约留 5.6 KiB 余量）；`nsh`、`nsh-peripherals`、`ostest` 不用 Wi-Fi，`.wifibss` 为空，设为 Kconfig 下限 64K，系统 RAM 为 319K。defconfig 显式写了 WRAM 之后，再选 EM 不会自动加大 WRAM，需要手动把它改为原值加 EM（例如 `wifi` 选 EM 32K 时设为 134K）。
+各配置的 WRAM 取值：`wifi` 设 102K（IOB 池 60，`.wifibss` 之外约留 4.9 KiB 余量）；`nsh`、`nsh-peripherals`、`ostest` 不用 Wi-Fi，`.wifibss` 为空，设为 Kconfig 下限 64K，系统 RAM 为 319K。defconfig 显式写了 WRAM 之后，再选 EM 不会自动加大 WRAM，需要手动把它改为原值加 EM（例如 `wifi` 选 EM 32K 时设为 134K）。
 
 `.wifibss` 将以下对象放入 Wi-Fi 可见区域：
 
@@ -292,11 +299,11 @@ TX 零拷贝镜像中（EM 0、WRAM 128K；EM 32K 时起始地址为 `0x20ff8000
 - `.wifibss` 使用 `0x1df00`（其中 IOB 池 `g_iob_buffer` 58,683 字节）；
 - 剩余 8,448 字节。
 
-当前 `wifi` 镜像（WRAM 102K、IOB 池 60）：`ram_wifi` 起始地址为 `0x21006800`，大小为 `0x19800`；`.wifibss` 使用 `0x18170`，剩余 5,776 字节（换用 `vela_bl616cl` profile 前为 `0x192a0`、剩余 1,376 字节，见 12.8）。
+当前 `wifi` 镜像（WRAM 102K、IOB 池 60）：`ram_wifi` 起始地址为 `0x21006800`，大小为 `0x19800`；`.wifibss` 使用 `0x18440`，剩余 5,056 字节（打开 RX 零拷贝前为 `0x18170`；换用 `vela_bl616cl` profile 前为 `0x192a0`、剩余 1,376 字节，见 12.8）。
 
 XIP 代码段 `.text` 的起点对齐到 32 KiB（I-cache 大小），RAM 段的 flash 镜像变大或变小时，代码的 cache set 不再跟着移动。`.text` 开头按调用顺序排列 Wi-Fi 热函数，分为任务循环、TX、TX 确认、RX 四组，共约 35 KB，让这些函数集中在少数 cache set 里，中间不夹冷代码。列表以 macsw 的 `macsw_cache_affinity.ld.in` 为起点：其中 147 个函数名只有 75 个在本构建的 LTO 输出中仍是独立函数；再加上 80 MHz tick 采样里同一路径上的任务循环、host port 和 glue 函数。LTO 会给局部函数加 `.lto_priv/.isra/.constprop` 后缀，所以每个名字都同时匹配 `.text.fn` 和 `.text.fn.*`。列表直接写在 `ld.script` 中，因为 NuttX CMake 预处理链接脚本时不跟踪被 include 的文件。效果见 12.9；组件更新后的检查和回归步骤见 [bl616cl-hot-code-layout.md](bl616cl-hot-code-layout.md)。
 
-`ram_wifi` 链接在 nocache 别名上，协议栈对 IOB 的读写都不经 cache；原生 SDK 的 lwIP 内存同样从这里分配。改为零拷贝前，`.wifibss` 为 `0x1ab30`，其中 45,408 字节是 wl80211 private 的 TX pool；IOB 池移出后系统堆增加约 58.7 KB。`.wifibss` 为 NOLOAD 且启动时不清零；`CONFIG_IOB_ALLOC` 关闭时 `iob_initialize()` 写入每个节点的链表指针、分配时重置长度与偏移，不依赖清零。
+`ram_wifi` 链接在 nocache 别名上，协议栈对 IOB 的读写都不经 cache；原生 SDK 的 lwIP 内存同样从这里分配。改为零拷贝前，`.wifibss` 为 `0x1ab30`，其中 45,408 字节是 wl80211 private 的 TX pool；IOB 池移出后系统堆增加约 58.7 KB。`.wifibss` 为 NOLOAD 且启动时不清零；`CONFIG_IOB_ALLOC` 关闭时 `iob_initialize()` 写入每个节点的链表指针、分配时重置长度与偏移，不依赖清零；打开时 `iob_initialize()` 还要把 `io_free` 置空（nuttx `c016d23b0d6`），否则 `iob_free()` 会调用残留的野指针。
 
 wl80211 public/private 侧的配套修改包括：
 
@@ -307,6 +314,7 @@ wl80211 public/private 侧的配套修改包括：
 - public `d1d2a8a`：`wifi_mgmr.c` 的 scan-result 读者在锁内复制记录；
 - public `22224e4`：TX 描述符大小的静态检查扣除以太头占用的 guard；
 - public `b086c54`：NuttX STA TX 在途帧上限、完成回调与 `wl80211_output_ready()`；
+- public `7eb191f`：`CONFIG_IOB_ALLOC` 下由数据地址找回池 IOB，TX 头放在 `io_data`（RX 零拷贝需要）；
 - private `151365a`：BL616CL 按工具链探测 ISA 参数，并增加 `CONFIG_MACSW_SELECT` profile 定义；
 - private `aad7cb5`：空 SSID 上报不再清除已知 SSID；
 - private `d189124`：`wl80211_scan_result_lock/unlock` 基于 `rtos_lock()` 实现，生产者在锁外构造记录。
@@ -418,6 +426,7 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 - `CONFIG_NETUTILS_IPERF=y`；
 - `CONFIG_IOB_NBUFFERS=60`、`CONFIG_BL616CL_WRAM_SIZE=102`：池和 WRAM 一起缩小，系统堆比池 90、WRAM 128K 时多约 26 KiB，吞吐代价见 12.7；
 - `CONFIG_NET_TCP_SELECTIVE_ACK=y`（会 select `NET_TCP_OUT_OF_ORDER`）、`CONFIG_NET_TCP_OUT_OF_ORDER_BUFSIZE=4096`：TCP RX 受接收侧丢帧限制；有了乱序队列，丢帧后已收到的段会保留，只需重传缺的那段。实测 TCP RX 从 7.0–7.6 升到 11.3–12.1 Mbps，TCP TX 从 13.1 降到 12.7，堆少 448 B。OOO 取 4K 是为了满足 NuttX 小内存建议中的 SEND+RECV+OOO < IOB 总量（16K+16K+4K < 38.4K）；实测 4K 与 8K 效果相同；
+- `CONFIG_BL616CL_WLAN_RX_ZEROCOPY=y`：≥500 B 的 RX 帧不拷贝，直接把 host RX 槽交给协议栈，见 5.3，效果见 12.10；
 - `CONFIG_NSH_READLINE=y`；
 - `CONFIG_READLINE_TABCOMPLETION=y`；
 - `CONFIG_READLINE_CMD_HISTORY=y`；
@@ -701,6 +710,29 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 
 三种填充下 `hot` 都更好：UDP TX +29%～+38%，UDP RX +14%～+26%，TCP +2%～+6%，满足 [bl616cl-hot-code-layout.md](bl616cl-hot-code-layout.md) 的验收标准。组件更新后按该文档重跑。
 
+### 12.10 RX 零拷贝
+
+同一 AP（open），`wifi` 打开（R2）与关闭（基线）`CONFIG_BL616CL_WLAN_RX_ZEROCOPY`，其余相同；按 12.9 的做法在 Wi-Fi 热函数之后插入 0、0x1e0、0x9a0 字节填充。每个镜像 3×20 秒，表中为中位数（Mbps，UDP RX 为主机 `-b 60M` 过载发送）：
+
+| 场景 | 基线（填充 0 / 0x1e0 / 0x9a0） | R2（填充 0 / 0x1e0 / 0x9a0） |
+| --- | --- | --- |
+| TCP TX | 20.3 / 20.6 / 20.7 | 20.2 / 20.6 / 20.4 |
+| UDP TX | 47.3 / 45.1 / 45.0 | 45.1 / 41.6 / 45.0 |
+| TCP RX | 21.2 / 21.2 / 21.9 | 21.5 / 22.2 / 22.3 |
+| UDP RX | 42.3 / 37.6 / 43.5 | 46.0 / 52.1 / 45.8 |
+
+- 三种填充下 RX 都更好：TCP RX +1.4%～+4.7%，过载 UDP RX +5%～+39%。主机按 20M、30M 发送时两者都收满。
+- TX 不经过零拷贝路径。TCP TX 相差 0～−1.4%；UDP TX 在两种填充下低 5%～8%，另一种持平。perfmon 镜像（布局又不同）中 R2 的 UDP TX 为 45.8、基线为 45.0，R2 的空闲还多 3.4 个百分点，所以 UDP TX 的差别按布局噪声处理，不是 CPU 开销。
+- CPU（perfmon 镜像）：UDP RX 20M 时空闲从 75.7% 升到 81.5%，`libc-mem`（主要是 memcpy）从 6.9% 降到 0.8%；TCP RX 时空闲从 29.6% 升到 33.4%，`libc-mem` 从 15.5% 降到 10.7%。
+- 探针镜像统计的 ≥500 B 帧包装比例：UDP RX 20M 为 99.9%，TCP RX 为 86%～87%，过载 UDP RX 为 47%～49%；其余是借出的槽满 8 个后的拷贝。主机 `ping -s 1400` 的 200 个 echo 都经发送前复制发出，没有丢包。
+- 堆不变（211,364 字节）；`.wifibss` +720 B；`nuttx.bin` +384 B（750,688 字节）。`nsh`、`nsh-peripherals`、`ostest` 不开 `IOB_ALLOC`，clean build 通过。
+- 调试镜像（wl80211 `INVARIANTS` + `DEBUG_ASSERTIONS`）跑完四个方向、ICMP、一个连接不读数据的 60 秒 TCP RX（借出的槽不超过 8 个，链路正常）和两个并发 TCP 发送，没有断言。
+- 两个并发 TCP 发送偶尔卡住，R2 和基线都会出现：一个连接的写缓冲还剩约 3 KB，在途为 0，也没有重传定时器，数据不再发出。这是发送轮询丢失，与零拷贝无关，另行跟踪。
+- 与设计相比有两处调整。一是借出槽的上限由 12 改为 8，因为 `vela_bl616cl` profile 把槽从 26 个减到 18 个。二是池空时不再包装短帧：首版这样做后，TCP TX 降到 16.7–18.0，原因是协议栈把下一个数据段建在包装 ACK 的槽上，发送前的复制又要用池 IOB，失败就丢帧重传。现在池空时照旧丢弃 ACK，TCP TX 与基线相同。
+- 短帧与混合长度（主机按包率发送，每例 10 秒）：UDP 64、440、460、1000、1470 B，100 B 与 1470 B 混合，440 B 与 460 B 混合，R2 与基线都零丢失；调试镜像确认 440 B 载荷（帧 482 B）走拷贝、460 B 载荷（帧 502 B）走包装。TCP `-l 200 -N` 和 `-l 100 -N` 加普通流的混合也正常，混合时发送前复制 43 次，没有失败。
+- 过载 UDP RX（1470 B，60M）时两者的 IP 层都收到全部报文，丢包都发生在 UDP socket 接收缓冲已满时：iperf 线程（优先级 100）在 `hpwork`（224）和 `wifi_fw`（127）忙时拿不到 CPU。R2 的应用多收 5.9%。`/proc/net/stat` 对这类丢包记两次。
+- AP 改回 WPA3 后，R2 镜像的 WPA3 单轮、10 轮连接、iperf 四方向各 30 秒 PASS。
+
 ## 13. 后续发布门禁
 
 在将本方案用于正式 SDK release 前，还应完成：
@@ -732,3 +764,4 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 - Wi-Fi 热函数布局实验、perfmon 验证与回归工具首次运行：同一 README 的“热点代码布局 Stage 2”和“perfmon 与布局回归工具”两节，数据在 `work/layout/`、`work/perfmon/`
 - RX 硬件缓冲与 `vela_bl616cl` profile：同一 README 的“RX 硬件缓冲”两节，数据在 `work/rxdiag/`、`work/rxcfg/`
 - Wi-Fi 热函数布局：同一 README 的“热点代码布局 Stage 2”一节，数据在 `work/layout/`
+- RX 零拷贝（R2）的实现、A/B、探针与调试镜像：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST009-iob-dynamic-zero-copy/work/README.md` 的“R2 实施与验证”“R2 补充验证”两节，数据在 `work/r2/`
