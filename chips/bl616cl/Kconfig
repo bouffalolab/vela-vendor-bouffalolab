@@ -214,6 +214,18 @@ config BL616CL_WLAN_RX_ZEROCOPY
 		A reply that the stack builds in a slot is copied into pool IOBs
 		before it is sent. IOB_ALLOC adds 12 bytes to every pool IOB.
 
+config BL616CL_FW_TASK_PRIORITY
+	int "Wi-Fi firmware task priority"
+	default 127
+	depends on BL_COMPONENT_WL80211
+	---help---
+		Priority of the "wifi_fw" task, which runs the MAC firmware and
+		hands received frames to the driver.  Keep it below the work
+		queue that runs the network stack (LPWORK, or HPWORK when
+		SCHED_LPWORK is off) and above applications.  With the network
+		stack at 120, below this task, TCP TX dropped by about a quarter
+		and UDP TX by about a third.
+
 config BL616CL_DMA0
 	bool "DMA0 generic DMA adapter"
 	default n
