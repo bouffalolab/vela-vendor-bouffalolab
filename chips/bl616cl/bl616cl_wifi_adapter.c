@@ -59,11 +59,6 @@
  ****************************************************************************/
 
 #define CONFIG_BL616CL_FW_TASK_NAME       "wifi_fw"
-#define CONFIG_BL616CL_FW_TASK_PRIORITY   (127)
-
-#ifndef CONFIG_BL616CL_WLAN_THREAD_PRIORITY
-  #define CONFIG_BL616CL_WLAN_THREAD_PRIORITY (150) /* BL4 default */
-#endif
 
 #ifndef CONFIG_BL616CL_SCAN_DURANTION
   #define CONFIG_BL616CL_SCAN_DURANTION   (100)
