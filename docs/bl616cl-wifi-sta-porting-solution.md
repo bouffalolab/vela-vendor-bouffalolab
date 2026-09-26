@@ -271,6 +271,13 @@ TX/RX 的关键原则是：
 - 协议栈可能在收到的 IOB 上直接构造回复（ICMP echo 等），而槽里只有约 60 B 的 headroom。`wlan_transmit()` 发现首个 IOB 的 `io_offset` 小于 `CONFIG_NET_LL_GUARDSIZE` 时，先把整帧复制进池 IOB 再发送；池里没有 IOB 就丢掉这一帧，由上层重传。
 - 该选项 select `IOB_ALLOC`，每个 IOB 头多 12 B（池 60 时 `.wifibss` 多 720 B）。配套修改：nuttx `c016d23b0d6` 在 `iob_initialize()` 中清零池 IOB 的 `io_free`；wl80211 public `7eb191f` 适配指针形式的 `io_data`；macsw `4da8c811` 给 `GLOBAL_INT_DISABLE/RESTORE` 加 memory clobber，因为 `wl80211_mac_rx_free()` 现在也在网络线程中调用，槽队列的更新必须留在临界区内。
 
+线程与优先级（2026-09-26 在模组上 A/B，三种布局填充）：
+
+- `wifi_fw`（`CONFIG_BL616CL_FW_TASK_PRIORITY`，默认 127）运行 MAC 固件并调用驱动 RX 回调；驱动把帧入队后用 `work_queue(LPWORK, ..., 0)` 交给网络线程，TX 完成、`d_txavail` 也一样。`wifi` 配置不开 `SCHED_LPWORK`，`LPWORK` 就是 `hpwork`（224，栈 2048），协议栈、TCP 定时器与 wl80211 的定时器、事件在同一个线程中运行。应用默认优先级 100。
+- 网络线程必须高于 `wifi_fw`：把协议栈放到优先级 120 的 LPWORK，TCP TX 降 23%、UDP TX 降 31%；放到 100 并开 RR 更差，过载时 IOB 被占满，丢包移到驱动。放到 150 的 LPWORK 与现状持平，却多占 4.2 KB 堆，所以不采用。`hpwork` 栈最深 788 B。
+- 延迟为 0 的 work 在下一个 tick 才执行（nuttx `96e9f7ccd60`），效果相当于按 tick 批处理。实验改成立即唤醒后，`hpwork` 每来一帧就抢占一次，UDP 收发降到约 20 Mbps，所以不回移 vela/dev 的立即唤醒。
+- UDP 过载时丢包发生在 socket 接收缓冲（应用线程拿不到 CPU），驱动不丢帧；`CONFIG_NETDEV_STATISTICS` 的 `/proc/net/wlan0` 与 `/proc/net/stat` 可以区分这两处。
+
 ## 6. Shared RAM、cache 和 linker
 
 BL616CL linker 在 `boards/bl616cl/ai-m64l-32s-kit/scripts/ld.script` 中为 Wi-Fi 保留独立的 `ram_wifi`：
