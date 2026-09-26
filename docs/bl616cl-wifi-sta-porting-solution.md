@@ -308,7 +308,7 @@ TX 零拷贝镜像中（EM 0、WRAM 128K；EM 32K 时起始地址为 `0x20ff8000
 
 当前 `wifi` 镜像（WRAM 102K、IOB 池 60）：`ram_wifi` 起始地址为 `0x21006800`，大小为 `0x19800`；`.wifibss` 使用 `0x18440`，剩余 5,056 字节（打开 RX 零拷贝前为 `0x18170`；换用 `vela_bl616cl` profile 前为 `0x192a0`、剩余 1,376 字节，见 12.8）。
 
-XIP 代码段 `.text` 的起点对齐到 32 KiB（I-cache 大小），RAM 段的 flash 镜像变大或变小时，代码的 cache set 不再跟着移动。`.text` 开头按调用顺序排列 Wi-Fi 热函数，分为任务循环、TX、TX 确认、RX 四组，共约 35 KB，让这些函数集中在少数 cache set 里，中间不夹冷代码。列表以 macsw 的 `macsw_cache_affinity.ld.in` 为起点：其中 147 个函数名只有 75 个在本构建的 LTO 输出中仍是独立函数；再加上 80 MHz tick 采样里同一路径上的任务循环、host port 和 glue 函数。LTO 会给局部函数加 `.lto_priv/.isra/.constprop` 后缀，所以每个名字都同时匹配 `.text.fn` 和 `.text.fn.*`。列表直接写在 `ld.script` 中，因为 NuttX CMake 预处理链接脚本时不跟踪被 include 的文件。效果见 12.9；组件更新后的检查和回归步骤见 [bl616cl-hot-code-layout.md](bl616cl-hot-code-layout.md)。
+XIP 代码段 `.text` 的起点对齐到 32 KiB（I-cache 大小），RAM 段的 flash 镜像变大或变小时，代码的 cache set 不再跟着移动。`.text` 开头按调用顺序排列 Wi-Fi 热函数，分为任务循环、TX、TX 确认、RX 四组，再接 NuttX 信号量、work queue 和定时器函数，共约 36 KB，让这些函数集中在少数 cache set 里，中间不夹冷代码。列表以 macsw 的 `macsw_cache_affinity.ld.in` 为起点：其中 147 个函数名只有 75 个在本构建的 LTO 输出中仍是独立函数；再加上 80 MHz tick 采样里同一路径上的任务循环、host port 和 glue 函数。LTO 会给局部函数加 `.lto_priv/.isra/.constprop` 后缀，所以每个名字都同时匹配 `.text.fn` 和 `.text.fn.*`。列表直接写在 `ld.script` 中，因为 NuttX CMake 预处理链接脚本时不跟踪被 include 的文件。效果见 12.9；组件更新后的检查和回归步骤见 [bl616cl-hot-code-layout.md](bl616cl-hot-code-layout.md)。
 
 `ram_wifi` 链接在 nocache 别名上，协议栈对 IOB 的读写都不经 cache；原生 SDK 的 lwIP 内存同样从这里分配。改为零拷贝前，`.wifibss` 为 `0x1ab30`，其中 45,408 字节是 wl80211 private 的 TX pool；IOB 池移出后系统堆增加约 58.7 KB。`.wifibss` 为 NOLOAD 且启动时不清零；`CONFIG_IOB_ALLOC` 关闭时 `iob_initialize()` 写入每个节点的链表指针、分配时重置长度与偏移，不依赖清零；打开时 `iob_initialize()` 还要把 `io_free` 置空（nuttx `c016d23b0d6`），否则 `iob_free()` 会调用残留的野指针。
 
@@ -691,7 +691,7 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 - 三种填充下 W1 都更好，按中位数计：TCP TX +2%～+14%，UDP TX +20%～+32%，TCP RX +4%～+9%，UDP RX +24%～+46%。
 - I-cache 缺失率：UDP TX 从 1.50% 降到 1.22%，TCP RX 从 1.28% 降到 1.15%。
 - Wi-Fi 中断（`interrupt0_handler`）每次的耗时，在 UDP TX 时从约 16.7k 降到 9.3k cycle。这部分时间 tick 采样看不到，是在 IRQ 分发处按 mcycle 统计得到的。
-- W1 的 UDP 吞吐仍随其余代码的位置变化，说明 net、memcpy、调度代码的位置还有影响，需要按模块继续排列。
+- W1 的 UDP 吞吐仍随其余代码的位置变化，说明 net、memcpy、调度代码的位置还有影响，需要按模块继续排列，结果见本节最后。
 
 正式镜像（不带采样补丁）与上一版 `wifi`（`vela_bl616cl` profile，同为 open AP）对比如下，单位 Mbps：
 
@@ -717,6 +717,27 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 | UDP RX | 32.5 / 33.5 / 33.6 | 41.1 / 41.5 / 38.3 |
 
 三种填充下 `hot` 都更好：UDP TX +29%～+38%，UDP RX +14%～+26%，TCP +2%～+6%，满足 [bl616cl-hot-code-layout.md](bl616cl-hot-code-layout.md) 的验收标准。组件更新后按该文档重跑。
+
+R2 之后按模块继续排列。perfmon 采样选出四组候选，每组单独接在 Wi-Fi 列表之后：
+
+- glue：Wi-Fi 列表漏掉的 `wl80211_output`、`bl616_wifi_sta_txdone`、`wlan_sta_tx_done`；
+- libc：`memcpy`、`memset`、`memcmp`；
+- net：socket、UDP/TCP、netdev/ARP/devif 和 IOB，61 个函数，12.4 KiB；
+- sched：信号量慢路径、work queue、`wd_cancel`、`clock_systime_ticks`，8 个函数，0.9 KiB。
+
+每组都和不加这组的 base 比较，每个镜像 3×20 秒，UDP RX 为 60M 过载。第一轮填充 0、0x1e0、0x9a0；sched 和 net+sched 第二轮再用 0x0f0、0x5c0、0xd40。下表是各填充下中位数相对 base 的变化范围：
+
+| 分组 | TCP TX | UDP TX | TCP RX | UDP RX |
+| --- | --- | --- | --- | --- |
+| glue | −1%～+1% | −2%～+3% | −1%～+2% | −16%～−4% |
+| libc | −1%～+4% | −8%～−5% | −1%～+5% | −12%～+2% |
+| net | −1%～+2% | −1%～+4% | 0%～+4% | −6%～+9% |
+| net+sched（第二轮） | −4%～−2% | −1%～+1% | −3%～0% | −5%～+24% |
+| sched（两轮共六种填充） | 0%～+4% | −3%～+4% | +1%～+5% | −15%～+22% |
+
+- 只采用 sched，作为列表最后一组，在 `__bl616cl_wifi_hot_end` 之前。它在六种填充下 TCP 两个方向全部提升，TCP TX 均值 20.5→20.8，TCP RX 21.6→22.1。UDP TX 均值 46.2，与 base 相同。UDP RX 过载均值 52.1→53.5，最低值 44.1→48.2。个别填充下 UDP 下降，未达到逐个填充都不降的要求，但 base 自身在不同填充之间 UDP RX 就相差 44～58，这个降幅在布局噪声内。代价是热区多 0.9 KiB。
+- glue 使 UDP RX 过载在每种填充下都下降，libc 使 UDP TX 在每种填充下都下降，不采用。net 的结果有升有降；与 sched 一起放时 TCP TX 在三种填充下都下降，而且热区增大到 48 KiB，超过 I-cache，不采用。
+- 加入 sched 后 `layout_check` 输出 `106/106 Wi-Fi hot entries placed at 0x80008000, 35.9 KiB`，热区各段的地址与 A/B 中的 sched 镜像一致。
 
 ### 12.10 RX 零拷贝
 

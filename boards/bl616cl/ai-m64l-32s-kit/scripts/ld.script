@@ -376,6 +376,15 @@ SECTIONS
     *(.text.wl80211_mac_rx_free .text.wl80211_mac_rx_free.*)
     *(.text.wl80211_tcpip_input .text.wl80211_tcpip_input.*)
     *(.text.wlan_sta_rx_done .text.wlan_sta_rx_done.*)
+    /* NuttX semaphores, work queue and timers on the same paths */
+    *(.text.nxsem_wait_slow .text.nxsem_wait_slow.*)
+    *(.text.nxsem_post_slow .text.nxsem_post_slow.*)
+    *(.text.nxsem_tickwait_slow .text.nxsem_tickwait_slow.*)
+    *(.text.work_queue .text.work_queue.*)
+    *(.text.work_queue_wq .text.work_queue_wq.*)
+    *(.text.work_qcancel .text.work_qcancel.*)
+    *(.text.wd_cancel .text.wd_cancel.*)
+    *(.text.clock_systime_ticks .text.clock_systime_ticks.*)
     __bl616cl_wifi_hot_end = ABSOLUTE(.);
 
     *(.text .text.*)
