@@ -327,10 +327,12 @@ static inline void wlan_cache_txpkt_tail(struct wlan_priv_s *priv)
   if (ret < 0)
     {
       wlerr("TX queue insertion failed: %d\n", ret);
+      NETDEV_TXERRORS(&priv->dev);
       netdev_iob_release(&priv->dev);
       return;
     }
 
+  NETDEV_TXPACKETS(&priv->dev);
   netdev_iob_clear(&priv->dev);
 }
 
@@ -536,6 +538,7 @@ static void wlan_transmit(struct wlan_priv_s *priv)
           iob = wlan_tx_headroom(iob, llhdrlen);
           if (iob == NULL)
             {
+              NETDEV_TXERRORS(&priv->dev);
               continue;
             }
         }
@@ -552,6 +555,7 @@ static void wlan_transmit(struct wlan_priv_s *priv)
       if (ret < 0)
         {
           wlerr("Wi-Fi TX failed: %d\n", ret);
+          NETDEV_TXERRORS(&priv->dev);
         }
     }
 
@@ -583,6 +587,7 @@ static void wlan_transmit(struct wlan_priv_s *priv)
 
 static void wlan_tx_done(struct wlan_priv_s *priv)
 {
+  NETDEV_TXDONE(&priv->dev);
   wd_cancel(&priv->txtimeout);
 
   wlan_txavail(&priv->dev);
@@ -725,6 +730,8 @@ recv_frame:
 
 out:
 
+  NETDEV_RXDROPPED(dev);
+
   /* clear wifi buffer */
 
   if (free_cb != NULL)
@@ -776,6 +783,7 @@ static void wlan_rxpoll(void *arg)
     {
       dev->d_iob = iob;
       dev->d_len = iob->io_pktlen + NET_LL_HDRLEN(dev);
+      NETDEV_RXPACKETS(dev);
 
       // iob_reserve(iob, NET_LL_HDRLEN(dev));
 
@@ -796,6 +804,7 @@ static void wlan_rxpoll(void *arg)
       if (eth_hdr->type == HTONS(ETHTYPE_IP))
         {
           ninfo("IPv4 frame\n");
+          NETDEV_RXIPV4(dev);
 
           /* Receive an IPv4 packet from the network device */
 
@@ -819,6 +828,7 @@ static void wlan_rxpoll(void *arg)
       if (eth_hdr->type == HTONS(ETHTYPE_IP6))
         {
           ninfo("IPv6 frame\n");
+          NETDEV_RXIPV6(dev);
 
           /* Give the IPv6 packet to the network layer */
 
@@ -842,6 +852,7 @@ static void wlan_rxpoll(void *arg)
       if (eth_hdr->type == HTONS(ETHTYPE_ARP))
         {
           ninfo("ARP frame\n");
+          NETDEV_RXARP(dev);
 
           /* Handle ARP packet */
 
@@ -861,6 +872,7 @@ static void wlan_rxpoll(void *arg)
 #endif
         {
           ninfo("INFO: Dropped, Unknown type: %04x\n", eth_hdr->type);
+          NETDEV_RXDROPPED(dev);
         }
 
       netdev_iob_release(&priv->dev);
@@ -963,6 +975,7 @@ static void wlan_txtimeout_work(void *arg)
 
   /* Try to send all cached TX packets */
 
+  NETDEV_TXTIMEOUTS(&priv->dev);
   wlan_transmit(priv);
 
   wlwarn("tx timeout \n");
