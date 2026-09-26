@@ -34,7 +34,8 @@
   时不跟踪被包含的文件，改了也不会重新链接。
 - 起点来源是 macsw 的 `macsw_cache_affinity.ld.in`，只保留本构建 LTO 后仍是
   独立函数的名字，再加上 tick 采样在同一路径上看到的任务循环、host port 和
-  glue 函数。当前 98 行，约 35 KiB。
+  glue 函数；最后一组是同一路径上的 NuttX 信号量、work queue 和定时器函数。
+  当前 106 行，约 36 KiB。
 - 两个标记符号供工具使用：`layout_check.py` 用它们确认列表位置，
   `layout_ab.sh` 用它们删掉列表或在其后插入填充。
 
@@ -44,7 +45,7 @@
 `wifi`；其他配置没有 Wi-Fi 代码，列表匹配不到任何函数，不做检查。输出一行：
 
 ```text
-bl616cl layout: 98/98 Wi-Fi hot entries placed at 0x80008000, 34.9 KiB (I-cache 32 KiB)
+bl616cl layout: 106/106 Wi-Fi hot entries placed at 0x80008000, 35.9 KiB (I-cache 32 KiB)
 ```
 
 列表中有名字在镜像里找不到时，再输出一行 WARNING 并列出这些名字。构建不会
@@ -111,11 +112,17 @@ python3 vendor/bouffalolab/tools/bl616cl/perf/perfmon_report.py \
   `txl_transmit_trigger`）不能删：tick 采样打不进中断，
   这些函数的开销体现在 `perfmon stat` 的 IRQ 86 周期上。
 - 只删除确认已不存在或不再被调用的函数；样本少不是删除的理由。
-- 列表越长，冷代码越多地被挤出 cache。当前约 35 KiB，新增时关注累计
+- 列表越长，冷代码越多地被挤出 cache。当前约 36 KiB，新增时关注累计
   大小，不要超出太多。
+- 上榜不等于加入后有收益，加入后都要按第 4 步 A/B。按模块实验时，`NEW` 的
+  glue 函数和 `memcpy` 一组都让某个方向在每种填充下下降；net 一组有升有降，
+  和调度一组一起加时 TCP TX 下降。最后只保留了 NuttX 调度一组，见移植方案
+  12.9。
 
 2026-09-25 的采样中，当前列表已包含所有达到阈值的 Wi-Fi 函数，只有
-`mm_timer_*`、`rc_*` 等低于 0.1% 的函数没有列入。
+`mm_timer_*`、`rc_*` 等低于 0.1% 的函数没有列入。R2 之后的采样又列出
+`wl80211_output`、`bl616_wifi_sta_txdone`、`wlan_sta_tx_done`，A/B 后没有
+加入。
 
 ### 4. A/B 确认收益
 
