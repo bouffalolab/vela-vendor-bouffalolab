@@ -16,6 +16,10 @@ intervals inside the traffic window for RX.  TCP RX also records the host
 RetransSegs delta.  After each case the DUT pings the host; on failure it
 reconnects and the case is marked RECONNECT.
 
+When several benches share the AP, set WIFI_AIRTIME_LOCK to a file that
+all of them flock exclusively while their traffic runs; each case then waits
+for it.
+
 Output in <out-dir>: results.csv, uart.log (PSK masked), per case
 r<rep>-<case>-host.txt and r<rep>-<case>.perfmon.
 """
@@ -220,6 +224,11 @@ def main():
             udp = case.startswith("udp")
             name = f"r{rep}-{case}"
             extra = ""
+            lock = None
+            if os.environ.get("WIFI_AIRTIME_LOCK"):
+                lock = os.open(os.environ["WIFI_AIRTIME_LOCK"],
+                               os.O_RDWR | os.O_CREAT, 0o666)
+                fcntl.flock(lock, fcntl.LOCK_EX)
             if case.endswith("tx"):
                 srv = subprocess.Popen(
                     ["iperf", "-s", "-B", args.host_ip, "-p", str(port)] +
@@ -271,6 +280,8 @@ def main():
                 extra = (f"offered={args.udp_rx}M" if udp
                          else f"host_retrans={delta}")
                 extra += f" host_mbps={hm[-1] if hm else None}"
+            if lock is not None:
+                os.close(lock)
             if perfmon:
                 block = perfmon_block(out)
                 if block:
