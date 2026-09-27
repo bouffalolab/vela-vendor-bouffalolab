@@ -36,6 +36,7 @@
 #include <nuttx/wqueue.h>
 #include <nuttx/mutex.h>
 #include <nuttx/sched.h>
+#include <nuttx/signal.h>
 #include <nuttx/wdog.h>
 #include <nuttx/wireless/wireless.h>
 #include <nuttx/wireless/ieee80211/ieee80211.h>
@@ -802,6 +803,8 @@ uint32_t wifi_sys_now_ms(bool isr)
 
 int bl616_wifi_adapter_init(void)
 {
+  int semcount;
+
   wlinfo("Starting wifi ...\r\n");
 
   /* enable wifi clock (bit-mask argument of GLB_PER_Clock_UnGate) */
@@ -833,6 +836,19 @@ int bl616_wifi_adapter_init(void)
               WIFI_TASK_STACK_SIZE,
               (main_t)wifi_main,
               NULL);
+
+  /* macswl_init() in the new task resets the kernel message queue and
+   * memory, so send nothing before the task is done with it, that is, until
+   * it first waits in wifi_task_suspend().  A Wi-Fi task below the priority
+   * of this thread used to lose the first request and hang boot.  Polling
+   * keeps wifi_task_suspend(), which is on the hot path, unchanged.
+   */
+
+  while (nxsem_get_value(&g_wifi_notify_sem, &semcount) == OK &&
+         semcount >= 0)
+    {
+      nxsig_usleep(1000);
+    }
 
   uint8_t eth_mac[6];
   platform_get_mac(WL80211_VIF_STA, eth_mac);
