@@ -45,7 +45,7 @@ WPA3-SAE 已完成 100 轮连接循环和四方向 100 秒压力，尚未做 500
 | `vela-manifest` | 通过 repo 固定 wireless 子仓路径和远端 | `884c975`，增加 `blgerrit` remote 及 macsw、wl80211 public/private、supplicant 项目 |
 | `vela-nuttx` | NuttX 网络栈和 OS 基座 | `97496437931`，修复 buffered send 唤醒竞态 |
 | `vela-vendor-bouffalolab` | OpenVela wrapper、BL616CL glue、板级、linker、配置 | `6365c1f`、`4f56261`、`7069305`、`71bd08b`、`f112fa0`、`62b724f`、`253c8a0` 等 |
-| `macsw` | Wi-Fi MAC/协议数据路径和 BL616CL/vela_bl616cl 配置库 | `f9b9a8b4`，恢复单天线扫描间的 coex plan；本地 `4a81f48b` 增加 `vela_bl616cl` profile，`3292f25e`（BS-1552）给中断宏加 memory clobber（未推送） |
+| `macsw` | Wi-Fi MAC/协议数据路径和 BL616CL/vela_bl616cl 配置库 | `f9b9a8b4`，恢复单天线扫描间的 coex plan；本地 `4a81f48b` 增加 `vela_bl616cl` profile，`3292f25e`（BS-1552）给中断宏加 memory clobber，`d59c4a33`（BS-1553）先清 RX trigger 再查 RX 环（见 12.11）；已推 gerrit 评审（WIP），未合入 |
 | `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | 当前本地 `6454cbe` |
 | `wl80211/private` | wl80211/net80211 core，单独生成 `libwl80211_bl616cl.a` | 当前本地 `4fb42f0` |
 | `bl_wpa_supplicant` | WPA/WPA2/WPA3 认证相关源码 | `de35a74`（`ffc9839` rebase 到 2.3.35），增加 NuttX OS port 和 mbedTLS PBKDF2；`36e4c44`，`os_get_random()` 改用 `getrandom()` |
@@ -635,7 +635,7 @@ TCP RX 在同一套复制代码上也曾测得 3.51–5.09，差异在波动范�
 
 RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降到约 1.44 万 cycle（CPU 320 MHz）。
 
-已知问题：主机不限速、连续多轮 TCP RX 时，MAC 会停止接收，最后以 `ap beacon loss` 断开。开 VIK 之前的镜像也能复现；开 VIK 后，4 次回归中有 2 次在 TCP RX 一步触发。原因未定位，暂缓处理。
+当时的已知问题：主机不限速、连续多轮 TCP RX 时，MAC 会停止接收，最后以 `ap beacon loss` 断开。开 VIK 之前的镜像也能复现；开 VIK 后，4 次回归中有 2 次在 TCP RX 一步触发。已定位并修复，见 12.11。
 
 ### 12.7 WRAM 与 IOB 池缩小
 
@@ -765,6 +765,23 @@ R2 之后按模块继续排列。perfmon 采样选出四组候选，每组单独
 - 短帧与混合长度（主机按包率发送，每例 10 秒）：UDP 64、440、460、1000、1470 B，100 B 与 1470 B 混合，440 B 与 460 B 混合，R2 与基线都零丢失；调试镜像确认 440 B 载荷（帧 482 B）走拷贝、460 B 载荷（帧 502 B）走包装。TCP `-l 200 -N` 和 `-l 100 -N` 加普通流的混合也正常，混合时发送前复制 43 次，没有失败。
 - 过载 UDP RX（1470 B，60M）时两者的 IP 层都收到全部报文，丢包都发生在 UDP socket 接收缓冲已满时：iperf 线程（优先级 100）在 `hpwork`（224）和 `wifi_fw`（127）忙时拿不到 CPU。R2 的应用多收 5.9%。`/proc/net/stat` 对这类丢包记两次。
 - AP 改回 WPA3 后，R2 镜像的 WPA3 单轮、10 轮连接、iperf 四方向各 30 秒 PASS。
+
+### 12.11 RX trigger 丢失导致的 ap beacon loss
+
+现象：主机不限速、连续多轮 TCP RX 时，RX 偶尔完全停止约 10 秒，然后以 `ap beacon loss`（status_code 16）断开，重连后恢复。现役配置 30 轮没有复现。回到 flash 40 MHz、旧 RX 环（default profile）、RX 拷贝加 VIK（TCP RX 约 13 Mbps）后，51 轮出现 8 次。
+
+在 beacon 连续丢失时打印 MAC 状态，每次读数都一样：RX 溢出计数一直增加，接收计数不变；RX_BUF_1 读写指针冻结，环已满；固件读指针等于硬件读指针，上传链表为空，host RX 缓冲和状态描述符都可用；rxBuffer1Trigger 使能为 1，但 `TX_RX_INT_STATUS`、`GEN_INT_STATUS` 和 kernel 事件都是 0。环里是一整环没处理的帧，却没有中断去触发处理。
+
+原因：`rxl_cntrl_evt()` 每轮循环先用 `rxl_rxdesc_get()` 看环是否为空，再清 rxBuffer1Trigger 的中断状态和 `KE_EVT_RXREADY_BIT`。`wifi_fw`（127）在这两步之间被 `hpwork`（224）等抢占时，AP 的聚合帧可以把环写满；硬件置起的 trigger 随后被清掉，环满后硬件不再写入，也不再触发。慢 flash 和 RX 拷贝让网络线程每次占用 CPU 更久，所以更容易命中；现役配置也有这个窗口，只是概率低。原生 SDK 的 macsw 和 `wlan_mac` 是同样的顺序。
+
+修复：macsw `d59c4a33`（BS-1553）改为先清 trigger 和事件，再取描述符；查到空以后才置起的 trigger 会保持挂起，重新使能时触发中断。
+
+验证：
+
+- 复现配置加修复：45 轮 0 次，也没有出现连续 3 个 beacon 丢失；TCP RX 均值 13.3，与修复前相同。
+- 现役配置加修复，3×20 秒：TCP TX 20.8、UDP TX 46.1、TCP RX 21.7、UDP RX 47.6～48.9（60M 过载），堆 211,236 字节，与修复前相同。
+- IRQ 宏的 memory clobber（BS-1552）与此无关：去掉 clobber 和保留 clobber 都能复现。
+- 复现配置上的 8 次断线重连后，TCP/UDP TX 都回到基线。ST010 记录过的一次“重连后 TX 减半”没有再出现；“ADDBA 等待响应时断线”的假设已用注入实验排除。
 
 ## 13. 后续发布门禁
 
