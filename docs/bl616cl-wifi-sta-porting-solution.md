@@ -45,9 +45,9 @@ WPA3-SAE 已完成 100 轮连接循环和四方向 100 秒压力，尚未做 500
 | `vela-manifest` | 通过 repo 固定 wireless 子仓路径和远端 | `884c975`，增加 `blgerrit` remote 及 macsw、wl80211 public/private、supplicant 项目 |
 | `vela-nuttx` | NuttX 网络栈和 OS 基座 | `97496437931`，修复 buffered send 唤醒竞态 |
 | `vela-vendor-bouffalolab` | OpenVela wrapper、BL616CL glue、板级、linker、配置 | `6365c1f`、`4f56261`、`7069305`、`71bd08b`、`f112fa0`、`62b724f`、`253c8a0` 等 |
-| `macsw` | Wi-Fi MAC/协议数据路径和 BL616CL/vela_bl616cl 配置库 | `f9b9a8b4`，恢复单天线扫描间的 coex plan；本地 `5245e902`，增加 `vela_bl616cl` profile（未推送） |
-| `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | 当前本地 `4e619d1` |
-| `wl80211/private` | wl80211/net80211 core，单独生成 `libwl80211_bl616cl.a` | 当前本地 `3bf7580` |
+| `macsw` | Wi-Fi MAC/协议数据路径和 BL616CL/vela_bl616cl 配置库 | `f9b9a8b4`，恢复单天线扫描间的 coex plan；本地 `4a81f48b` 增加 `vela_bl616cl` profile，`3292f25e`（BS-1552）给中断宏加 memory clobber（未推送） |
+| `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | 当前本地 `6454cbe` |
+| `wl80211/private` | wl80211/net80211 core，单独生成 `libwl80211_bl616cl.a` | 当前本地 `4fb42f0` |
 | `bl_wpa_supplicant` | WPA/WPA2/WPA3 认证相关源码 | `de35a74`（`ffc9839` rebase 到 2.3.35），增加 NuttX OS port 和 mbedTLS PBKDF2；`36e4c44`，`os_get_random()` 改用 `getrandom()` |
 | `bouffalo_sdk-drivers` | BL616CL PHYRF、rfparam、LHAL 等原厂驱动 | `8470912`，补充 BL616CL PHYRF 兼容头 |
 
@@ -269,7 +269,7 @@ TX/RX 的关键原则是：
 - ≥500 B 的帧不再从 wl80211 的 host RX 槽拷进 IOB 池。驱动用 `iob_init_with_data()` 把槽包成 IOB：IOB 头放在槽的 `rx_info` 上（wl80211 调用 RX 回调时已经读完它），`io_offset` 指向 L3，与拷贝路径相同；IOB 释放时 `io_free` 把槽还给 wl80211。短帧照旧拷贝：拷贝便宜，而且收到的 TCP ACK 要留在池 IOB 上，协议栈会在 ACK 的 IOB 上构造下一个数据段。
 - 同时借给协议栈的槽最多 `(CFG_BARX - 1) × CFG_REORD_BUF` 个（`vela_bl616cl` profile 为 8 个，槽共 18 个），其余留给 BA 重排序和交接；借满后照旧拷贝。槽用光时 MAC 连 beacon 也收不到。
 - 协议栈可能在收到的 IOB 上直接构造回复（ICMP echo 等），而槽里只有约 60 B 的 headroom。`wlan_transmit()` 发现首个 IOB 的 `io_offset` 小于 `CONFIG_NET_LL_GUARDSIZE` 时，先把整帧复制进池 IOB 再发送；池里没有 IOB 就丢掉这一帧，由上层重传。
-- 该选项 select `IOB_ALLOC`，每个 IOB 头多 12 B（池 60 时 `.wifibss` 多 720 B）。配套修改：nuttx `c016d23b0d6` 在 `iob_initialize()` 中清零池 IOB 的 `io_free`；wl80211 public `a6d61df` 适配指针形式的 `io_data`；macsw `4da8c811` 给 `GLOBAL_INT_DISABLE/RESTORE` 加 memory clobber，因为 `wl80211_mac_rx_free()` 现在也在网络线程中调用，槽队列的更新必须留在临界区内。
+- 该选项 select `IOB_ALLOC`，每个 IOB 头多 12 B（池 60 时 `.wifibss` 多 720 B）。配套修改：nuttx `c016d23b0d6` 在 `iob_initialize()` 中清零池 IOB 的 `io_free`；wl80211 public `a14c5b8` 适配指针形式的 `io_data`；macsw `3292f25e` 给 `GLOBAL_INT_DISABLE/RESTORE` 加 memory clobber，因为 `wl80211_mac_rx_free()` 现在也在网络线程中调用，槽队列的更新必须留在临界区内。
 
 线程与优先级（2026-09-26 在模组上 A/B，三种布局填充）：
 
@@ -312,19 +312,23 @@ XIP 代码段 `.text` 的起点对齐到 32 KiB（I-cache 大小），RAM 段的
 
 `ram_wifi` 链接在 nocache 别名上，协议栈对 IOB 的读写都不经 cache；原生 SDK 的 lwIP 内存同样从这里分配。改为零拷贝前，`.wifibss` 为 `0x1ab30`，其中 45,408 字节是 wl80211 private 的 TX pool；IOB 池移出后系统堆增加约 58.7 KB。`.wifibss` 为 NOLOAD 且启动时不清零；`CONFIG_IOB_ALLOC` 关闭时 `iob_initialize()` 写入每个节点的链表指针、分配时重置长度与偏移，不依赖清零；打开时 `iob_initialize()` 还要把 `io_free` 置空（nuttx `c016d23b0d6`），否则 `iob_free()` 会调用残留的野指针。
 
-wl80211 public/private 侧的配套修改包括：
+wl80211 public/private 侧的配套修改如下，BL616CL 与 openvela 需要的排在前面：
 
-- public `d690aa3`：保留 BSD queue/tree 兼容头；
-- public `5e73b97`：NuttX 下使用 `sys/queue.h`，scan-result tree 统一使用 vendored `tree.h`；
-- public `030c700`：修正 NuttX host port（`nuttx.c`、`rtos_al_nuttx.c`）在当前 NuttX 下的编译；
-- public `dfca19b`：`bl_lp.h` 仅在 `CONFIG_LPAPP` 下包含；
-- public `da9d84b`：`wifi_mgmr.c` 的 scan-result 读者在锁内复制记录；
-- public `73efdeb`：TX 描述符大小的静态检查扣除以太头占用的 guard；
-- public `9525caa`：NuttX STA TX 在途帧上限、完成回调与 `wl80211_output_ready()`；
-- public `a6d61df`：`CONFIG_IOB_ALLOC` 下由数据地址找回池 IOB，TX 头放在 `io_data`（RX 零拷贝需要）；
-- private `9bb7e6d`：BL616CL 按工具链探测 ISA 参数，并增加 `CONFIG_MACSW_SELECT` profile 定义；
-- private `e1db7ae`：空 SSID 上报不再清除已知 SSID；
-- private `3bf7580`：`wl80211_scan_result_lock/unlock` 基于 `rtos_lock()` 实现，生产者在锁外构造记录。
+- public `ddd2ed7`：保留 BSD queue/tree 兼容头；
+- public `553aa47`：NuttX 下使用 `sys/queue.h`，scan-result tree 统一使用 vendored `tree.h`；
+- public `662908c`：修正 NuttX host port（`nuttx.c`、`rtos_al_nuttx.c`）在当前 NuttX 下的编译；
+- public `727fe21`：`bl_lp.h` 仅在 `CONFIG_LPAPP` 下包含；
+- public `4928faa`：TX 描述符大小的静态检查扣除以太头占用的 guard；
+- public `8e6ada9`：NuttX STA TX 在途帧上限、完成回调与 `wl80211_output_ready()`；
+- public `a14c5b8`：`CONFIG_IOB_ALLOC` 下由数据地址找回池 IOB，TX 头放在 `io_data`（RX 零拷贝需要）；
+- public `aa7555d`：更正超时 work 所在队列的注释；
+- private `4f69084`：BL616CL 按工具链探测 ISA 参数，并增加 `CONFIG_MACSW_SELECT` profile 定义。
+
+与原生 SDK 共用的独立修复排在后面，各有 BS 单：
+
+- public `0f53c64`（BS-1551）：lwIP 版 `wl80211_output_raw()` 失败时不再调用完成回调；
+- private `ba8fba8`（BS-1550）：空 SSID 上报不再清除已知 SSID；
+- private `4fb42f0`、public `6454cbe`（BS-1549）：`wl80211_scan_result_lock/unlock` 基于 `rtos_lock()` 实现，生产者在锁外构造记录，`wifi_mgmr.c` 的读者在锁内复制记录。public 这一个要等 private 合入、Jenkins 更新预编译库之后再合。
 
 private 的 TX 路径与 master 相同。此前为复制方案加入的 TX pool（private `b86b33e`、`2fee8fe`、`089097b`，public `93e1af5`、`7369603`）已撤回。
 
@@ -601,7 +605,7 @@ TCP RX 在同一套复制代码上也曾测得 3.51–5.09，差异在波动范�
 
 ### 12.5 既有缺陷修复
 
-`wifi` 镜像（vendor `7864afb`，public `679cc6a`，private `3bf7580`）在同一模组上重跑 WPA3 单轮、10 轮连接、iperf 四方向各 30 秒、30 轮扫描，全部 PASS；MAC 为模组出厂地址 `c8:e7:13:7e:0c:11`（与原生 SDK 读到的一致）。
+`wifi` 镜像（vendor `7864afb`；public、private 为当时的本地分支，已含本节的全部修复）在同一模组上重跑 WPA3 单轮、10 轮连接、iperf 四方向各 30 秒、30 轮扫描，全部 PASS；MAC 为模组出厂地址 `c8:e7:13:7e:0c:11`（与原生 SDK 读到的一致）。
 
 | 缺陷 | 修复 | 实板验证 |
 | --- | --- | --- |
