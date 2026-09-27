@@ -277,6 +277,8 @@ TX/RX 的关键原则是：
 - 网络线程必须高于 `wifi_fw`：把协议栈放到优先级 120 的 LPWORK，TCP TX 降 23%、UDP TX 降 31%；放到 100 并开 RR 更差，过载时 IOB 被占满，丢包移到驱动。放到 150 的 LPWORK 与现状持平，却多占 4.2 KB 堆，所以不采用。`hpwork` 栈最深 788 B。
 - 延迟为 0 的 work 在下一个 tick 才执行（nuttx `96e9f7ccd60`），效果相当于按 tick 批处理。实验改成立即唤醒后，`hpwork` 每来一帧就抢占一次，UDP 收发降到约 20 Mbps，所以不回移 vela/dev 的立即唤醒。
 - UDP 过载时丢包发生在 socket 接收缓冲（应用线程拿不到 CPU），驱动不丢帧；`CONFIG_NETDEV_STATISTICS` 的 `/proc/net/wlan0` 与 `/proc/net/stat` 可以区分这两处。
+- `wifi_fw` 相对应用的优先级（2026-09-27 A/B，三种布局填充）：与 iperf 同为 100 时，UDP RX 60M 过载几乎收满（59.3～59.7，127 时 48～54），TCP TX +0.4～+0.8、TCP RX +0.2，UDP TX −1.0～−1.8；此时协议栈放 `hpwork` 还是优先级 150 的 LPWORK，结果相同（LPWORK 多占约 2.2 KB 堆）。低于应用（90）时 UDP TX 降 6～12。同级时应用长时间占用 CPU 会推迟 `wifi_fw`，这种负载没有测过，默认仍为 127。
+- `bl616_wifi_adapter_init()` 创建 `wifi_fw` 后，先等它第一次阻塞在 `wifi_task_suspend()`（即 `macswl_init()` 已完成）再发消息（vendor `fc4a65c`）。此前 `wifi_fw` 低于初始化线程（100）时，`macswl_init()` 中的 `ke_init()` 会清掉已经发出的 `MM_RESET_REQ`，启动卡住。
 
 ## 6. Shared RAM、cache 和 linker
 
