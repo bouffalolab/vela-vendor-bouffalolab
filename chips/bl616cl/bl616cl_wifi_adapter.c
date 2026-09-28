@@ -1230,6 +1230,7 @@ static int is_ascii_hex_char(char c)
 int bl616_wifi_sta_connect(void)
 {
   int ret;
+  int retry;
   uint16_t status;
   uint16_t freq = 0;
   uint8_t bssid[18] = {0};
@@ -1285,51 +1286,71 @@ int bl616_wifi_sta_connect(void)
 
   bl616_wifi_sta_set_quick_connect(true);
 
-  /* Set connect block */
+  /* An AP may drop a PMF station in its driver only (e.g. Broadcom
+   * "wl deauthenticate") while hostapd keeps the old association.  The
+   * next association then succeeds, but the AP sends SA Queries instead
+   * of EAPOL M1 until our 4-way handshake timeout deauths and clears the
+   * stale entry.  Try once more in that case: the status is PSK_TIMEOUT
+   * only when no EAPOL frame came at all, a wrong key reports
+   * WLAN_FW_AUTHENTICATION_FAIILURE instead.
+   */
 
-  g_sta_block = true;
-
-  {
-    wifi_mgmr_sta_connect_params_t params;
-    char bssid_str[MGMR_BSSID_LEN + 1] = { 0 };
-
-    /* Convert BSSID array to string format */
-
-    snprintf(bssid_str, sizeof(bssid_str), "%02X:%02X:%02X:%02X:%02X:%02X",
-             g_wifi_cfg.bssid[0], g_wifi_cfg.bssid[1], g_wifi_cfg.bssid[2],
-             g_wifi_cfg.bssid[3], g_wifi_cfg.bssid[4], g_wifi_cfg.bssid[5]);
-
-    memset(&params, 0, sizeof(params));
-    memcpy(params.ssid, g_wifi_cfg.ssid, g_wifi_cfg.ssid_len);
-    memcpy(params.key,
-           g_wifi_cfg.pmk_valid ? g_wifi_cfg.pmk : g_wifi_cfg.pwd,
-           g_wifi_cfg.pmk_valid ? MGMR_KEY_LEN : g_wifi_cfg.pwd_len);
-    memcpy(params.bssid_str, bssid_str, sizeof(bssid_str));
-    params.freq1 = freq;
-    params.pmf_cfg = 1;
-
-    ret = wifi_mgmr_sta_connect(&params);
-  }
-
-  if (ret < 0)
+  for (retry = 1; ; retry--)
     {
-      wlerr("ERROR: Failed to connect Wi-Fi ret=%d\n", ret);
+      /* Set connect block */
+
+      g_sta_block = true;
+
+      {
+        wifi_mgmr_sta_connect_params_t params;
+        char bssid_str[MGMR_BSSID_LEN + 1] = { 0 };
+
+        /* Convert BSSID array to string format */
+
+        snprintf(bssid_str, sizeof(bssid_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+                 g_wifi_cfg.bssid[0], g_wifi_cfg.bssid[1], g_wifi_cfg.bssid[2],
+                 g_wifi_cfg.bssid[3], g_wifi_cfg.bssid[4], g_wifi_cfg.bssid[5]);
+
+        memset(&params, 0, sizeof(params));
+        memcpy(params.ssid, g_wifi_cfg.ssid, g_wifi_cfg.ssid_len);
+        memcpy(params.key,
+               g_wifi_cfg.pmk_valid ? g_wifi_cfg.pmk : g_wifi_cfg.pwd,
+               g_wifi_cfg.pmk_valid ? MGMR_KEY_LEN : g_wifi_cfg.pwd_len);
+        memcpy(params.bssid_str, bssid_str, sizeof(bssid_str));
+        params.freq1 = freq;
+        params.pmf_cfg = 1;
+
+        ret = wifi_mgmr_sta_connect(&params);
+      }
+
+      if (ret < 0)
+        {
+          wlerr("ERROR: Failed to connect Wi-Fi ret=%d\n", ret);
+
+          g_sta_block = false;
+
+          adapter_wifi_lock(false);
+          return ret;
+        }
+
+      ret = nxsem_tickwait_uninterruptible(
+        &g_wifi_wait_connect_sem,
+        SEC2TICK(CONFIG_BL616CL_WLAN_CONNECT_TIMEOUT));
 
       g_sta_block = false;
 
-      adapter_wifi_lock(false);
-      return ret;
+      /* check connect state */
+
+      status = wifi_mgmr_sta_info_status_code_get();
+
+      if (retry == 0 || ret < 0 ||
+          status != WLAN_FW_4WAY_HANDSHAKE_ERROR_PSK_TIMEOUT_FAILURE)
+        {
+          break;
+        }
+
+      wlwarn("WARN: no 4-way handshake from AP, retry\n");
     }
-
-  ret = nxsem_tickwait_uninterruptible(
-    &g_wifi_wait_connect_sem,
-    SEC2TICK(CONFIG_BL616CL_WLAN_CONNECT_TIMEOUT));
-
-  g_sta_block = false;
-
-  /* check connect state */
-
-  status = wifi_mgmr_sta_info_status_code_get();
 
   if (ret < 0 || status != WLAN_FW_SUCCESSFUL)
     {
