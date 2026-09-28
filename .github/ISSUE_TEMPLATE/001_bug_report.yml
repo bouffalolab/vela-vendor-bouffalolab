@@ -44,6 +44,7 @@ body:
       options:
         - "[Arch: arm]"
         - "[Arch: arm64]"
+        - "[Arch: risc-v]"
         - "[Arch: x86_64]"
     validations:
       required: true
