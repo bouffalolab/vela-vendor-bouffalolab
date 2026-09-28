@@ -98,6 +98,13 @@
 #define WLAN_BUF_SIZE \
   (CONFIG_NET_ETH_PKTSIZE + CONFIG_NET_LL_GUARDSIZE + CONFIG_NET_GUARDSIZE)
 
+/* The stack writes the IPv4 and TCP headers (up to 80 bytes with options)
+ * right after the guard and needs them in the first IOB.
+ */
+
+static_assert(CONFIG_NET_LL_GUARDSIZE + 80 <= CONFIG_IOB_BUFSIZE,
+              "first IOB too small for the guard and IPv4/TCP headers");
+
 #ifdef CONFIG_BL616CL_WLAN_RX_ZEROCOPY
 /* RX frames at least this long stay in their wl80211 host RX slot, which
  * is wrapped as an IOB, instead of being copied into a pool IOB.  Short

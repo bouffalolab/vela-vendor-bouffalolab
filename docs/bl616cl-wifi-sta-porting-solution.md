@@ -342,7 +342,7 @@ scan-result tree 由 private 的 `wl80211_scan_result_lock/unlock` 保护，底�
 
 STA TX 采用零拷贝，与原生 SDK 和 BL4 相同：
 
-- `wl80211_output()` 把 TX 描述符放在首个 IOB 的 guard（`CONFIG_NET_LL_GUARDSIZE=388`，以太头占最后 14 字节），把 IOB 链作为 PBD 段交给 `wl80211_mac_tx()`；一个 MTU 帧占 3 个 640 字节 IOB，不超过 `TX_PBD_CNT=5`；
+- `wl80211_output()` 把 TX 描述符放在首个 IOB 的 guard（`CONFIG_NET_LL_GUARDSIZE=376`，即 360 B 描述符加 14 B 以太头后按 4 对齐，以太头占最后 14 字节），把 IOB 链作为 PBD 段交给 `wl80211_mac_tx()`；`CONFIG_IOB_BUFSIZE=628` 是一个 1500 B 的 IP 包仍能放进 3 个 IOB 的最小 4 对齐值（3×628−376≥1500），不超过 `TX_PBD_CNT=5`；驱动静态检查 guard 加 80 B IPv4/TCP 头不超过 IOB 大小；
 - MAC 从 L3 数据起点向前写 LLC、安全头和 MAC 头，最坏需要以太头之前 38 字节，落在 guard 内；SW 重传复用同一份帧，IOB 在最终完成前不得改动；
 - 完成回调 `wl80211_sta_tx_complete()` 释放 IOB 链，递减在途计数，并调用 chip 通过 `internal_register_txdone_cb()` 注册的钩子；
 - MAC 队列本身没有上限，在途数据帧最多 `WL80211_TX_INFLIGHT_MAX`（24，与原 TX pool 槽数相同）；达到上限时 `wl80211_output()` 返回 `-EAGAIN`，IOB 仍归驱动，驱动存入 `tx_pending`，完成钩子触发下一轮发送；驱动在 poll 前用 `wl80211_output_ready()` 判断；
@@ -438,7 +438,7 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 - DHCP、DNS、IPv4、TCP/UDP 和 buffered write；
 - `CONFIG_NETUTILS_IPERF=y`；
 - `CONFIG_IOB_NBUFFERS=60`、`CONFIG_BL616CL_WRAM_SIZE=102`：池和 WRAM 一起缩小，系统堆比池 90、WRAM 128K 时多约 26 KiB，吞吐代价见 12.7；
-- `CONFIG_NET_TCP_SELECTIVE_ACK=y`（会 select `NET_TCP_OUT_OF_ORDER`）、`CONFIG_NET_TCP_OUT_OF_ORDER_BUFSIZE=4096`：TCP RX 受接收侧丢帧限制；有了乱序队列，丢帧后已收到的段会保留，只需重传缺的那段。实测 TCP RX 从 7.0–7.6 升到 11.3–12.1 Mbps，TCP TX 从 13.1 降到 12.7，堆少 448 B。OOO 取 4K 是为了满足 NuttX 小内存建议中的 SEND+RECV+OOO < IOB 总量（16K+16K+4K < 38.4K）；实测 4K 与 8K 效果相同；
+- `CONFIG_NET_TCP_SELECTIVE_ACK=y`（会 select `NET_TCP_OUT_OF_ORDER`）、`CONFIG_NET_TCP_OUT_OF_ORDER_BUFSIZE=4096`：TCP RX 受接收侧丢帧限制；有了乱序队列，丢帧后已收到的段会保留，只需重传缺的那段。实测 TCP RX 从 7.0–7.6 升到 11.3–12.1 Mbps，TCP TX 从 13.1 降到 12.7，堆少 448 B。OOO 取 4K 是为了满足 NuttX 小内存建议中的 SEND+RECV+OOO < IOB 总量（16K+16K+4K < 60×628 B≈37.7K）；实测 4K 与 8K 效果相同；
 - `CONFIG_BL616CL_WLAN_RX_ZEROCOPY=y`：≥500 B 的 RX 帧不拷贝，直接把 host RX 槽交给协议栈，见 5.3，效果见 12.10；
 - `CONFIG_NETDEV_STATISTICS=y`：驱动统计收发帧数、按类型的 RX、驱动丢帧、TX 错误与超时，`cat /proc/net/wlan0` 查看；过载时据此区分驱动丢帧与 socket 丢帧（`/proc/net/stat`）。代价 flash +1.2 KB、RAM +128 B；
 - `CONFIG_SCHED_LPWORK=y`、`CONFIG_SCHED_LPWORKPRIORITY=150`（栈用默认 2048）：Wi-Fi 驱动收发和协议栈放在 `lpwork`，`hpwork` 留给 BLE 等中断下半部；`BL616CL_FW_TASK_PRIORITY` 取 Kconfig 默认 130。见 5.3；
