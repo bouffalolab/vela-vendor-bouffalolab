@@ -271,13 +271,13 @@ TX/RX 的关键原则是：
 - 协议栈可能在收到的 IOB 上直接构造回复（ICMP echo 等），而槽里只有约 60 B 的 headroom。`wlan_transmit()` 发现首个 IOB 的 `io_offset` 小于 `CONFIG_NET_LL_GUARDSIZE` 时，先把整帧复制进池 IOB 再发送；池里没有 IOB 就丢掉这一帧，由上层重传。
 - 该选项 select `IOB_ALLOC`，每个 IOB 头多 12 B（池 60 时 `.wifibss` 多 720 B）。配套修改：nuttx `c016d23b0d6` 在 `iob_initialize()` 中清零池 IOB 的 `io_free`；wl80211 public `a14c5b8` 适配指针形式的 `io_data`；macsw `3292f25e` 给 `GLOBAL_INT_DISABLE/RESTORE` 加 memory clobber，因为 `wl80211_mac_rx_free()` 现在也在网络线程中调用，槽队列的更新必须留在临界区内。
 
-线程与优先级（2026-09-26 在模组上 A/B，三种布局填充）：
+线程与优先级（2026-09-26～28 在模组上 A/B，三种布局填充）：
 
-- `wifi_fw`（`CONFIG_BL616CL_FW_TASK_PRIORITY`，默认 127）运行 MAC 固件并调用驱动 RX 回调；驱动把帧入队后用 `work_queue(LPWORK, ..., 0)` 交给网络线程，TX 完成、`d_txavail` 也一样。`wifi` 配置不开 `SCHED_LPWORK`，`LPWORK` 就是 `hpwork`（224，栈 2048），协议栈、TCP 定时器与 wl80211 的定时器、事件在同一个线程中运行。应用默认优先级 100。
-- 网络线程必须高于 `wifi_fw`：把协议栈放到优先级 120 的 LPWORK，TCP TX 降 23%、UDP TX 降 31%；放到 100 并开 RR 更差，过载时 IOB 被占满，丢包移到驱动。放到 150 的 LPWORK 与现状持平，却多占 4.2 KB 堆，所以不采用。`hpwork` 栈最深 788 B。
+- `wifi_fw`（`CONFIG_BL616CL_FW_TASK_PRIORITY`，默认 130）运行 MAC 固件并调用驱动 RX 回调；驱动把帧入队后用 `work_queue(LPWORK, ..., 0)` 交给网络线程，TX 完成、`d_txavail` 也一样。`wifi` 配置自 2026-09-28 开 `SCHED_LPWORK`（优先级 150，栈 2048），驱动收发、协议栈和 TCP 定时器在 `lpwork` 中运行；wl80211 的定时器与事件仍在 `hpwork`（224）。`hpwork` 以后要跑 BLE 等中断下半部，Wi-Fi 尽量不用。顺序为 `hpwork` 224 > `lpwork` 150 > `wifi_fw` 130 > 应用 100。不开 `SCHED_LPWORK` 时 `LPWORK` 就是 `hpwork`。
+- 网络线程必须高于 `wifi_fw`：把协议栈放到优先级 120 的 LPWORK，TCP TX 降 23%、UDP TX 降 31%；放到 100 并开 RR 更差，过载时 IOB 被占满，丢包移到驱动。放到 150 的 LPWORK（`wifi_fw` 127 或 130）时 TCP 收发和 UDP TX 与 `hpwork` 持平，UDP RX 60M 过载低 2.0～3.4 Mbps，栈 2048 时堆少 2,176 B；为了把 `hpwork` 留给 BLE 采用 LPWORK 150。协议栈在 `hpwork` 上栈最深 788 B，在 `lpwork` 上 724 B。
 - 延迟为 0 的 work 在下一个 tick 才执行（nuttx `96e9f7ccd60`），效果相当于按 tick 批处理。实验改成立即唤醒后，`hpwork` 每来一帧就抢占一次，UDP 收发降到约 20 Mbps，所以不回移 vela/dev 的立即唤醒。
 - UDP 过载时丢包发生在 socket 接收缓冲（应用线程拿不到 CPU），驱动不丢帧；`CONFIG_NETDEV_STATISTICS` 的 `/proc/net/wlan0` 与 `/proc/net/stat` 可以区分这两处。
-- `wifi_fw` 相对应用的优先级（2026-09-27 A/B，三种布局填充）：与 iperf 同为 100 时，UDP RX 60M 过载几乎收满（59.3～59.7，127 时 48～54），TCP TX +0.4～+0.8、TCP RX +0.2，UDP TX −1.0～−1.8；此时协议栈放 `hpwork` 还是优先级 150 的 LPWORK，结果相同（LPWORK 多占约 2.2 KB 堆）。低于应用（90）时 UDP TX 降 6～12。同级时应用长时间占用 CPU 会推迟 `wifi_fw`，这种负载没有测过，默认仍为 127。
+- `wifi_fw` 相对应用的优先级（2026-09-27 A/B，三种布局填充）：与 iperf 同为 100 时，UDP RX 60M 过载几乎收满（59.3～59.7，127 时 48～54），TCP TX +0.4～+0.8、TCP RX +0.2，UDP TX −1.0～−1.8；此时协议栈放 `hpwork` 还是优先级 150 的 LPWORK，结果相同（LPWORK 多占约 2.2 KB 堆）。低于应用（90）时 UDP TX 降 6～12。同级时两者互不抢占，应用长时间占用 CPU 会推迟 `wifi_fw`，所以默认取 130，保持高于应用。
 - `bl616_wifi_adapter_init()` 创建 `wifi_fw` 后，先等它第一次阻塞在 `wifi_task_suspend()`（即 `macswl_init()` 已完成）再发消息（vendor `fc4a65c`）。此前 `wifi_fw` 低于初始化线程（100）时，`macswl_init()` 中的 `ke_init()` 会清掉已经发出的 `MM_RESET_REQ`，启动卡住。
 
 ## 6. Shared RAM、cache 和 linker
@@ -441,6 +441,7 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 - `CONFIG_NET_TCP_SELECTIVE_ACK=y`（会 select `NET_TCP_OUT_OF_ORDER`）、`CONFIG_NET_TCP_OUT_OF_ORDER_BUFSIZE=4096`：TCP RX 受接收侧丢帧限制；有了乱序队列，丢帧后已收到的段会保留，只需重传缺的那段。实测 TCP RX 从 7.0–7.6 升到 11.3–12.1 Mbps，TCP TX 从 13.1 降到 12.7，堆少 448 B。OOO 取 4K 是为了满足 NuttX 小内存建议中的 SEND+RECV+OOO < IOB 总量（16K+16K+4K < 38.4K）；实测 4K 与 8K 效果相同；
 - `CONFIG_BL616CL_WLAN_RX_ZEROCOPY=y`：≥500 B 的 RX 帧不拷贝，直接把 host RX 槽交给协议栈，见 5.3，效果见 12.10；
 - `CONFIG_NETDEV_STATISTICS=y`：驱动统计收发帧数、按类型的 RX、驱动丢帧、TX 错误与超时，`cat /proc/net/wlan0` 查看；过载时据此区分驱动丢帧与 socket 丢帧（`/proc/net/stat`）。代价 flash +1.2 KB、RAM +128 B；
+- `CONFIG_SCHED_LPWORK=y`、`CONFIG_SCHED_LPWORKPRIORITY=150`（栈用默认 2048）：Wi-Fi 驱动收发和协议栈放在 `lpwork`，`hpwork` 留给 BLE 等中断下半部；`BL616CL_FW_TASK_PRIORITY` 取 Kconfig 默认 130。见 5.3；
 - `CONFIG_DEBUG_WIRELESS_ERROR=y`：wireless 调试只开 error。warn 级在 IOB 池用尽时会给每个丢弃的 RX 帧打印一行（占池测试 20 轮 18.5 万行）；关掉 warn 与 info 后 `nuttx.bin` 小约 6 KB；
 - `CONFIG_NSH_READLINE=y`；
 - `CONFIG_READLINE_TABCOMPLETION=y`；
