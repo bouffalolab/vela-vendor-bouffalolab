@@ -291,7 +291,7 @@ ram_wifi ORIGIN = 0x21020000 - CONFIG_BL616CL_WRAM_SIZE KiB
 
 WRAM 和 BLE EM 的划分沿用原生 `bl616cl_common.ld.in`：EM 从 WRAM 顶部划走，启动时 `bl616cl_em_select()` 按 `__LD_CONFIG_EM_SEL` 设置 GLB EM_SEL，系统 RAM 为 `384K - 1K - WRAM`。Kconfig 默认 EM 为 0、WRAM 为 128K；选 EM 16K/32K 时 WRAM 默认改为 144K/160K，`ram_wifi` 保持 128K，多出的部分从系统 RAM 让出（EM 32K 时系统 RAM 由 255K 降为 223K）。NuttX CMake 不会因配置变化重新预处理链接脚本，改这两项后要先 `vela clean`。
 
-各配置的 WRAM 取值：`wifi` 设 102K（IOB 池 60，`.wifibss` 之外约留 4.9 KiB 余量）；`nsh`、`nsh-peripherals`、`ostest` 不用 Wi-Fi，`.wifibss` 为空，设为 Kconfig 下限 64K，系统 RAM 为 319K。defconfig 显式写了 WRAM 之后，再选 EM 不会自动加大 WRAM，需要手动把它改为原值加 EM（例如 `wifi` 选 EM 32K 时设为 134K）。
+各配置的 WRAM 取值：`wifi` 设 97K（IOB 池 60、每个 628 B，`.wifibss` 之外留 656 B）；`nsh`、`nsh-peripherals`、`ostest` 不用 Wi-Fi，`.wifibss` 为空，设为 Kconfig 下限 64K，系统 RAM 为 319K。defconfig 显式写了 WRAM 之后，再选 EM 不会自动加大 WRAM，需要手动把它改为原值加 EM（例如 `wifi` 选 EM 32K 时设为 129K）。
 
 `.wifibss` 将以下对象放入 Wi-Fi 可见区域：
 
@@ -308,7 +308,7 @@ TX 零拷贝镜像中（EM 0、WRAM 128K；EM 32K 时起始地址为 `0x20ff8000
 - `.wifibss` 使用 `0x1df00`（其中 IOB 池 `g_iob_buffer` 58,683 字节）；
 - 剩余 8,448 字节。
 
-当前 `wifi` 镜像（WRAM 102K、IOB 池 60）：`ram_wifi` 起始地址为 `0x21006800`，大小为 `0x19800`；`.wifibss` 使用 `0x18440`，剩余 5,056 字节（打开 RX 零拷贝前为 `0x18170`；换用 `vela_bl616cl` profile 前为 `0x192a0`、剩余 1,376 字节，见 12.8）。
+当前 `wifi` 镜像（WRAM 97K、IOB 池 60、每个 628 B）：`ram_wifi` 起始地址为 `0x21007c00`，大小为 `0x18400`；`.wifibss` 使用 `0x18170`，剩余 656 字节（WRAM 102K、IOB 640 B 时为 `0x18440`、剩余 5,056 字节；打开 RX 零拷贝前为 `0x18170`；换用 `vela_bl616cl` profile 前为 `0x192a0`、剩余 1,376 字节，见 12.8）。
 
 XIP 代码段 `.text` 的起点对齐到 32 KiB（I-cache 大小），RAM 段的 flash 镜像变大或变小时，代码的 cache set 不再跟着移动。`.text` 开头按调用顺序排列 Wi-Fi 热函数，分为任务循环、TX、TX 确认、RX 四组，再接 NuttX 信号量、work queue 和定时器函数，共约 36 KB，让这些函数集中在少数 cache set 里，中间不夹冷代码。列表以 macsw 的 `macsw_cache_affinity.ld.in` 为起点：其中 147 个函数名只有 75 个在本构建的 LTO 输出中仍是独立函数；再加上 80 MHz tick 采样里同一路径上的任务循环、host port 和 glue 函数。LTO 会给局部函数加 `.lto_priv/.isra/.constprop` 后缀，所以每个名字都同时匹配 `.text.fn` 和 `.text.fn.*`。列表直接写在 `ld.script` 中，因为 NuttX CMake 预处理链接脚本时不跟踪被 include 的文件。效果见 12.9；组件更新后的检查和回归步骤见 [bl616cl-hot-code-layout.md](bl616cl-hot-code-layout.md)。
 
@@ -437,7 +437,7 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 - WAPI、WEXT、无线 driver；
 - DHCP、DNS、IPv4、TCP/UDP 和 buffered write；
 - `CONFIG_NETUTILS_IPERF=y`；
-- `CONFIG_IOB_NBUFFERS=60`、`CONFIG_BL616CL_WRAM_SIZE=102`：池和 WRAM 一起缩小，系统堆比池 90、WRAM 128K 时多约 26 KiB，吞吐代价见 12.7；
+- `CONFIG_IOB_NBUFFERS=60`、`CONFIG_BL616CL_WRAM_SIZE=97`：池和 WRAM 一起缩小，系统堆比池 90、WRAM 128K 时多约 31 KiB，吞吐代价见 12.7；
 - `CONFIG_NET_TCP_SELECTIVE_ACK=y`（会 select `NET_TCP_OUT_OF_ORDER`）、`CONFIG_NET_TCP_OUT_OF_ORDER_BUFSIZE=4096`：TCP RX 受接收侧丢帧限制；有了乱序队列，丢帧后已收到的段会保留，只需重传缺的那段。实测 TCP RX 从 7.0–7.6 升到 11.3–12.1 Mbps，TCP TX 从 13.1 降到 12.7，堆少 448 B。OOO 取 4K 是为了满足 NuttX 小内存建议中的 SEND+RECV+OOO < IOB 总量（16K+16K+4K < 60×628 B≈37.7K）；实测 4K 与 8K 效果相同；
 - `CONFIG_BL616CL_WLAN_RX_ZEROCOPY=y`：≥500 B 的 RX 帧不拷贝，直接把 host RX 槽交给协议栈，见 5.3，效果见 12.10；
 - `CONFIG_NETDEV_STATISTICS=y`：驱动统计收发帧数、按类型的 RX、驱动丢帧、TX 错误与超时，`cat /proc/net/wlan0` 查看；过载时据此区分驱动丢帧与 socket 丢帧（`/proc/net/stat`）。代价 flash +1.2 KB、RAM +128 B；
@@ -660,6 +660,8 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 | UDP TX | 24.8、25.0 | 19.1、26.8、23.2 |
 | TCP RX | 7.93 | 8.53 |
 | 两个并发 TCP TX 合计 | 约 12–13 | 约 11.9 |
+
+2026-09-28：macsw profile（12.8）和 IOB 628 B 让 `.wifibss` 缩小后，WRAM 由 102K 降到 97K，`wifi` 堆总量 209,060→214,180（+5,120 B），`.wifibss` 余 656 B；代码与热区不变，同一布局下吞吐与 102K 相同，WPA3 回归通过。
 
 池 60 时 UDP TX 最多占用 36 个 IOB，正好是池减去节流线 24，说明发送深度受池限制。池 60 的三个 UDP TX 数据来自三个镜像：本节 R1 镜像，以及其后只改 `g_allsyms` 段位置、只开字符串优化的两个镜像；后两项改动不涉及发送路径。三次结果在 19–27 Mbps 之间，所以还不能确定池 60 相对池 90 的 UDP TX 代价，需要多次重复测量。
 
