@@ -80,9 +80,11 @@ target_include_directories(
           ${BL_BOUFFALO_DRIVERS_DIR}/lhal/include
           ${BL_BOUFFALO_DRIVERS_DIR}/lhal/include/arch)
 
+# The wl80211 timers and events run on LPWORK next to the driver RX/TX and
+# the network stack; HPWORK is left for interrupt bottom halves (BLE).
 target_compile_definitions(
   bl_wl80211
-  PRIVATE BL616CL ARCH_RISCV
+  PRIVATE BL616CL ARCH_RISCV WL80211_WORK=LPWORK
           CONFIG_MACSW_SELECT_INCLUDE="macsw_${CONFIG_MACSW_SELECT}_config.h")
 target_compile_options(bl_wl80211 PRIVATE -Wno-undef -Wno-unused-function
                                           -Wno-unused-variable)
