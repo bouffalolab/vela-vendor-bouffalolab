@@ -441,6 +441,7 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 - `CONFIG_NET_TCP_SELECTIVE_ACK=y`（会 select `NET_TCP_OUT_OF_ORDER`）、`CONFIG_NET_TCP_OUT_OF_ORDER_BUFSIZE=4096`：TCP RX 受接收侧丢帧限制；有了乱序队列，丢帧后已收到的段会保留，只需重传缺的那段。实测 TCP RX 从 7.0–7.6 升到 11.3–12.1 Mbps，TCP TX 从 13.1 降到 12.7，堆少 448 B。OOO 取 4K 是为了满足 NuttX 小内存建议中的 SEND+RECV+OOO < IOB 总量（16K+16K+4K < 38.4K）；实测 4K 与 8K 效果相同；
 - `CONFIG_BL616CL_WLAN_RX_ZEROCOPY=y`：≥500 B 的 RX 帧不拷贝，直接把 host RX 槽交给协议栈，见 5.3，效果见 12.10；
 - `CONFIG_NETDEV_STATISTICS=y`：驱动统计收发帧数、按类型的 RX、驱动丢帧、TX 错误与超时，`cat /proc/net/wlan0` 查看；过载时据此区分驱动丢帧与 socket 丢帧（`/proc/net/stat`）。代价 flash +1.2 KB、RAM +128 B；
+- `CONFIG_DEBUG_WIRELESS_ERROR=y`：wireless 调试只开 error。warn 级在 IOB 池用尽时会给每个丢弃的 RX 帧打印一行（占池测试 20 轮 18.5 万行）；关掉 warn 与 info 后 `nuttx.bin` 小约 6 KB；
 - `CONFIG_NSH_READLINE=y`；
 - `CONFIG_READLINE_TABCOMPLETION=y`；
 - `CONFIG_READLINE_CMD_HISTORY=y`；
