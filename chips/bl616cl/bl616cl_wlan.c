@@ -66,7 +66,8 @@
  ****************************************************************************/
 
 /* RX/TX work queue.  LPWORK falls back to HPWORK when CONFIG_SCHED_LPWORK
- * is disabled; the wl80211 timers and events also run on HPWORK.
+ * is disabled.  The wl80211 timers and events run on the same queue
+ * (WL80211_WORK, see components/wireless/wifi/wl80211/CMakeLists.txt).
  */
 
 #define WLAN_WORK    LPWORK
@@ -1028,7 +1029,7 @@ static void wlan_txtimeout_expiry(wdparm_t arg)
  *   None
  *
  * Assumptions:
- *   Called on the higher priority worker thread.
+ *   Called on the WLAN_WORK worker thread.
  *
  ****************************************************************************/
 
