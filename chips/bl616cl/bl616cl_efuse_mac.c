@@ -29,6 +29,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "bl616cl_sdk.h"
 #include "bl616cl_mfg_media.h"
 #include "bl616cl_efuse_mac.h"
 
