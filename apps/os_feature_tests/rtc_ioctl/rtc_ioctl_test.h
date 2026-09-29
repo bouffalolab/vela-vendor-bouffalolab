@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/apps/os_feature_tests/rtc_ioctl/rtc_ioctl_test.h
+ * vendor/bouffalolab/apps/os_feature_tests/rtc_ioctl/rtc_ioctl_test.h
  *
  * SPDX-License-Identifier: Apache-2.0
  *

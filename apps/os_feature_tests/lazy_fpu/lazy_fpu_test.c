@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/apps/os_feature_tests/lazy_fpu/lazy_fpu_test.c
+ * vendor/bouffalolab/apps/os_feature_tests/lazy_fpu/lazy_fpu_test.c
  *
  * SPDX-License-Identifier: Apache-2.0
  *

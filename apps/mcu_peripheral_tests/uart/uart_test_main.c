@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/apps/mcu_peripheral_tests/uart/uart_test_main.c
+ * vendor/bouffalolab/apps/mcu_peripheral_tests/uart/uart_test_main.c
  *
  * SPDX-License-Identifier: Apache-2.0
  ****************************************************************************/

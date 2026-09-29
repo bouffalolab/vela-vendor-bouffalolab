@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/components/wireless/rfparam/include/log.h
+ * vendor/bouffalolab/components/wireless/rfparam/include/log.h
  *
  * Minimal log shim for the rfparam adapter sources compiled into the
  * bl_rfparam library. The bouffalo SDK log framework is not part of this

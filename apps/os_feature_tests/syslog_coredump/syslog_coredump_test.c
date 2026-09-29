@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/apps/os_feature_tests/syslog_coredump/syslog_coredump_test.c
+ * vendor/bouffalolab/apps/os_feature_tests/syslog_coredump/syslog_coredump_test.c
  *
  * SPDX-License-Identifier: Apache-2.0
  *

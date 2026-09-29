@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/apps/mcu_peripheral_tests/gpio/gpio_case_main.c
+ * vendor/bouffalolab/apps/mcu_peripheral_tests/gpio/gpio_case_main.c
  *
  * MCU Peripheral GPIO Test Cases
  *
