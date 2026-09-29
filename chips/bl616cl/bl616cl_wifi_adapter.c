@@ -49,6 +49,14 @@
 
 #include "wl80211.h"
 #include "macsw.h"
+#include "coexm.h"
+
+/* rfparam_adapter.h has legacy non-prototype declarations. */
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstrict-prototypes"
+#include "rfparam_adapter.h"
+#pragma GCC diagnostic pop
 
 #include "supplicant.h"
 #include "bl_wpa.h"
@@ -130,19 +138,6 @@ static wifi_txdone_cb_t g_sta_txdone_cb;
 static sem_t g_wifi_scan_sem = SEM_INITIALIZER(1);
 static sem_t g_wifi_wait_connect_sem = SEM_INITIALIZER(0);
 
-
-/****************************************************************************
- * Private Function Prototypes
- ****************************************************************************/
-
-/* rf config */
-
-extern int32_t rfparam_init(uint32_t base_addr,
-                            void *rf_para,
-                            uint32_t apply_flag);
-extern int rfparam_set_country_code(const char *country);
-extern void rfparam_update_ant_gain(int8_t ant_gain);
-extern int8_t rfparam_get_ant_gain(void);
 
 /****************************************************************************
  * Private Functions
@@ -696,9 +691,6 @@ void __assert_func(const char *file, int line,
 
 void wifi_task_suspend(void)
 {
-  extern bool coex_coord_on_wifi_suspend_enter(void);
-  extern void coex_coord_on_wifi_wake(bool slept_committed);
-
   bool slept_committed = coex_coord_on_wifi_suspend_enter();
 
   /* Wait for notification using semaphore */
@@ -795,7 +787,6 @@ int bl616_wifi_adapter_init(void)
   /* Enable wifi irq */
 
   extern void interrupt0_handler(void);
-  extern void wifi_main(void *arg);
 
   if (irq_attach(BL616CL_IRQ_NUM_WIFI, (xcpt_t)interrupt0_handler, NULL) == OK)
     {
