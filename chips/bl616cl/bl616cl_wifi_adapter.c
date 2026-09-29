@@ -472,17 +472,15 @@ static int format_scan_result_to_wapi(struct iwreq *req)
 
   struct wl80211_scan_result_item *n, *tmp;
 
-  /* Count wl80211 scan results.  The scan-result lock serializes with the
-   * WiFi task producer; nothing may allocate, free or sleep under it.
+  /* Count wl80211 scan results.  The caller holds g_wifi_scan_sem, so no
+   * scan runs: only this adapter starts scans, and the WiFi task writes
+   * the tree only while one of them runs (SCAN_DONE posts the semaphore).
    */
 
-  wl80211_scan_result_lock();
   RB_FOREACH_SAFE(n, _scan_result_tree, &wl80211_scan_result, tmp)
   {
     result_cnt++;
   }
-
-  wl80211_scan_result_unlock();
 
   if (result_cnt == 0)
     {
@@ -507,35 +505,17 @@ static int format_scan_result_to_wapi(struct iwreq *req)
       return -ENOMEM;
     }
 
-  /* Unlink at most result_cnt items from the tree under the lock; the
-   * unlinked items are owned by this call, so sorting, formatting and
-   * freeing them run without the lock.
+  /* Unlink the items from the tree; they are owned by this call and freed
+   * after formatting.
    */
 
   j = 0;
 
-  wl80211_scan_result_lock();
   RB_FOREACH_SAFE(n, _scan_result_tree, &wl80211_scan_result, tmp)
   {
-    if (j == result_cnt)
-      {
-        break; /* The tree grew after counting */
-      }
-
     RB_REMOVE(_scan_result_tree, &wl80211_scan_result, n);
     rssi_list[j++] = (uintptr_t)n;
   }
-
-  wl80211_scan_result_unlock();
-
-  /* Another reader may have drained items after counting */
-
-  result_cnt = j;
-  if (result_cnt == 0)
-    {
-      kmm_free(rssi_list);
-      return -ENOENT;
-    }
 
   /* Sort the valid list according the rssi using custom comparator */
 
