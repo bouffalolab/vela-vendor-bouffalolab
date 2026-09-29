@@ -83,12 +83,8 @@ void bl616cl_timer_clock_init(void)
 
 void bl616cl_pinmux_early_uart(void)
 {
-  uint32_t regval;
-
   putreg32(0xffffffff, GLB_BASE + GLB_UART_CFG1_OFFSET);
   putreg32(0x0000ffff, GLB_BASE + GLB_UART_CFG2_OFFSET);
 
-  regval = getreg32(HBN_BASE + HBN_IRQ_MODE_OFFSET);
-  regval &= ~HBN_REG_EN_HW_PU_PD_MSK;
-  putreg32(regval, HBN_BASE + HBN_IRQ_MODE_OFFSET);
+  HBN_Hw_Pu_Pd_Cfg(DISABLE);
 }
