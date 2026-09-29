@@ -35,6 +35,7 @@
 #include "bl616cl_clockconfig.h"
 #include "bl616cl_cpu.h"
 #include "bl616cl_flash.h"
+#include "bl616cl_lowputc.h"
 #include "bl616cl_memory.h"
 #ifdef CONFIG_BL616CL_PSRAM
 #include "bl616cl_psram_internal.h"

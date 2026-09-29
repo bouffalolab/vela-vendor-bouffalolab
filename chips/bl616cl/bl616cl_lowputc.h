@@ -78,6 +78,7 @@ EXTERN struct bl616cl_uart_s g_uart1_config;
  * Public Function Prototypes
  ****************************************************************************/
 
+void bl616cl_pinmux_early_uart(void);
 void bl616cl_lowsetup(void);
 int bl616cl_lowputc_config(struct bl616cl_uart_s *config);
 
