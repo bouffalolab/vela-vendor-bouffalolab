@@ -54,7 +54,7 @@ extern "C"
  * Description:
  *   Set Wi-Fi station link status
  *
- * Parameters:
+ * Input Parameters:
  *   linkstatus - true Notifies the networking layer about an available
  *                carrier, false Notifies the networking layer about an
  *                disappeared carrier.
@@ -88,7 +88,7 @@ int bl616cl_wlan_sta_initialize(void);
  * Description:
  *   Get Wi-Fi station netcard driver
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:

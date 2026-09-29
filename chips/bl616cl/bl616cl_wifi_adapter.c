@@ -954,14 +954,13 @@ int bl616cl_wifi_sta_register_recv_cb(int (*recv_cb)(void *net,
  * Name: bl616cl_wifi_sta_read_mac
  *
  * Description:
- *   Read MAC address from efuse
+ *   Read the station MAC address through wifi_mgmr_sta_mac_get().
  *
  * Input Parameters:
- *   mac  - MAC address buffer pointer
- *   type - MAC address type
+ *   mac - Buffer that receives the 6-byte MAC address.
  *
  * Returned Value:
- *   0 if success or -1 if fail
+ *   0 on success; nonzero on failure.
  *
  ****************************************************************************/
 
