@@ -100,8 +100,7 @@ if(CONFIG_BL_COMPONENT_WL80211)
     bl616cl_wlan.c
     bl616cl_wifi_adapter.c
     bl616cl_efuse_mac.c
-    bl616cl_macsw_plat.c
-    bl616cl_rfparam_ext.c)
+    bl616cl_macsw_plat.c)
 
   set(BL616CL_VENDOR_DIR ${CMAKE_CURRENT_LIST_DIR}/../..)
   set(BL616CL_WIFI_DIR ${BL616CL_VENDOR_DIR}/components/wireless/wifi)
