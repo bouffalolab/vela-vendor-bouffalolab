@@ -32,7 +32,6 @@
  ****************************************************************************/
 
 void bl616cl_memory_early_init(void);
-void bl616cl_flash_early_init(void);
 void bl616cl_section_load(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_MEMORY_H */

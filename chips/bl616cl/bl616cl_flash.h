@@ -31,6 +31,7 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+void bl616cl_flash_early_init(void);
 int bl616cl_flash_initialize(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_FLASH_H */
