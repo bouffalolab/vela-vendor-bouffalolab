@@ -13,7 +13,6 @@
 
 #define BL616CL_PSRAM_BASE          (0x88000000)
 #define BL616CL_PSRAM_NOCACHE_BASE  0x18000000u
-#define BL616CL_PSRAM_MAX_SIZE      (16u * 1024u * 1024u)
 
 #ifdef CONFIG_BL616CL_PSRAM
 /* Returns the usable heap region size, or zero if initialization failed.
