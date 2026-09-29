@@ -157,7 +157,7 @@ vendor/bouffalolab/tools/bl616cl/perf/layout_ab.sh -b <out>/ab
   看多个位置，不能只比一次。
 - 以前用开关 NSH `mw` 命令挪动代码，现在不再有效：位移会被 256 字节对齐的
   `up_saveusercontext` 吸收。
-- 改了链接脚本用到的 CONFIG（如 `BL616CL_WRAM_SIZE`）后必须
+- 改了链接脚本用到的 CONFIG（如 `BL616CL_EM_*`）后必须
   `vela clean`，因为 `ld.script.tmp` 只依赖脚本源文件。改列表本身不需要。
 - I-cache 为 32 KiB（见 [bl616cl-cache.md](bl616cl-cache.md)），相联度没有
   确认。对齐按 cache 总大小取，与相联度无关。

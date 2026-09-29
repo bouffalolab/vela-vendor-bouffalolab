@@ -23,16 +23,16 @@
 OUTPUT_ARCH(riscv)
 ENTRY(__start)
 
-/* WRAM (CONFIG_BL616CL_WRAM_SIZE) sits at the top of the OCRAM+WRAM
- * window and BLE EM (CONFIG_BL616CL_EM_SIZE) is carved from its top, as in
- * the Bouffalo SDK bl616cl_common.ld.in. The rest is ram_wifi: the macsw
- * shared objects and the NuttX IOB pool (CONFIG_IOB_SECTION="SHAREDRAM"),
- * which the MAC transmits from directly.
+/* BLE EM (CONFIG_BL616CL_EM_SIZE) is carved from the top of WRAM, as in
+ * the Bouffalo SDK bl616cl_common.ld.in. ram_wifi is the WRAM below EM on
+ * the nocache alias, the only view the Wi-Fi hardware uses. .wifibss sits
+ * at its top and the heap, on the cacheable alias, runs up to where
+ * .wifibss starts, so the split follows the size of .wifibss instead of a
+ * fixed WRAM size.
  */
 
-__bl616cl_wram_size = CONFIG_BL616CL_WRAM_SIZE * 1024;
 __LD_CONFIG_EM_SEL = CONFIG_BL616CL_EM_SIZE * 1024;
-__bl616cl_ram_size = 224K - 1K + 160K - __bl616cl_wram_size;
+__bl616cl_ram_size = 224K - 1K + 160K - __LD_CONFIG_EM_SEL;
 
 MEMORY
 {
@@ -42,8 +42,7 @@ MEMORY
                LENGTH = __bl616cl_app_size - 4K - 6K
   ram_nocache (!rx) : ORIGIN = 0x20fc0400, LENGTH = __bl616cl_ram_size
   ram (!rx) : ORIGIN = 0x60fc0400, LENGTH = __bl616cl_ram_size
-  ram_wifi (wxa) : ORIGIN = 0x21020000 - __bl616cl_wram_size,
-                   LENGTH = __bl616cl_wram_size - __LD_CONFIG_EM_SEL
+  ram_wifi (wxa) : ORIGIN = 0x20ff8000, LENGTH = 160K - __LD_CONFIG_EM_SEL
 }
 
 /* Let ld derive program headers from section attributes. Script-generated
@@ -63,7 +62,6 @@ SECTIONS
 
   __bl616cl_cache_xip_end = ABSOLUTE(ORIGIN(rom_header) + 4M);
   __bl616cl_cache_ram_start = ABSOLUTE(ORIGIN(ram));
-  __bl616cl_cache_ram_end = ABSOLUTE(ORIGIN(ram) + LENGTH(ram));
 
   .init ORIGIN(rom_header) :
   {
@@ -207,11 +205,15 @@ SECTIONS
   } > ram
 
   /* Wi-Fi shared data: macsw descriptors, wl80211 RX buffer memory and
-   * the NuttX IOB pool must live in the WiFi-visible RAM window
-   * (collection modeled after the BL4 baseline .wifibss section).
+   * the NuttX IOB pool (CONFIG_IOB_SECTION="SHAREDRAM"), which the MAC
+   * transmits from directly (collection modeled after the BL4 baseline
+   * .wifibss section). The start is aligned down to the section
+   * alignment, so the padding inside and the size do not depend on the
+   * address.
    */
 
-  .wifibss (NOLOAD) :
+  .wifibss ((ORIGIN(ram_wifi) + LENGTH(ram_wifi) - SIZEOF(.wifibss)) &
+            ~(MAX(ALIGNOF(.wifibss), 16) - 1)) (NOLOAD) :
   {
     PROVIDE(__wifi_bss_start = ABSOLUTE(.));
     _sshram = ABSOLUTE(.);
@@ -232,6 +234,11 @@ SECTIONS
     PROVIDE(__wifi_bss_end = ABSOLUTE(.));
   } > ram_wifi
 
+  /* The part of ram_wifi taken by .wifibss; the heap gets the rest. */
+
+  __ram_wifi_start = ADDR(.wifibss);
+  __ram_wifi_end = ORIGIN(ram_wifi) + LENGTH(ram_wifi);
+
   .bss (NOLOAD) : AT(ADDR(.bss))
   {
     _sbss = ABSOLUTE(.);
@@ -250,8 +257,11 @@ SECTIONS
     __StackTop = ABSOLUTE(.);
   } > ram
 
+  /* The heap runs up to the cacheable alias of __ram_wifi_start. */
+
   __HeapBase = ALIGN(__StackTop, 16);
-  __HeapLimit = ORIGIN(ram) + LENGTH(ram);
+  __HeapLimit = __ram_wifi_start - ORIGIN(ram_nocache) + ORIGIN(ram);
+  __bl616cl_cache_ram_end = ABSOLUTE(__HeapLimit);
 
   /* Special RAM sections consume their inputs first. Place the remaining
    * XIP code and constants after their flash load images.  Start the code
@@ -488,14 +498,12 @@ SECTIONS
   ASSERT(__HeapBase < __HeapLimit, "BL616CL cacheable RAM overflow")
   ASSERT(__bl616cl_app_size > 4K + 6K,
          "BL616CL application partition is too small")
-  ASSERT(__bl616cl_wram_size >= 64K && __bl616cl_wram_size <= 160K,
-         "BL616CL WRAM size is invalid")
   ASSERT(__LD_CONFIG_EM_SEL == 0 || __LD_CONFIG_EM_SEL == 16K ||
          __LD_CONFIG_EM_SEL == 32K, "BL616CL EM size is invalid")
-  ASSERT(__LD_CONFIG_EM_SEL <= __bl616cl_wram_size,
-         "BL616CL EM exceeds WRAM")
-  ASSERT(__HeapLimit - 0x40000000 == ORIGIN(ram_wifi),
-         "BL616CL heap overlaps WiFi RAM")
+  ASSERT(ADDR(.wifibss) >= 0x20ff8000,
+         "BL616CL .wifibss must stay in WRAM")
+  ASSERT(ADDR(.wifibss) + SIZEOF(.wifibss) <= __ram_wifi_end,
+         "BL616CL .wifibss overlaps EM")
   ASSERT((__StackTop & 15) == 0, "BL616CL idle stack must be 16-byte aligned")
 
   /DISCARD/ :
