@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_efuse_mac.c
+ * vendor/bouffalolab/chips/bl616cl/bl616cl_efuse_mac.c
  *
  * BL616CL STA MAC-address read for the wl80211 host port: the factory
  * MAC from the SoC mfg media layer (RF-parameter flash area, then efuse

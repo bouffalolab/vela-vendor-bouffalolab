@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_rfparam_ext.c
+ * vendor/bouffalolab/chips/bl616cl/bl616cl_rfparam_ext.c
  *
  * BL616CL rfparam adapter extensions for the STA-only build. The newer
  * rfparam blob (BL4 baseline) exposes ant-gain management and a country

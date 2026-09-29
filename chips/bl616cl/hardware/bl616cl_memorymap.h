@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/chips/bl616cl/hardware/bl616cl_memorymap.h
+ * vendor/bouffalolab/chips/bl616cl/hardware/bl616cl_memorymap.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
