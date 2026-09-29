@@ -121,7 +121,7 @@ python3 vendor/bouffalolab/tools/bl616cl/perf/perfmon_report.py \
 
 2026-09-25 的采样中，当前列表已包含所有达到阈值的 Wi-Fi 函数，只有
 `mm_timer_*`、`rc_*` 等低于 0.1% 的函数没有列入。R2 之后的采样又列出
-`wl80211_output`、`bl616_wifi_sta_txdone`、`wlan_sta_tx_done`，A/B 后没有
+`wl80211_output`、`bl616cl_wifi_sta_txdone`、`wlan_sta_tx_done`，A/B 后没有
 加入。
 
 ### 4. A/B 确认收益

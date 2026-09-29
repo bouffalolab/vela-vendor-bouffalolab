@@ -194,7 +194,7 @@ struct wlan_ops_s
 /* Reference count of register Wi-Fi handler */
 
 static uint8_t g_callback_register_ref = 0;
-static struct wlan_priv_s g_wlan_priv[BL616_WLAN_DEVS];
+static struct wlan_priv_s g_wlan_priv[BL616CL_WLAN_DEVS];
 
 #ifdef CONFIG_BL616CL_WLAN_RX_ZEROCOPY
 /* Host RX slots currently wrapped as IOBs */
@@ -204,32 +204,32 @@ static int g_wlan_rx_held;
 
 static const struct wlan_ops_s g_sta_ops =
 {
-  .start       = bl616_wifi_sta_start,
-  .send        = bl616_wifi_sta_send_data,
-  .essid       = bl616_wifi_sta_essid,
-  .bssid       = bl616_wifi_sta_bssid,
-  .passwd      = bl616_wifi_sta_password,
-  .mode        = bl616_wifi_sta_mode,
-  .auth        = bl616_wifi_sta_auth,
-  .freq        = bl616_wifi_sta_freq,
-  .bitrate     = bl616_wifi_sta_bitrate,
-  .txpower     = bl616_wifi_sta_txpower,
-  .channel     = bl616_wifi_sta_channel,
-  .country     = bl616_wifi_sta_country,
-  .rssi        = bl616_wifi_sta_rssi,
-  .connect     = bl616_wifi_sta_connect,
-  .scan        = bl616_wifi_sta_scan,
-  .scan_result = bl616_wifi_sta_scan_result,
-  .disconnect  = bl616_wifi_sta_disconnect,
-  .pta         = bl616_wifi_sta_pta,
-  .stop        = bl616_wifi_sta_stop,
-  .dtim        = bl616_wifi_sta_dtim,
-  .powersave   = bl616_wifi_sta_powersave,
-  .pmksa       = bl616_wifi_sta_pmksa,
+  .start       = bl616cl_wifi_sta_start,
+  .send        = bl616cl_wifi_sta_send_data,
+  .essid       = bl616cl_wifi_sta_essid,
+  .bssid       = bl616cl_wifi_sta_bssid,
+  .passwd      = bl616cl_wifi_sta_password,
+  .mode        = bl616cl_wifi_sta_mode,
+  .auth        = bl616cl_wifi_sta_auth,
+  .freq        = bl616cl_wifi_sta_freq,
+  .bitrate     = bl616cl_wifi_sta_bitrate,
+  .txpower     = bl616cl_wifi_sta_txpower,
+  .channel     = bl616cl_wifi_sta_channel,
+  .country     = bl616cl_wifi_sta_country,
+  .rssi        = bl616cl_wifi_sta_rssi,
+  .connect     = bl616cl_wifi_sta_connect,
+  .scan        = bl616cl_wifi_sta_scan,
+  .scan_result = bl616cl_wifi_sta_scan_result,
+  .disconnect  = bl616cl_wifi_sta_disconnect,
+  .pta         = bl616cl_wifi_sta_pta,
+  .stop        = bl616cl_wifi_sta_stop,
+  .dtim        = bl616cl_wifi_sta_dtim,
+  .powersave   = bl616cl_wifi_sta_powersave,
+  .pmksa       = bl616cl_wifi_sta_pmksa,
 };
 
 #ifdef CONFIG_PM
-struct bl616_wlan_pm_config_s
+struct bl616cl_wlan_pm_config_s
 {
   struct pm_callback_s pm_cb;
 };
@@ -238,7 +238,7 @@ static void up_pm_notify(struct pm_callback_s *cb,
                          int domain,
                          enum pm_state_e pmstate);
 
-static struct bl616_wlan_pm_config_s g_wlan_pm =
+static struct bl616cl_wlan_pm_config_s g_wlan_pm =
 {
   .pm_cb.notify  = up_pm_notify,
 };
@@ -291,7 +291,7 @@ static void wlan_ipv6multicast(struct wlan_priv_s *priv);
 #endif
 
 #ifdef CONFIG_PM
-static int bl616_wlan_pm_init(void);
+static int bl616cl_wlan_pm_init(void);
 static void up_pm_notify(struct pm_callback_s *cb,
                          int domain,
                          enum pm_state_e pmstate);
@@ -1471,7 +1471,7 @@ static int wlan_ioctl(struct net_driver_s *dev, int cmd, unsigned long arg)
 #endif /* CONFIG_NETDEV_IOCTL */
 
 /****************************************************************************
- * Name: bl616_net_initialize
+ * Name: bl616cl_net_initialize
  *
  * Description:
  *   Initialize the bl616 driver
@@ -1485,7 +1485,7 @@ static int wlan_ioctl(struct net_driver_s *dev, int cmd, unsigned long arg)
  *
  ****************************************************************************/
 
-static int bl616_net_initialize(int devno,
+static int bl616cl_net_initialize(int devno,
                                 uint8_t *mac_addr,
                                 const struct wlan_ops_s *ops)
 {
@@ -1565,7 +1565,7 @@ static void up_pm_notify(struct pm_callback_s *cb,
 }
 
 /****************************************************************************
- * Name: bl616_net_initialize
+ * Name: bl616cl_net_initialize
  *
  * Description:
  *   Initialize the bl616 driver
@@ -1579,10 +1579,10 @@ static void up_pm_notify(struct pm_callback_s *cb,
  *
  ****************************************************************************/
 
-static int bl616_wlan_pm_init(void)
+static int bl616cl_wlan_pm_init(void)
 {
   int ret;
-  struct wlan_priv_s *priv = &g_wlan_priv[BL616_WLAN_STA_DEVNO];
+  struct wlan_priv_s *priv = &g_wlan_priv[BL616CL_WLAN_STA_DEVNO];
 
   /* Register to receive power management callbacks */
 
@@ -1611,7 +1611,7 @@ static int bl616_wlan_pm_init(void)
 
 static int wlan_sta_rx_done(void *net, void *buffer, uint16_t len, void *eb)
 {
-  struct wlan_priv_s *priv = &g_wlan_priv[BL616_WLAN_STA_DEVNO];
+  struct wlan_priv_s *priv = &g_wlan_priv[BL616CL_WLAN_STA_DEVNO];
 
   return wlan_rx_done(priv, buffer, len, net, eb);
 }
@@ -1636,7 +1636,7 @@ static int wlan_sta_rx_done(void *net, void *buffer, uint16_t len, void *eb)
 
 static void wlan_sta_tx_done(void *arg)
 {
-  struct wlan_priv_s *priv = &g_wlan_priv[BL616_WLAN_STA_DEVNO];
+  struct wlan_priv_s *priv = &g_wlan_priv[BL616CL_WLAN_STA_DEVNO];
 
   wlan_tx_done(priv);
 }
@@ -1646,7 +1646,7 @@ static void wlan_sta_tx_done(void *arg)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: bl616_wlan_sta_get_netdev
+ * Name: bl616cl_wlan_sta_get_netdev
  *
  * Description:
  *   Get Wi-Fi station netcard driver
@@ -1659,13 +1659,13 @@ static void wlan_sta_tx_done(void *arg)
  *
  ****************************************************************************/
 
-struct net_driver_s *bl616_wlan_sta_get_netdev(void)
+struct net_driver_s *bl616cl_wlan_sta_get_netdev(void)
 {
-  return &g_wlan_priv[BL616_WLAN_STA_DEVNO].dev;
+  return &g_wlan_priv[BL616CL_WLAN_STA_DEVNO].dev;
 }
 
 /****************************************************************************
- * Name: bl616_wlan_sta_set_linkstatus
+ * Name: bl616cl_wlan_sta_set_linkstatus
  *
  * Description:
  *   Set Wi-Fi station link status
@@ -1680,10 +1680,10 @@ struct net_driver_s *bl616_wlan_sta_get_netdev(void)
  *
  ****************************************************************************/
 
-int bl616_wlan_sta_set_linkstatus(bool linkstatus)
+int bl616cl_wlan_sta_set_linkstatus(bool linkstatus)
 {
   int ret = -EINVAL;
-  struct wlan_priv_s *priv = &g_wlan_priv[BL616_WLAN_STA_DEVNO];
+  struct wlan_priv_s *priv = &g_wlan_priv[BL616CL_WLAN_STA_DEVNO];
 
   if (priv != NULL)
     {
@@ -1710,7 +1710,7 @@ int bl616_wlan_sta_set_linkstatus(bool linkstatus)
 }
 
 /****************************************************************************
- * Name: bl616_wlan_sta_initialize
+ * Name: bl616cl_wlan_sta_initialize
  *
  * Description:
  *   Initialize the bl616 WLAN station netcard driver
@@ -1723,12 +1723,12 @@ int bl616_wlan_sta_set_linkstatus(bool linkstatus)
  *
  ****************************************************************************/
 
-int bl616_wlan_sta_initialize(void)
+int bl616cl_wlan_sta_initialize(void)
 {
   int ret;
   uint8_t eth_mac[6];
 
-  ret = bl616_wifi_adapter_init();
+  ret = bl616cl_wifi_adapter_init();
   if (ret < 0)
     {
       wlerr("ERROR: Initialize Wi-Fi adapter error: %d\n", ret);
@@ -1736,10 +1736,10 @@ int bl616_wlan_sta_initialize(void)
     }
 
 #ifdef CONFIG_PM
-  bl616_wlan_pm_init();
+  bl616cl_wlan_pm_init();
 #endif
 
-  ret = bl616_wifi_sta_read_mac(eth_mac);
+  ret = bl616cl_wifi_sta_read_mac(eth_mac);
   if (ret < 0)
     {
       wlerr("ERROR: Failed to read MAC address\n");
@@ -1754,16 +1754,16 @@ int bl616_wlan_sta_initialize(void)
         eth_mac[4],
         eth_mac[5]);
 
-  g_wlan_priv[BL616_WLAN_STA_DEVNO].ref = 0;
-  ret = bl616_net_initialize(BL616_WLAN_STA_DEVNO, eth_mac, &g_sta_ops);
+  g_wlan_priv[BL616CL_WLAN_STA_DEVNO].ref = 0;
+  ret = bl616cl_net_initialize(BL616CL_WLAN_STA_DEVNO, eth_mac, &g_sta_ops);
   if (ret < 0)
     {
       wlerr("ERROR: Failed to initialize net\n");
       return ret;
     }
 
-  bl616_wifi_sta_register_recv_cb(wlan_sta_rx_done);
-  bl616_wifi_sta_register_txdone_cb(wlan_sta_tx_done);
+  bl616cl_wifi_sta_register_recv_cb(wlan_sta_rx_done);
+  bl616cl_wifi_sta_register_txdone_cb(wlan_sta_tx_done);
 
   ninfo("INFO: Initialize Wi-Fi station success net\n");
 

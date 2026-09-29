@@ -3,7 +3,7 @@
  *
  * BL616CL rfparam adapter extensions for the STA-only build. The newer
  * rfparam blob (BL4 baseline) exposes ant-gain management and a country
- * code setter consumed by bl616_wifi_adapter ioctl paths; the current
+ * code setter consumed by bl616cl_wifi_adapter ioctl paths; the current
  * drivers/rfparam sources do not carry them yet.
  *
  * This file provides the interface while keeping behavior explicit:

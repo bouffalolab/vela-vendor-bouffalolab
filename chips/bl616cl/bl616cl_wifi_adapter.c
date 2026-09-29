@@ -228,7 +228,7 @@ static int adapter_wifi_lock(bool lock)
 
 #if 0
 /****************************************************************************
- * Name: bl616_wifi_auth_trans
+ * Name: bl616cl_wifi_auth_trans
  *
  * Description:
  *   Converts a auth type values to WEXT auth type values.
@@ -241,7 +241,7 @@ static int adapter_wifi_lock(bool lock)
  *
  ****************************************************************************/
 
-static int bl616_wifi_auth_trans(uint32_t wifi_auth)
+static int bl616cl_wifi_auth_trans(uint32_t wifi_auth)
 {
   int auth_mode = IW_AUTH_WPA_VERSION_DISABLED;
 
@@ -270,7 +270,7 @@ static int bl616_wifi_auth_trans(uint32_t wifi_auth)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_cipher_trans
+ * Name: bl616cl_wifi_cipher_trans
  *
  * Description:
  *   Converts a cipher type values to WEXT cipher type values.
@@ -283,7 +283,7 @@ static int bl616_wifi_auth_trans(uint32_t wifi_auth)
  *
  ****************************************************************************/
 
-static int bl616_wifi_cipher_trans(uint32_t wifi_cipher)
+static int bl616cl_wifi_cipher_trans(uint32_t wifi_cipher)
 {
   int cipher_mode = IW_AUTH_CIPHER_NONE;
 
@@ -325,7 +325,7 @@ static int bl616_wifi_cipher_trans(uint32_t wifi_cipher)
 #endif
 
 /****************************************************************************
- * Name: bl616_freq_to_channel
+ * Name: bl616cl_freq_to_channel
  *
  * Description:
  *   convert freq to channel
@@ -338,7 +338,7 @@ static int bl616_wifi_cipher_trans(uint32_t wifi_cipher)
  *
  ****************************************************************************/
 
-static int bl616_freq_to_channel(int freq)
+static int bl616cl_freq_to_channel(int freq)
 {
   int channel = freq;
 
@@ -393,7 +393,7 @@ static int bl616_freq_to_channel(int freq)
 }
 
 /****************************************************************************
- * Name: bl616_channel_to_freq
+ * Name: bl616cl_channel_to_freq
  *
  * Description:
  *  convert channel to freq
@@ -406,7 +406,7 @@ static int bl616_freq_to_channel(int freq)
  *
  ****************************************************************************/
 
-static inline uint16_t bl616_channel_to_freq(int channel)
+static inline uint16_t bl616cl_channel_to_freq(int channel)
 {
   if ((channel >= 1) && (channel <= 14))
     {
@@ -586,7 +586,7 @@ static int format_scan_result_to_wapi(struct iwreq *req)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_clear_info
+ * Name: bl616cl_wifi_sta_clear_info
  *
  * Description:
  *   Clear Wi-Fi station info
@@ -599,7 +599,7 @@ static int format_scan_result_to_wapi(struct iwreq *req)
  *
  ****************************************************************************/
 
-static void bl616_wifi_sta_clear_info(void)
+static void bl616cl_wifi_sta_clear_info(void)
 {
   memset(g_wifi_cfg.pwd, 0x0, sizeof(g_wifi_cfg.pwd));
   g_wifi_cfg.pwd_len = 0;
@@ -614,7 +614,7 @@ static void bl616_wifi_sta_clear_info(void)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_set_quick_connect
+ * Name: bl616cl_wifi_sta_set_quick_connect
  *
  * Description:
  *   Set quick connect flag
@@ -624,12 +624,12 @@ static void bl616_wifi_sta_clear_info(void)
  *
  ****************************************************************************/
 
-static inline void bl616_wifi_sta_set_quick_connect(bool quick_connect)
+static inline void bl616cl_wifi_sta_set_quick_connect(bool quick_connect)
 {
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_set_lowreate_connect
+ * Name: bl616cl_wifi_sta_set_lowrate_connect
  *
  * Description:
  *   Set low rate connect flag
@@ -639,7 +639,7 @@ static inline void bl616_wifi_sta_set_quick_connect(bool quick_connect)
  *
  ****************************************************************************/
 
-static inline void bl616_wifi_sta_set_lowrate_connect(bool lowrate_connect)
+static inline void bl616cl_wifi_sta_set_lowrate_connect(bool lowrate_connect)
 {
 }
 
@@ -751,7 +751,7 @@ uint32_t wifi_sys_now_ms(bool isr)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_adapter_init
+ * Name: bl616cl_wifi_adapter_init
  *
  * Description:
  *   Initialize Wi-Fi adapter
@@ -764,7 +764,7 @@ uint32_t wifi_sys_now_ms(bool isr)
  *
  ****************************************************************************/
 
-int bl616_wifi_adapter_init(void)
+int bl616cl_wifi_adapter_init(void)
 {
   int semcount;
 
@@ -832,7 +832,7 @@ int bl616_wifi_adapter_init(void)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_start
+ * Name: bl616cl_wifi_sta_start
  *
  * Description:
  *   Start Wi-Fi station.
@@ -846,7 +846,7 @@ int bl616_wifi_adapter_init(void)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_start(void)
+int bl616cl_wifi_sta_start(void)
 {
   g_wifi_cfg.mode = IW_MODE_INFRA;
   g_wifi_cfg.pta = IW_PTA_PRIORITY_BALANCED;
@@ -855,7 +855,7 @@ int bl616_wifi_sta_start(void)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_stop
+ * Name: bl616cl_wifi_sta_stop
  *
  * Description:
  *   Stop Wi-Fi station.
@@ -869,19 +869,19 @@ int bl616_wifi_sta_start(void)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_stop(void)
+int bl616cl_wifi_sta_stop(void)
 {
   /* Clear sta info */
 
   g_wifi_cfg.pta = IW_PTA_PRIORITY_BALANCED;
 
-  bl616_wifi_sta_clear_info();
+  bl616cl_wifi_sta_clear_info();
 
   return OK;
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_register_txdone_cb
+ * Name: bl616cl_wifi_sta_register_txdone_cb
  *
  * Description:
  *   Register the station TX done callback function.
@@ -894,15 +894,15 @@ int bl616_wifi_sta_stop(void)
  *
  ****************************************************************************/
 
-void bl616_wifi_sta_register_txdone_cb(wifi_txdone_cb_t cb)
+void bl616cl_wifi_sta_register_txdone_cb(wifi_txdone_cb_t cb)
 {
   extern void internal_register_txdone_cb(void (*cb)(void));
 
   g_sta_txdone_cb = cb;
-  internal_register_txdone_cb(bl616_wifi_sta_txdone);
+  internal_register_txdone_cb(bl616cl_wifi_sta_txdone);
 }
 
-void bl616_wifi_sta_txdone(void)
+void bl616cl_wifi_sta_txdone(void)
 {
   if (g_sta_txdone_cb != NULL)
     {
@@ -912,7 +912,7 @@ void bl616_wifi_sta_txdone(void)
 
 
 /****************************************************************************
- * Name: bl616_wifi_sta_send_data
+ * Name: bl616cl_wifi_sta_send_data
  *
  * Description:
  *   Send data to Wi-Fi station.
@@ -928,7 +928,7 @@ void bl616_wifi_sta_txdone(void)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_send_data(struct iob_s *iob,
+int bl616cl_wifi_sta_send_data(struct iob_s *iob,
                              uint16_t llhdrlen,
                              uint16_t offset)
 {
@@ -941,7 +941,7 @@ int bl616_wifi_sta_send_data(struct iob_s *iob,
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_register_recv_cb
+ * Name: bl616cl_wifi_sta_register_recv_cb
  *
  * Description:
  *   Register Wi-Fi station receive packet callback function
@@ -955,7 +955,7 @@ int bl616_wifi_sta_send_data(struct iob_s *iob,
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_register_recv_cb(int (*recv_cb)(void *net,
+int bl616cl_wifi_sta_register_recv_cb(int (*recv_cb)(void *net,
                                                    void *buffer,
                                                    uint16_t len,
                                                    void *eb))
@@ -969,7 +969,7 @@ int bl616_wifi_sta_register_recv_cb(int (*recv_cb)(void *net,
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_read_mac
+ * Name: bl616cl_wifi_sta_read_mac
  *
  * Description:
  *   Read MAC address from efuse
@@ -983,13 +983,13 @@ int bl616_wifi_sta_register_recv_cb(int (*recv_cb)(void *net,
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_read_mac(uint8_t *mac)
+int bl616cl_wifi_sta_read_mac(uint8_t *mac)
 {
   return wifi_mgmr_sta_mac_get(mac);
 }
 
 /****************************************************************************
- * Name: bl616_wifi_set_password
+ * Name: bl616cl_wifi_set_password
  *
  * Description:
  *   Set/Get Wi-Fi station password
@@ -1004,13 +1004,13 @@ int bl616_wifi_sta_read_mac(uint8_t *mac)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_password(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_password(struct iwreq *iwr, bool set)
 {
   struct iw_encode_ext *ext = iwr->u.encoding.pointer;
   uint8_t *pdata = ext->key;
   int ret;
 
-  /* Serialize with bl616_wifi_sta_connect(), which reads pwd */
+  /* Serialize with bl616cl_wifi_sta_connect(), which reads pwd */
 
   ret = adapter_wifi_lock(true);
   if (ret < 0)
@@ -1066,7 +1066,7 @@ int bl616_wifi_sta_password(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_essid
+ * Name: bl616cl_wifi_sta_essid
  *
  * Description:
  *   Set/Get Wi-Fi station ESSID
@@ -1081,7 +1081,7 @@ int bl616_wifi_sta_password(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_essid(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_essid(struct iwreq *iwr, bool set)
 {
   uint8_t *pdata = iwr->u.essid.pointer;
 
@@ -1112,7 +1112,7 @@ int bl616_wifi_sta_essid(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_bssid
+ * Name: bl616cl_wifi_sta_bssid
  *
  * Description:
  *   Set/Get Wi-Fi station BSSID
@@ -1127,7 +1127,7 @@ int bl616_wifi_sta_essid(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_bssid(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_bssid(struct iwreq *iwr, bool set)
 {
   struct iwreq *req = (struct iwreq *)iwr;
   int ret = OK;
@@ -1175,7 +1175,7 @@ static int is_ascii_hex_char(char c)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_connect
+ * Name: bl616cl_wifi_sta_connect
  *
  * Description:
  *   Trigger Wi-Fi station connection action
@@ -1189,7 +1189,7 @@ static int is_ascii_hex_char(char c)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_connect(void)
+int bl616cl_wifi_sta_connect(void)
 {
   int ret;
   int retry;
@@ -1246,7 +1246,7 @@ int bl616_wifi_sta_connect(void)
 
   freq = g_wifi_cfg.freq;
 
-  bl616_wifi_sta_set_quick_connect(true);
+  bl616cl_wifi_sta_set_quick_connect(true);
 
   /* An AP may drop a PMF station in its driver only (e.g. Broadcom
    * "wl deauthenticate") while hostapd keeps the old association.  The
@@ -1337,7 +1337,7 @@ int bl616_wifi_sta_connect(void)
 
       /* Clear sta info */
 
-      bl616_wifi_sta_clear_info();
+      bl616cl_wifi_sta_clear_info();
 
     }
 
@@ -1347,7 +1347,7 @@ int bl616_wifi_sta_connect(void)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_disconnect
+ * Name: bl616cl_wifi_sta_disconnect
  *
  * Description:
  *   Trigger Wi-Fi station disconnection action
@@ -1361,7 +1361,7 @@ int bl616_wifi_sta_connect(void)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_disconnect(void)
+int bl616cl_wifi_sta_disconnect(void)
 {
   int ret;
 
@@ -1382,7 +1382,7 @@ int bl616_wifi_sta_disconnect(void)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_mode
+ * Name: bl616cl_wifi_sta_mode
  *
  * Description:
  *   Set/Get Wi-Fi Station mode code.
@@ -1397,7 +1397,7 @@ int bl616_wifi_sta_disconnect(void)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_mode(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_mode(struct iwreq *iwr, bool set)
 {
   if (set)
     g_wifi_cfg.mode = iwr->u.mode;
@@ -1408,7 +1408,7 @@ int bl616_wifi_sta_mode(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_auth
+ * Name: bl616cl_wifi_sta_auth
  *
  * Description:
  *   Set/Get station authentication mode params.
@@ -1423,7 +1423,7 @@ int bl616_wifi_sta_mode(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_auth(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_auth(struct iwreq *iwr, bool set)
 {
   int cmd;
 
@@ -1480,7 +1480,7 @@ int bl616_wifi_sta_auth(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_freq
+ * Name: bl616cl_wifi_sta_freq
  *
  * Description:
  *   Set/Get station frequency.
@@ -1495,7 +1495,7 @@ int bl616_wifi_sta_auth(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_freq(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_freq(struct iwreq *iwr, bool set)
 {
   struct iwreq *req = (struct iwreq *)iwr;
 
@@ -1509,8 +1509,8 @@ int bl616_wifi_sta_freq(struct iwreq *iwr, bool set)
           return -EINVAL;
         }
 
-      g_wifi_cfg.channel = bl616_freq_to_channel(req->u.freq.m);
-      g_wifi_cfg.freq = bl616_channel_to_freq(g_wifi_cfg.channel);
+      g_wifi_cfg.channel = bl616cl_freq_to_channel(req->u.freq.m);
+      g_wifi_cfg.freq = bl616cl_channel_to_freq(g_wifi_cfg.channel);
 
       if (g_wifi_cfg.channel == 0)
         return -EINVAL;
@@ -1542,7 +1542,7 @@ int bl616_wifi_sta_freq(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_bitrate
+ * Name: bl616cl_wifi_sta_bitrate
  *
  * Description:
  *   Get station default bit rate (Mbps).
@@ -1557,7 +1557,7 @@ int bl616_wifi_sta_freq(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_bitrate(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_bitrate(struct iwreq *iwr, bool set)
 {
   if (set)
     {
@@ -1573,7 +1573,7 @@ int bl616_wifi_sta_bitrate(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_txpower
+ * Name: bl616cl_wifi_sta_txpower
  *
  * Description:
  *   Get station transmit power (dBm).
@@ -1588,7 +1588,7 @@ int bl616_wifi_sta_bitrate(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_txpower(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_txpower(struct iwreq *iwr, bool set)
 {
   int8_t power;
 
@@ -1628,7 +1628,7 @@ int bl616_wifi_sta_txpower(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_pta
+ * Name: bl616cl_wifi_sta_pta
  *
  * Description:
  *   Get station PTA priority parameters.
@@ -1643,7 +1643,7 @@ int bl616_wifi_sta_txpower(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_pta(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_pta(struct iwreq *iwr, bool set)
 {
   if (set)
     {
@@ -1658,7 +1658,7 @@ int bl616_wifi_sta_pta(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_channel
+ * Name: bl616cl_wifi_sta_channel
  *
  * Description:
  *   Get station range of channel parameters.
@@ -1673,7 +1673,7 @@ int bl616_wifi_sta_pta(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_channel(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_channel(struct iwreq *iwr, bool set)
 {
   int ret;
   int k;
@@ -1707,7 +1707,7 @@ int bl616_wifi_sta_channel(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_country
+ * Name: bl616cl_wifi_sta_country
  *
  * Description:
  *   Configure country info.
@@ -1722,7 +1722,7 @@ int bl616_wifi_sta_channel(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_country(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_country(struct iwreq *iwr, bool set)
 {
   int ret;
 
@@ -1755,7 +1755,7 @@ int bl616_wifi_sta_country(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_rssi
+ * Name: bl616cl_wifi_sta_rssi
  *
  * Description:
  *   Get Wi-Fi sensitivity (dBm).
@@ -1770,7 +1770,7 @@ int bl616_wifi_sta_country(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_rssi(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_rssi(struct iwreq *iwr, bool set)
 {
   int rssi = 0;
 
@@ -1792,7 +1792,7 @@ int bl616_wifi_sta_rssi(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_scan
+ * Name: bl616cl_wifi_sta_scan
  *
  * Description:
  *   Scan APs.
@@ -1806,7 +1806,7 @@ int bl616_wifi_sta_rssi(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_scan(struct iwreq *iwr)
+int bl616cl_wifi_sta_scan(struct iwreq *iwr)
 {
   struct iw_scan_req *req;
   char ssid[SSID_MAX_LEN + 1] = { 0 };
@@ -1898,7 +1898,7 @@ int bl616_wifi_sta_scan(struct iwreq *iwr)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_dtim
+ * Name: bl616cl_wifi_dtim
  *
  * Description:
  *   Set/Get DTIM interval.
@@ -1911,7 +1911,7 @@ int bl616_wifi_sta_scan(struct iwreq *iwr)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_dtim(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_dtim(struct iwreq *iwr, bool set)
 {
   struct iwreq *req = (struct iwreq *)iwr;
   DEBUGASSERT(req != NULL);
@@ -1931,7 +1931,7 @@ int bl616_wifi_sta_dtim(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_powersave
+ * Name: bl616cl_wifi_powersave
  *
  * Description:
  *   Set/Get power save mode.
@@ -1944,7 +1944,7 @@ int bl616_wifi_sta_dtim(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_powersave(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_powersave(struct iwreq *iwr, bool set)
 {
   struct iwreq *req = (struct iwreq *)iwr;
 
@@ -1975,7 +1975,7 @@ int bl616_wifi_sta_powersave(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_pmksa
+ * Name: bl616cl_wifi_sta_pmksa
  *
  * Description
  *   Set/Get PMKSA cache.
@@ -1989,7 +1989,7 @@ int bl616_wifi_sta_powersave(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_pmksa(struct iwreq *iwr, bool set)
+int bl616cl_wifi_sta_pmksa(struct iwreq *iwr, bool set)
 {
   uint8_t *pmk = iwr->u.data.pointer;
   uint16_t len = iwr->u.data.length;
@@ -2057,7 +2057,7 @@ int bl616_wifi_sta_pmksa(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616_wifi_sta_scan_result
+ * Name: bl616cl_wifi_sta_scan_result
  *
  * Description:
  *   Get scan result.
@@ -2070,7 +2070,7 @@ int bl616_wifi_sta_pmksa(struct iwreq *iwr, bool set)
  *
  ****************************************************************************/
 
-int bl616_wifi_sta_scan_result(struct iwreq *iwr)
+int bl616cl_wifi_sta_scan_result(struct iwreq *iwr)
 {
   int ret;
 
@@ -2136,7 +2136,7 @@ void bl616_wifi_event_handler(void *arg1, uint32_t arg2)
 #endif
 
           if (!g_sta_connected)
-            bl616_wlan_sta_set_linkstatus(true);
+            bl616cl_wlan_sta_set_linkstatus(true);
 
           flags = up_irq_save();
           g_sta_connected = true;
@@ -2169,11 +2169,11 @@ void bl616_wifi_event_handler(void *arg1, uint32_t arg2)
             {
               /* Disconnect event */
 
-              bl616_wlan_sta_set_linkstatus(false);
+              bl616cl_wlan_sta_set_linkstatus(false);
 
               /* Clear sta info */
 
-              bl616_wifi_sta_clear_info();
+              bl616cl_wifi_sta_clear_info();
             }
 
           flags = up_irq_save();

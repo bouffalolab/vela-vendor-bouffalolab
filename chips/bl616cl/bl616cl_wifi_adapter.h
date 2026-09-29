@@ -45,8 +45,8 @@ extern "C"
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define BL616_WLAN_STA_DEVNO    0
-#define BL616_WLAN_DEVS         1
+#define BL616CL_WLAN_STA_DEVNO    0
+#define BL616CL_WLAN_DEVS         1
 
 #define MAC_LEN      (6)
 #define SSID_MAX_LEN (32)
@@ -68,66 +68,66 @@ typedef void (*wifi_txdone_cb_t)(void *arg);
  * Public Function Prototypes
  ****************************************************************************/
 
-int bl616_wifi_adapter_init(void);
+int bl616cl_wifi_adapter_init(void);
 
-int bl616_wifi_sta_start(void);
+int bl616cl_wifi_sta_start(void);
 
-int bl616_wifi_sta_stop(void);
+int bl616cl_wifi_sta_stop(void);
 
-int bl616_wifi_sta_send_data(struct iob_s *iob,
+int bl616cl_wifi_sta_send_data(struct iob_s *iob,
                              uint16_t llhdrlen,
                              uint16_t offset);
 
-int bl616_wifi_sta_register_recv_cb(int (*recv_cb)(void *net,
+int bl616cl_wifi_sta_register_recv_cb(int (*recv_cb)(void *net,
                                                    void *buffer,
                                                    uint16_t len,
                                                    void *eb));
 
-void bl616_wifi_sta_register_txdone_cb(wifi_txdone_cb_t cb);
+void bl616cl_wifi_sta_register_txdone_cb(wifi_txdone_cb_t cb);
 
-void bl616_wifi_sta_txdone(void);
+void bl616cl_wifi_sta_txdone(void);
 
-int bl616_wifi_sta_read_mac(uint8_t *mac);
+int bl616cl_wifi_sta_read_mac(uint8_t *mac);
 
-int bl616_wifi_sta_password(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_password(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_essid(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_essid(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_bssid(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_bssid(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_connect(void);
+int bl616cl_wifi_sta_connect(void);
 
-int bl616_wifi_sta_disconnect(void);
+int bl616cl_wifi_sta_disconnect(void);
 
-int bl616_wifi_sta_scan(struct iwreq *iwr);
+int bl616cl_wifi_sta_scan(struct iwreq *iwr);
 
-int bl616_wifi_sta_scan_result(struct iwreq *iwr);
+int bl616cl_wifi_sta_scan_result(struct iwreq *iwr);
 
-int bl616_wifi_sta_mode(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_mode(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_auth(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_auth(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_freq(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_freq(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_bitrate(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_bitrate(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_txpower(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_txpower(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_channel(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_channel(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_country(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_country(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_rssi(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_rssi(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_pta(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_pta(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_dtim(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_dtim(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_powersave(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_powersave(struct iwreq *iwr, bool set);
 
-int bl616_wifi_sta_pmksa(struct iwreq *iwr, bool set);
+int bl616cl_wifi_sta_pmksa(struct iwreq *iwr, bool set);
 
-void bl616_wifi_stop_callback(void);
+void bl616cl_wifi_stop_callback(void);
 
 /* RF parameter stubs implemented in bl616cl_rfparam_ext.c */
 
