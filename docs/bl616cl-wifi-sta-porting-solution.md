@@ -331,14 +331,14 @@ wl80211 public/private 侧的配套修改如下，BL616CL 与 openvela 需要的
 与原生 SDK 共用的独立修复排在后面，各有 BS 单：
 
 - public `0f53c64`（BS-1551）：lwIP 版 `wl80211_output_raw()` 失败时不再调用完成回调；
-- private `ba8fba8`（BS-1550）：空 SSID 上报不再清除已知 SSID；
-- private `4fb42f0`、public `6454cbe`（BS-1549）：`wl80211_scan_result_lock/unlock` 基于 `rtos_lock()` 实现，生产者在锁外构造记录，`wifi_mgmr.c` 的读者在锁内复制记录。public 这一个要等 private 合入、Jenkins 更新预编译库之后再合。
+
+曾提交的 BS-1550（空 SSID 上报时保留已知 SSID，gerrit 11412）已撤回：按 BS-1151，扫描时总是用最新上报更新 AP 的全部信息，空 SSID 覆盖已知 SSID 是预期行为。
 
 private 的 TX 路径与 master 相同。此前为复制方案加入的 TX pool（private `b86b33e`、`2fee8fe`、`089097b`，public `93e1af5`、`7369603`）已撤回。
 
 `wl80211.h` 强制使用统一的 tree layout，避免不同 translation unit 对 RB tree entry 的大小和布局理解不一致。这是扫描结果树跨 public header、private core 和 chip adapter 时的 ABI 约束。
 
-scan-result tree 由 private 的 `wl80211_scan_result_lock/unlock` 保护，底层是 `rtos_lock()`（FreeRTOS `vTaskEnterCritical`，NuttX `sched_lock`）。持锁期间不得分配或释放内存、打印、回调或阻塞：WiFi task 在锁外构造记录，锁内只链接或合并；`wifi_mgmr.c` 和 chip adapter 在锁内只计数、复制或摘除节点，内存分配、排序和释放都在锁外进行。NuttX 的 `sched_lock` 只在单核上提供互斥。
+scan-result tree 没有锁，Vela 靠 adapter 的 `g_wifi_scan_sem` 保证读写不并发：只有显式扫描写这棵树（连接阶段的扫描写 `connect.c` 自己的候选列表），显式扫描只由 `bl616_wifi_sta_scan()` 发起，`SIOCGIWSCAN` 读取也要先拿同一个信号量，而 `SCAN_DONE` 在扫描 op 出队释放之后才释放它。这个前提在 Vela 打开 `CONFIG_WL80211_P2P` 或出现别的扫描发起方时不再成立，需要重新评估。曾提交的扫描结果锁（BS-1549，gerrit 11413/11423）经评审撤回。
 
 ## 7. TX 资源所有权与稳定性修复
 
