@@ -33,6 +33,12 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
+/* Applications cannot include the SDK headers, so this mirrors
+ * BL616CL_PSRAM_BASE from drivers/soc/bl616cl/std/include/hardware/
+ * bl616cl.h. Chip code also includes hardware/bl616cl_memorymap.h, where
+ * a differing value is reported as a macro redefinition.
+ */
+
 #define BL616CL_PSRAM_BASE          (0x88000000)
 #define BL616CL_PSRAM_NOCACHE_BASE  0x18000000u
 

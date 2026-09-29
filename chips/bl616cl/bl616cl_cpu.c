@@ -32,6 +32,8 @@
 #include "hardware/bl616cl_core.h"
 #ifdef CONFIG_BL616CL_PSRAM
 #include <arch/chip/bl616cl_psram.h>
+
+#include "hardware/bl616cl_memorymap.h"
 #endif
 
 /****************************************************************************
