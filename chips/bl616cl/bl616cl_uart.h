@@ -34,7 +34,25 @@
  ****************************************************************************/
 
 #ifdef CONFIG_BL616CL_UART1
+
+/****************************************************************************
+ * Name: bl616cl_uart1_register
+ *
+ * Description:
+ *   Set the TX and RX pins of UART1 and register it as /dev/ttyS1.
+ *
+ * Input Parameters:
+ *   txpin - GPIO pin used for UART1 TX.
+ *   rxpin - GPIO pin used for UART1 RX.
+ *
+ * Returned Value:
+ *   The result of uart_register(): zero (OK) on success; a negated errno
+ *   value on failure.
+ *
+ ****************************************************************************/
+
 int bl616cl_uart1_register(uint8_t txpin, uint8_t rxpin);
+
 #endif
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_UART_H */

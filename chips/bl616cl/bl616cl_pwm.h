@@ -35,6 +35,23 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_pwm_initialize
+ *
+ * Description:
+ *   Get the PWM lower half. Only the fixed channel and pin of this port are
+ *   supported. Looks up the PWM and GPIO devices.
+ *
+ * Input Parameters:
+ *   channel - PWM channel number; must be BL616CL_PWM_CHANNEL
+ *   pin     - GPIO pin number; must be BL616CL_PWM_PIN
+ *
+ * Returned Value:
+ *   A pointer to the PWM lower half on success; NULL if the channel or pin is
+ *   unsupported or a device lookup fails.
+ *
+ ****************************************************************************/
+
 struct pwm_lowerhalf_s *bl616cl_pwm_initialize(uint8_t channel,
                                                uint8_t pin);
 

@@ -31,6 +31,23 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_bus_error_initialize
+ *
+ * Description:
+ *   Enable BL616CL MCU bus error and timeout traps after core bring-up.
+ *   Attach the panic handler to the BMX MCU bus error and timeout interrupts,
+ *   enable the bus timeout and enable both interrupts.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   Errors are returned by irq_attach().
+ *
+ ****************************************************************************/
+
 int bl616cl_bus_error_initialize(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_BUS_H */

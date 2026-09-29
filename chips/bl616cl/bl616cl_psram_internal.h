@@ -31,6 +31,29 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_psram_initialize
+ *
+ * Description:
+ *   Initialize the on-package Winbond PSRAM during early startup. Check that
+ *   the chip has PSRAM, read the factory DQS trim from efuse (or calibrate
+ *   when there is none), power and clock the PSRAM, configure its GPIOs,
+ *   release TZC access, configure the device and record its size. Failures
+ *   are reported on the early console.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -ENODEV - the chip has no PSRAM or GPIO is unavailable.
+ *   -EINVAL - the factory trim is invalid.
+ *   -EIO - power or clock setup, calibration or verification failed.
+ *   Other errors are returned by the device configuration, for example -EFBIG
+ *   for a device larger than 16 MiB.
+ *
+ ****************************************************************************/
+
 int bl616cl_psram_initialize(void);
 
 #endif

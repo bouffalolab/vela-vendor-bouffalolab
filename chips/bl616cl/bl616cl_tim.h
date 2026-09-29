@@ -31,6 +31,28 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_timer_initialize
+ *
+ * Description:
+ *   Register a hardware timer as a timer driver device. Enable the timer
+ *   0/1/watchdog peripheral clock, stop the timer with its interrupt masked
+ *   and register it with timer_register().
+ *
+ * Input Parameters:
+ *   devpath - The device path to register, for example /dev/timer0.
+ *   timer - Timer index: 0 for TIMER0 or 1 for TIMER1; it must be enabled by
+ *           CONFIG_BL616CL_TIMER0 or CONFIG_BL616CL_TIMER1.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -ENODEV - The timer is not enabled in the configuration or its lhal
+ *               device was not found.
+ *     -EEXIST - timer_register() failed.
+ *
+ ****************************************************************************/
+
 int bl616cl_timer_initialize(const char *devpath, uint8_t timer);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIP_BL616CL_BL616CL_TIM_H */

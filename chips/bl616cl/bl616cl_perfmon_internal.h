@@ -32,11 +32,42 @@
  * Public Function Prototypes
  ****************************************************************************/
 
-/* Select the E907 counter events. */
+/****************************************************************************
+ * Name: bl616cl_perfmon_initialize
+ *
+ * Description:
+ *   Select the events counted by the hardware performance counters: I-cache
+ *   access and miss, conditional branch and mispredict, and D-cache read and
+ *   write access and miss. Event numbers: see enum bl616cl_perfmon_event_e
+ *   and rv_hpm.h.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
 
 void bl616cl_perfmon_initialize(void);
 
-/* riscv_dispatch_irq() tail: run riscv_doirq() and account for it. */
+/****************************************************************************
+ * Name: bl616cl_perfmon_dispatch
+ *
+ * Description:
+ *   Interrupt dispatch wrapper called from riscv_dispatch_irq(). Take a PC
+ *   sample on the machine timer interrupt when sampling is active, run the
+ *   interrupt through riscv_doirq() and accumulate its count and mcycle
+ *   cycles per IRQ.
+ *
+ * Input Parameters:
+ *   irq - NuttX IRQ number
+ *   regs - Saved register context of the interrupted code
+ *
+ * Returned Value:
+ *   The register context to restore, as returned by riscv_doirq().
+ *
+ ****************************************************************************/
 
 void *bl616cl_perfmon_dispatch(int irq, uintreg_t *regs);
 

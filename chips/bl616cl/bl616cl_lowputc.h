@@ -78,8 +78,68 @@ EXTERN struct bl616cl_uart_s g_uart1_config;
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_pinmux_early_uart
+ *
+ * Description:
+ *   Write 0xffffffff to GLB_UART_CFG1 and 0x0000ffff to GLB_UART_CFG2, then
+ *   disable the HBN hardware pull-up/pull-down configuration. Called from
+ *   __bl616cl_start() before riscv_earlyserialinit().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 void bl616cl_pinmux_early_uart(void);
+
+/****************************************************************************
+ * Name: bl616cl_lowsetup
+ *
+ * Description:
+ *   Initialize the serial console before the full serial driver is
+ *   registered.
+ *
+ *   UART0 is configured with bl616cl_lowputc_config() only when it is the
+ *   serial console and CONFIG_SUPPRESS_UART_CONFIG is not set.  Otherwise
+ *   it does nothing.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 void bl616cl_lowsetup(void);
+
+/****************************************************************************
+ * Name: bl616cl_lowputc_config
+ *
+ * Description:
+ *   Configure a UART for non-DMA operation.
+ *
+ *   Enable the UART clock, route the TX and RX pins (after disabling their
+ *   GPIO keep setting), look up the lhal device and initialize it from the
+ *   settings in config with no flow control and LSB first bit order.
+ *
+ * Input Parameters:
+ *   config - UART configuration. On success config->device is set to the lhal
+ *            UART device.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -EIO    - The UART clock could not be enabled.
+ *     -ENODEV - The GPIO or UART lhal device was not found.
+ *     -ENOSYS - Neither CONFIG_BL616CL_UART0 nor CONFIG_BL616CL_UART1 is set.
+ *
+ ****************************************************************************/
+
 int bl616cl_lowputc_config(struct bl616cl_uart_s *config);
 
 #undef EXTERN

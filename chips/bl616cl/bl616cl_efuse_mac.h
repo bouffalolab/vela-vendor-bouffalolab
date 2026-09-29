@@ -33,7 +33,24 @@
  * Public Function Prototypes
  ****************************************************************************/
 
-/* wl80211 host port contract (rtos_al_nuttx.c platform_get_mac()). */
+/****************************************************************************
+ * Name: bl616_efuse_read_mac_address
+ *
+ * Description:
+ *   Resolve the STA MAC address for platform_get_mac(): the factory MAC
+ *   from mfg media (RF-parameter flash area, then efuse MAC slots 2..0),
+ *   then a fixed locally administered fallback so the interface is always
+ *   usable on boards without a provisioned address.
+ *
+ *   The bl616_ name is the wl80211 host port contract (rtos_al_nuttx.c).
+ *
+ * Input Parameters:
+ *   mac - Buffer that receives the 6-byte MAC address.
+ *
+ * Returned Value:
+ *   Always 0; mac is filled with the factory or the fallback address.
+ *
+ ****************************************************************************/
 
 int bl616_efuse_read_mac_address(uint8_t mac[6]);
 

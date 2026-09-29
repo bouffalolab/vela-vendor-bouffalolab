@@ -25,6 +25,26 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_oneshot_initialize
+ *
+ * Description:
+ *   Initialize the oneshot lower half on TIMER1 and register it as a oneshot
+ *   device. The timer is stopped with its interrupt attached, and the driver
+ *   is registered with oneshot_register() at BL616CL_ONESHOT_CLOCK_FREQUENCY.
+ *
+ * Input Parameters:
+ *   devpath - The device path to register.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -ENODEV - The TIMER1 lhal device was not found.
+ *     Other errors are returned from bflb_irq_attach() and
+ *     oneshot_register().
+ *
+ ****************************************************************************/
+
 int bl616cl_oneshot_initialize(const char *devpath);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIP_BL616CL_BL616CL_ONESHOT_H */

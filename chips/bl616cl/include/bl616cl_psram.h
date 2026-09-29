@@ -47,12 +47,26 @@
  ****************************************************************************/
 
 #ifdef CONFIG_BL616CL_PSRAM
-/* Returns the usable heap region size, or zero if initialization failed.
- * The uncached alias accesses the same storage. Clients must synchronize
- * caches before accessing an allocation through that alias.
- */
+
+/****************************************************************************
+ * Name: bl616cl_psram_size_get
+ *
+ * Description:
+ *   Return the PSRAM size detected by bl616cl_psram_initialize().
+ *
+ *   The uncached alias accesses the same storage. Clients must synchronize
+ *   caches before accessing an allocation through that alias.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   The PSRAM size in bytes; zero if PSRAM is absent or not initialized.
+ *
+ ****************************************************************************/
 
 size_t bl616cl_psram_size_get(void);
+
 #endif
 
 #endif
