@@ -157,8 +157,7 @@ chips/bl616cl/
 ├── bl616cl_wlan.[ch]            # netdev/WEXT/收发回调
 ├── bl616cl_wifi_adapter.[ch]    # adapter 和控制流程
 ├── bl616cl_efuse_mac.[ch]       # bl616_efuse_read_mac_address()：出厂 MAC（mfg media）与本地管理回退
-├── bl616cl_macsw_plat.c         # macsw 低功耗 hook 与单调时间源
-└── bl616cl_rfparam_ext.c        # rfparam 扩展接口
+└── bl616cl_macsw_plat.c         # macsw 低功耗 hook 与单调时间源
 ```
 
 public 与 chip 之间的接口：chip 实现 `bl616_wifi_event_handler()`、`bl616_efuse_read_mac_address()`，并通过 `internal_register_recv_cb()`、`internal_register_txdone_cb()` 注册 RX 与 TX 完成回调。
@@ -411,7 +410,7 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 
 `rfparam_bl616cl_flash_otp.c` 负责 BL616CL Flash OTP 记录、CRC、trim/power offset 和 MAC slot 的读取定义，使运行时能够使用 BL616CL 对应的 RF 校准参数来源。
 
-`chips/bl616cl/bl616cl_rfparam_ext.c` 提供当前 adapter 所需的扩展接口。天线增益目前由适配层记录；country setter 对尚未接入的 BL616CL rfparam 流程明确返回 `-EOPNOTSUPP`，避免静默成功。
+BL616CL rfparam 流程没有天线增益、发射功率和 country 相关接口，adapter 不再提供从 BL616 移来的空实现（原 `bl616cl_rfparam_ext.c`）。`SIOCSIWTXPOW`、`SIOCGIWTXPOW` 返回 `-ENOSYS`；`SIOCSIWCOUNTRY` 只设置 `wifi_mgmr` 的 country code，不重新加载 RF 参数。
 
 ## 10. 配置方案
 
@@ -799,7 +798,7 @@ R2 之后按模块继续排列。perfmon 采样选出四组候选，每组单独
 1. 将 manifest 的 floating `master` 转为冻结 revision/tag 或 release manifest，并把内部 gerrit 源码项目从公开 manifest 拆到内部 overlay；
 2. 重新核对各组件许可、来源和对外同步策略；
 3. 对 WPA3-SAE 补做 500 轮连接和 500 秒级四方向压力；
-4. 明确 country code、天线增益和 RF calibration 扩展接口的产品行为；
+4. 明确 country code、发射功率和 RF calibration 的产品行为（当前 `SIOCSIWTXPOW`、`SIOCGIWTXPOW` 返回 `-ENOSYS`）；
 5. 在新的 openvela/NuttX 基线或工具链变化后重新编译 PHYRF、macsw、wl80211 和 supplicant，并重新检查 ABI；
 6. 保留最简 `nsh` 与独立 `wifi` 两个构建目标，避免测试工具和 Wi-Fi 组件重新回流到基础配置；
 7. 在发布候选 `wifi` 镜像上重跑 500 轮扫描、500 轮连接和 TCP/UDP 四方向压力。

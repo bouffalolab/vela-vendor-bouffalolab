@@ -129,14 +129,6 @@ int bl616cl_wifi_sta_pmksa(struct iwreq *iwr, bool set);
 
 void bl616cl_wifi_stop_callback(void);
 
-/* RF parameter stubs implemented in bl616cl_rfparam_ext.c */
-
-int8_t rfparam_get_ant_gain(void);
-
-void rfparam_update_ant_gain(int8_t ant_gain);
-
-int rfparam_set_country_code(const char *country);
-
 #ifdef __cplusplus
 }
 #endif

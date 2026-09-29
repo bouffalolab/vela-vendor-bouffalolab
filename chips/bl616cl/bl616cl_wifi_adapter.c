@@ -1682,55 +1682,24 @@ int bl616cl_wifi_sta_bitrate(struct iwreq *iwr, bool set)
  * Name: bl616cl_wifi_sta_txpower
  *
  * Description:
- *   Get station transmit power (dBm).
+ *   Get or set station transmit power (dBm). Not supported: the BL616CL
+ *   RF parameter flow exposes no transmit power control or readback.
  *
  * Input Parameters:
  *   iwr - The argument of the ioctl cmd
  *   set - true: set data; false: get data
  *
  * Returned Value:
- *   OK on success (positive non-zero values are cmd-specific)
- *   Negated errno returned on failure.
+ *   -ENOSYS always.
  *
  ****************************************************************************/
 
 int bl616cl_wifi_sta_txpower(struct iwreq *iwr, bool set)
 {
-  int8_t power;
+  UNUSED(iwr);
 
-  if (set)
-    {
-      struct iwreq *req = (struct iwreq *)iwr;
-      uint8_t power_type = req->u.txpower.flags & IW_TXPOW_TYPE;
-      power = (int8_t)req->u.txpower.value;
-
-      wlinfo("set ant gain:%d dbm, type %d\n", power, power_type);
-
-      if (power_type == IW_TXPOW_DBM)
-        {
-          rfparam_update_ant_gain(power);
-
-          rfparam_init(0, NULL, 1);
-        }
-      else
-        {
-          wlwarn("WARNING: SIOCSIWTXPOW not implemented\n");
-          return -ENOSYS;
-        }
-    }
-  else
-    {
-      struct iwreq *req = (struct iwreq *)iwr;
-      int8_t ant_gain = rfparam_get_ant_gain();
-
-      req->u.txpower.value    = ant_gain;
-      req->u.txpower.disabled = 0;
-      req->u.txpower.flags    = IW_TXPOW_DBM;
-
-      wlinfo("get ant gain:%d dbm\n", ant_gain);
-    }
-
-  return OK;
+  wlwarn("WARNING: SIOC%cIWTXPOW not implemented\n", set ? 'S' : 'G');
+  return -ENOSYS;
 }
 
 /****************************************************************************
@@ -1838,11 +1807,6 @@ int bl616cl_wifi_sta_country(struct iwreq *iwr, bool set)
     {
       if (wifi_mgmr_set_country_code(iwr->u.data.pointer) == 0)
         {
-          if (rfparam_set_country_code(iwr->u.data.pointer) == 0)
-            {
-              rfparam_init(0, NULL, 1);
-            }
-
           ret = OK;
         }
       else
