@@ -31,6 +31,24 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_bod_initialize
+ *
+ * Description:
+ *   Enable the BL616CL brown-out detector using the SDK HBN hook. The
+ *   threshold is 2.4 V, the interrupt is enabled and POR is independent of
+ *   BOD. The interrupt handler panics the system.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -EIO - HBN_Set_BOD_Cfg() failed.
+ *   Other errors are returned by irq_attach().
+ *
+ ****************************************************************************/
+
 int bl616cl_bod_initialize(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_BOD_H */

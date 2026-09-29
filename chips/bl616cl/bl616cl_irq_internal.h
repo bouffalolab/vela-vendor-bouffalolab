@@ -54,17 +54,147 @@ extern "C"
  * Public Function Prototypes
  ****************************************************************************/
 
-/* LHAL uses raw CLIC indices. NuttX reserves RISCV_IRQ_ASYNC entries
- * before asynchronous interrupts. Convert only at the adapter boundary.
- */
+/****************************************************************************
+ * Name: bl616cl_irq_raw_to_nuttx
+ *
+ * Description:
+ *   Convert a raw SDK/CLIC interrupt number to the NuttX IRQ number by adding
+ *   RISCV_IRQ_ASYNC.
+ *
+ *   LHAL uses raw CLIC indices, while NuttX reserves RISCV_IRQ_ASYNC entries
+ *   before asynchronous interrupts. Convert only at the adapter boundary.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   The NuttX IRQ number. The input is not range checked.
+ *
+ ****************************************************************************/
 
 int bl616cl_irq_raw_to_nuttx(int irq);
+
+/****************************************************************************
+ * Name: bl616cl_irq_nuttx_to_raw
+ *
+ * Description:
+ *   Convert a NuttX IRQ number to the raw SDK/CLIC interrupt number by
+ *   subtracting RISCV_IRQ_ASYNC.
+ *
+ * Input Parameters:
+ *   irq - NuttX IRQ number
+ *
+ * Returned Value:
+ *   The raw interrupt number. The input is not range checked.
+ *
+ ****************************************************************************/
+
 int bl616cl_irq_nuttx_to_raw(int irq);
+
+/****************************************************************************
+ * Name: bl616cl_clic_enable_raw
+ *
+ * Description:
+ *   Set the CLIC interrupt-enable bit of a raw interrupt. Out-of-range
+ *   numbers are ignored.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_clic_enable_raw(int irq);
+
+/****************************************************************************
+ * Name: bl616cl_clic_disable_raw
+ *
+ * Description:
+ *   Clear the CLIC interrupt-enable bit of a raw interrupt. Out-of-range
+ *   numbers are ignored.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_clic_disable_raw(int irq);
+
+/****************************************************************************
+ * Name: bl616cl_clic_set_pending_raw
+ *
+ * Description:
+ *   Set the CLIC pending bit of a raw interrupt, which triggers it in
+ *   software. Out-of-range numbers are ignored.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_clic_set_pending_raw(int irq);
+
+/****************************************************************************
+ * Name: bl616cl_clic_clear_pending_raw
+ *
+ * Description:
+ *   Clear the CLIC pending bit of a raw interrupt. Out-of-range numbers are
+ *   ignored.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_clic_clear_pending_raw(int irq);
+
+/****************************************************************************
+ * Name: bl616cl_clic_set_nlbits
+ *
+ * Description:
+ *   Program the nlbits field of cliccfg, which splits the clicintctl bits
+ *   between preemption level and sub-priority.
+ *
+ * Input Parameters:
+ *   nlbits - Number of level bits; only the low 4 bits are used
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_clic_set_nlbits(uint8_t nlbits);
+
+/****************************************************************************
+ * Name: bl616cl_clic_set_priority_raw
+ *
+ * Description:
+ *   Update the clicintctl priority of a raw interrupt. The preemption level
+ *   is placed in the upper nlbits bits (nlbits read back from cliccfg, capped
+ *   at 8) and the sub-priority in the bits above the low nibble, which is
+ *   preserved. Out-of-range numbers are ignored.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *   preemptprio - Preemption level
+ *   subprio - Sub-priority, masked to the bits left by nlbits
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_clic_set_priority_raw(int irq, uint8_t preemptprio,
                                    uint8_t subprio);
 

@@ -31,12 +31,93 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_rtc_hw_initialize
+ *
+ * Description:
+ *   Select the RTC clock and start the RTC counter. With
+ *   CONFIG_BL616CL_RTC_CLOCK_DIG32K the 32 kHz clock is derived from XCLK
+ *   with a divider of BL616CL_RTC_DIG32K_DIV; otherwise the RC32K oscillator
+ *   is kept on and used.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 void bl616cl_rtc_hw_initialize(void);
+
+/****************************************************************************
+ * Name: bl616cl_rtc_hw_counter
+ *
+ * Description:
+ *   Read the RTC counter value from the HBN block.
+ *
+ * Input Parameters:
+ *   low - Location to return the low 32 bits of the counter.
+ *   high - Location to return the high 32 bits of the counter.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 void bl616cl_rtc_hw_counter(uint32_t *low, uint32_t *high);
+
 #ifdef CONFIG_BL616CL_RTC_ALARM
+
+/****************************************************************************
+ * Name: bl616cl_rtc_hw_set_alarm
+ *
+ * Description:
+ *   Program the RTC alarm comparator with no interrupt delay, comparing bits
+ *   0 to 47 of the counter.
+ *
+ * Input Parameters:
+ *   counter - Counter value at which the alarm interrupt fires.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 void bl616cl_rtc_hw_set_alarm(uint64_t counter);
+
+/****************************************************************************
+ * Name: bl616cl_rtc_hw_clear_alarm
+ *
+ * Description:
+ *   Clear the RTC interrupt and its HBN interrupt flag.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 void bl616cl_rtc_hw_clear_alarm(void);
+
+/****************************************************************************
+ * Name: bl616cl_rtc_hw_alarm_pending
+ *
+ * Description:
+ *   Check whether the RTC interrupt is pending in the HBN block.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Non-zero if the RTC interrupt is pending; zero otherwise.
+ *
+ ****************************************************************************/
+
 int bl616cl_rtc_hw_alarm_pending(void);
+
 #endif
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_RTC_HW_H */

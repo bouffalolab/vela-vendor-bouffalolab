@@ -35,7 +35,41 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_clock_early_init
+ *
+ * Description:
+ *   Power on the 40 MHz XTAL and the WIFIPLL, switch the MCU system clock to
+ *   WIFIPLL 320 MHz and select XTAL as the MCU XCLK. The function is placed
+ *   in the .sclock_rlt_code.bl616cl_clock_early_init section
+ *   (BL616CL_CLOCK_SAFE).
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 void bl616cl_clock_early_init(void);
+
+/****************************************************************************
+ * Name: bl616cl_timer_clock_init
+ *
+ * Description:
+ *   Enable the MTIMER clock, sourced from the MCU XCLK and divided down to
+ *   BL616CL_MTIMER_FREQ. The divider is derived from the current XCLK rate
+ *   (asserted to be non-zero).
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 void bl616cl_timer_clock_init(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_CLOCKCONFIG_H */

@@ -78,9 +78,58 @@ struct bl616cl_pwm_test_diag_s
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_pwm_test_reset
+ *
+ * Description:
+ *   Clear the test fault, call counters and last error.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 void bl616cl_pwm_test_reset(void);
+
+/****************************************************************************
+ * Name: bl616cl_pwm_test_set_fault
+ *
+ * Description:
+ *   Select the fault to inject into later operations.
+ *
+ * Input Parameters:
+ *   fault - Fault to inject, BL616CL_PWM_TEST_FAULT_NONE to disable
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure. -EINVAL if the
+ *   fault value is out of range.
+ *
+ ****************************************************************************/
+
 int bl616cl_pwm_test_set_fault(enum bl616cl_pwm_test_fault_e fault);
+
+/****************************************************************************
+ * Name: bl616cl_pwm_test_get_diag
+ *
+ * Description:
+ *   Copy the call counters, last error, cached settings and the current
+ *   polarity state to a diagnostics structure. Polarity is read from the
+ *   registers while the clock is enabled.
+ *
+ * Input Parameters:
+ *   diag - Location that receives the diagnostics
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure. -EINVAL if diag
+ *   is NULL.
+ *
+ ****************************************************************************/
+
 int bl616cl_pwm_test_get_diag(struct bl616cl_pwm_test_diag_s *diag);
+
 #endif
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_PWM_H */

@@ -31,7 +31,41 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_cache_early_init
+ *
+ * Description:
+ *   Enable the D-cache and I-cache with csi_dcache_enable() and
+ *   csi_icache_enable(). Called from __bl616cl_start() after
+ *   bl616cl_pmp_init() and before bl616cl_section_load().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 void bl616cl_cache_early_init(void);
+
+/****************************************************************************
+ * Name: bl616cl_cache_after_load
+ *
+ * Description:
+ *   Make the caches coherent with memory written while loading sections:
+ *   clean the whole D-cache (__DCACHE_CALL) and invalidate the whole I-cache
+ *   (__ICACHE_IALL), with barriers around each step. Called from
+ *   __bl616cl_start() after bl616cl_section_load().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 void bl616cl_cache_after_load(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_CACHE_H */

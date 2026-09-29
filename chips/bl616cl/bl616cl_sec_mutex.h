@@ -31,6 +31,21 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_sec_mutex_init
+ *
+ * Description:
+ *   Initialize the BouffaloLab security-engine mutex adapter by calling
+ *   bflb_sec_mutex_init().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_sec_mutex_init(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_SEC_MUTEX_H */
