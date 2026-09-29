@@ -60,21 +60,11 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define CONFIG_BL616CL_FW_TASK_NAME       "wifi_fw"
-
-#ifndef CONFIG_BL616CL_SCAN_DURANTION
-  #define CONFIG_BL616CL_SCAN_DURANTION   (100)
-#endif /* CONFIG_BL616CL_SCAN_DURANTION */
-
-#ifndef CONFIG_BL616CL_WLAN_CONNECT_TIMEOUT
-  #define CONFIG_BL616CL_WLAN_CONNECT_TIMEOUT (20) /* 60s */
-#endif /* CONFIG_BL616CL_WLAN_CONNECT_TIMEOUT */
-
-#ifndef CONFIG_BL616CL_WLAN_PS_ACTIVETIME
-  #define CONFIG_BL616CL_WLAN_PS_ACTIVETIME (50)
-#endif
-
- #define WIFI_TASK_STACK_SIZE           (6 * 1024)
+#define BL616CL_FW_TASK_NAME           "wifi_fw"
+#define BL616CL_SCAN_DURATION          (100)
+#define BL616CL_WLAN_CONNECT_TIMEOUT   (20) /* Seconds */
+#define BL616CL_WLAN_PS_ACTIVETIME     (50) /* Milliseconds */
+#define WIFI_TASK_STACK_SIZE           (6 * 1024)
 
 /****************************************************************************
  * Private Data
@@ -812,7 +802,7 @@ int bl616_wifi_adapter_init(void)
       up_enable_irq(BL616CL_IRQ_NUM_WIFI);
     }
 
-  task_create(CONFIG_BL616CL_FW_TASK_NAME,
+  task_create(BL616CL_FW_TASK_NAME,
               CONFIG_BL616CL_FW_TASK_PRIORITY,
               WIFI_TASK_STACK_SIZE,
               (main_t)wifi_main,
@@ -845,7 +835,7 @@ int bl616_wifi_adapter_init(void)
       wlerr("ERROR: Failed to set default country code\n");
     }
 
-  bl_wifi_sta_ps_active_ms(CONFIG_BL616CL_WLAN_PS_ACTIVETIME);
+  bl_wifi_sta_ps_active_ms(BL616CL_WLAN_PS_ACTIVETIME);
 
   return OK;
 }
@@ -1316,7 +1306,7 @@ int bl616_wifi_sta_connect(void)
 
       ret = nxsem_tickwait_uninterruptible(
         &g_wifi_wait_connect_sem,
-        SEC2TICK(CONFIG_BL616CL_WLAN_CONNECT_TIMEOUT));
+        SEC2TICK(BL616CL_WLAN_CONNECT_TIMEOUT));
 
       g_sta_block = false;
 
@@ -1887,7 +1877,7 @@ int bl616_wifi_sta_scan(struct iwreq *iwr)
         }
     }
 
-  config.duration = CONFIG_BL616CL_SCAN_DURANTION;
+  config.duration = BL616CL_SCAN_DURATION;
 
   /* TODO: passive scan */
   /* TODO: probt cnt */
