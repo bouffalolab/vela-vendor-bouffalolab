@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/boards/bl616cl/common/include/bl616cl_board_common.h
+ * vendor/bouffalolab/boards/bl616cl/common/include/bl616cl_board_common.h
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with

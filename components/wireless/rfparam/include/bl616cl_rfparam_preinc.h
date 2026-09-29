@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/components/wireless/rfparam/include/bl616cl_rfparam_preinc.h
+ * vendor/bouffalolab/components/wireless/rfparam/include/bl616cl_rfparam_preinc.h
  *
  * Forced pre-include for TU units that must see the BL616CL SoC headers
  * (rfparam adapter) while the NuttX environment already defines an enum

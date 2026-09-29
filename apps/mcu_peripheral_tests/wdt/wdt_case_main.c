@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/apps/mcu_peripheral_tests/wdt/wdt_case_main.c
+ * vendor/bouffalolab/apps/mcu_peripheral_tests/wdt/wdt_case_main.c
  *
  * MCU Peripheral WDT (Watchdog) Test Cases
  *

@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/os_feature_tests/cache/cache_test_trampoline.S
+ * vendor/bouffalolab/apps/os_feature_tests/cache/cache_test_trampoline.S
  *
  * SPDX-License-Identifier: Apache-2.0
  *

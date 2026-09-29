@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/apps/mcu_peripheral_tests/rtc/rtc_test_main.c
+ * vendor/bouffalolab/apps/mcu_peripheral_tests/rtc/rtc_test_main.c
  *
  * MCU Peripheral RTC Test Cases (RTC-001 ~ RTC-005)
  ****************************************************************************/

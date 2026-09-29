@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/apps/mcu_peripheral_tests/timer/timer_case_main.c
+ * vendor/bouffalolab/apps/mcu_peripheral_tests/timer/timer_case_main.c
  *
  * MCU Peripheral Timer / PWM Test Cases (TIMER-001 ~ TIMER-010)
  *   TIMER-001  basic counting / overflow period accuracy (/dev/timer0)

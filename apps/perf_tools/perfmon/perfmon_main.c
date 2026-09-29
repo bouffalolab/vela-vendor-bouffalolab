@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/apps/perf_tools/perfmon/perfmon_main.c
+ * vendor/bouffalolab/apps/perf_tools/perfmon/perfmon_main.c
  *
  * SPDX-License-Identifier: Apache-2.0
  *

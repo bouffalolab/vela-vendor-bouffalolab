@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/os_feature_tests/mm_record/mm_record_stack_test.c
+ * vendor/bouffalolab/apps/os_feature_tests/mm_record/mm_record_stack_test.c
  *
  * SPDX-License-Identifier: Apache-2.0
  *

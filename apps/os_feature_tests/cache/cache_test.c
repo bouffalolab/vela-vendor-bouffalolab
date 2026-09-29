@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/os_feature_tests/cache/cache_test.c
+ * vendor/bouffalolab/apps/os_feature_tests/cache/cache_test.c
  *
  * SPDX-License-Identifier: Apache-2.0
  *

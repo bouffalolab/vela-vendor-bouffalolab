@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/apps/mcu_peripheral_tests/dma/dma_test_main.c
+ * vendor/bouffalolab/apps/mcu_peripheral_tests/dma/dma_test_main.c
  *
  * BL616CL DMA0 contract and memory-to-memory test cases.
  ****************************************************************************/

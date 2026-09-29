@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/apps/os_feature_tests/ubsan/ubsan_test.c
+ * vendor/bouffalolab/apps/os_feature_tests/ubsan/ubsan_test.c
  *
  * SPDX-License-Identifier: Apache-2.0
  *
