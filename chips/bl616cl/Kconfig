@@ -95,6 +95,8 @@ menuconfig BL616CL_UART
 	bool "UART"
 	default y
 	select ARCH_HAVE_SERIAL_TERMIOS
+	---help---
+		Enable the BL616CL UART serial drivers.
 
 if BL616CL_UART
 
@@ -102,6 +104,8 @@ config BL616CL_UART0
 	bool "UART0"
 	default y
 	select UART0_SERIALDRIVER
+	---help---
+		Enable UART0, used as the serial console on the supported boards.
 
 if BL616CL_UART0
 
@@ -109,11 +113,15 @@ config BL616CL_UART0_RXPIN
 	int "UART0 RX pin"
 	range 0 36
 	default 35
+	---help---
+		GPIO number routed to the UART0 RX signal.
 
 config BL616CL_UART0_TXPIN
 	int "UART0 TX pin"
 	range 0 36
 	default 34
+	---help---
+		GPIO number routed to the UART0 TX signal.
 
 endif # BL616CL_UART0
 
@@ -255,10 +263,16 @@ if BL616CL_I2C
 config BL616CL_I2C0
 	bool "I2C0 controller"
 	default n
+	---help---
+		Build the I2C0 master lower-half; the board registers it as a
+		NuttX I2C bus.
 
 config BL616CL_I2C1
 	bool "I2C1 controller"
 	default n
+	---help---
+		Build the I2C1 master lower-half; the board registers it as a
+		NuttX I2C bus.
 
 config BL616CL_I2C_TEST
 	bool
@@ -284,6 +298,9 @@ if BL616CL_SPI
 config BL616CL_SPI0
 	bool "SPI0 controller"
 	default n
+	---help---
+		Build the SPI0 master lower-half; the board registers it as
+		SPI bus 0.
 
 config BL616CL_SPI1
 	bool "SPI1 controller"
@@ -395,6 +412,9 @@ if BL616CL_TIMER
 config BL616CL_TIMER0
 	bool "Timer 0"
 	default y
+	---help---
+		Enable the BL616CL TIMER0 ordinary timer lower-half, registered
+		as /dev/timer0.
 
 config BL616CL_TIMER1
 	bool "Timer 1"
@@ -435,6 +455,9 @@ config BL616CL_GPIO_INT_NCALLBACKS
 	int "Number of GPIO interrupt callbacks"
 	default 4
 	range 1 255
+	---help---
+		Number of interrupt callbacks the GPIO I/O expander can hold at
+		the same time.
 
 endif # IOEXPANDER_INT_ENABLE
 endif # BL616CL_GPIO
