@@ -31,7 +31,44 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_memory_early_init
+ *
+ * Description:
+ *   Early memory setup called at startup. If PSRAM has not been initialized
+ *   yet, open the whole first 64 MiB of PSRAMB in TZC region 0 (not locked),
+ *   then select the EM/WRAM split.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_memory_early_init(void);
-void bl616cl_section_load(void);
+
+/****************************************************************************
+ * Name: start_load
+ *
+ * Description:
+ *   Initialize RAM sections at startup: copy every entry of the
+ *   __mem_copy_sections table from its load address to its run address and
+ *   zero every entry of the __mem_setz_sections table. Both tables end with
+ *   a sentinel and entries with NULL pointers are skipped.
+ *
+ *   Defined in drivers/soc/bl616cl/std/startup/start_load.c, which has no
+ *   header of its own.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void start_load(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_MEMORY_H */
