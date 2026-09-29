@@ -48,6 +48,13 @@ def positive_int(value: str) -> int:
     return number
 
 
+def positive_float(value: str) -> float:
+    number = float(value)
+    if not number > 0:
+        raise argparse.ArgumentTypeError("must be greater than zero")
+    return number
+
+
 def parse_args() -> argparse.Namespace:
     parser = ResultArgumentParser(
         description="Reset a BouffaloLab module and verify startup serial output."
@@ -59,6 +66,14 @@ def parse_args() -> argparse.Namespace:
         action="append",
         default=[],
         help="Required startup marker; may be specified more than once",
+    )
+    parser.add_argument(
+        "--first-byte-timeout",
+        type=positive_float,
+        default=FIRST_BYTE_TIMEOUT_S,
+        metavar="SECONDS",
+        help="Seconds to wait for the first byte after reset "
+        f"(default {FIRST_BYTE_TIMEOUT_S:g})",
     )
     return parser.parse_args()
 
@@ -153,8 +168,8 @@ def reset_module(fd: int, usb_id: tuple[str, str] | None) -> str:
     return "standard-dtr-rts"
 
 
-def capture_output(fd: int) -> bytes:
-    first_byte_deadline = time.monotonic() + FIRST_BYTE_TIMEOUT_S
+def capture_output(fd: int, first_byte_timeout_s: float) -> bytes:
+    first_byte_deadline = time.monotonic() + first_byte_timeout_s
     idle_deadline: float | None = None
     capture_deadline: float | None = None
     output = bytearray()
@@ -234,7 +249,7 @@ def main() -> int:
         print(f"[run] port={args.port} baudrate={args.baudrate} usb_id={usb_label}")
         reset_method = reset_module(fd, usb_id)
         print(f"[run] reset_method={reset_method}; capturing startup output")
-        output = capture_output(fd)
+        output = capture_output(fd, args.first_byte_timeout)
     except KeyboardInterrupt:
         print("[error] interrupted", file=sys.stderr)
         emit_result("error", port=args.port, baudrate=args.baudrate, error="interrupted")

@@ -26,6 +26,8 @@ python3 SKILL_DIR/scripts/bl_module_reset.py \
 
 `SKILL_DIR` 是本文件所在目录的绝对路径。`--expect` 可省略或重复：省略时以收到可读启动日志为成功；指定时必须匹配全部标志。
 
+`--first-byte-timeout` 可选，是复位后等待第一个字节的秒数，默认 5。启动前输出为空的固件需要调大，例如开了 KASAN 的 `nsh-peripherals` 约 21 s 后才出第一行，用 `--first-byte-timeout 30`。收到第一个字节后的抓取窗口不变：空闲 0.5 s 或累计 5 s 即结束。
+
 ## 规则
 
 - 只执行正常启动复位，不进入 UART 下载模式，也不构建或烧录固件。
