@@ -114,6 +114,25 @@ static void bl616cl_rng_store_le32(FAR uint8_t *dest, uint32_t value)
   dest[3] = (value >> 24) & UINT32_C(0xff);
 }
 
+/****************************************************************************
+ * Name: bl616cl_rng_read_block
+ *
+ * Description:
+ *   Generate one 32-byte TRNG block. The sequence follows lhal
+ *   bflb_trng_read(), which is not used directly: it ignores
+ *   SEC_ENG_SE_TRNG_0_HT_ERROR, so a block that failed the hardware health
+ *   test would be returned as random data, and it leaves the TRNG enabled
+ *   when it times out.
+ *
+ * Input Parameters:
+ *   block - Buffer that receives the block; zeroed on failure.
+ *
+ * Returned Value:
+ *   OK on success; -ETIMEDOUT if the TRNG stays busy, or -EIO if the
+ *   health test fails.
+ *
+ ****************************************************************************/
+
 static int bl616cl_rng_read_block(uint8_t block[BL616CL_TRNG_BLOCK_SIZE])
 {
   uintptr_t ctrladdr =
