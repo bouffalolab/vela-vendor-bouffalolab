@@ -45,13 +45,13 @@
 struct perfmon_irqname_s
 {
   int irq;
-  FAR const char *name;
+  const char *name;
 };
 
 struct perfmon_window_s
 {
   struct bl616cl_perfmon_counters_s counters;
-  FAR struct bl616cl_perfmon_irq_s *irqs;
+  struct bl616cl_perfmon_irq_s *irqs;
   struct timespec ts;
 };
 
@@ -59,7 +59,7 @@ struct perfmon_window_s
 struct perfmon_func_s
 {
   uintptr_t addr;
-  FAR const char *name;
+  const char *name;
   uint32_t count;
 };
 #endif
@@ -143,7 +143,7 @@ static const struct perfmon_irqname_s g_perfmon_irqnames[] =
  * Private Functions
  ****************************************************************************/
 
-static void perfmon_usage(FAR const char *progname)
+static void perfmon_usage(const char *progname)
 {
   printf("Usage: %s stat [-d delay] [-t seconds]\n"
          "       %s prof [-d delay] [-t seconds] [-s shift] [-n top] [-r]\n"
@@ -156,7 +156,7 @@ static void perfmon_usage(FAR const char *progname)
          progname, progname, progname);
 }
 
-static FAR const char *perfmon_irqname(int irq)
+static const char *perfmon_irqname(int irq)
 {
   size_t i;
 
@@ -172,7 +172,7 @@ static FAR const char *perfmon_irqname(int irq)
   return irq < RISCV_IRQ_ASYNC ? "exception" : "-";
 }
 
-static int perfmon_snapshot(FAR struct perfmon_window_s *w)
+static int perfmon_snapshot(struct perfmon_window_s *w)
 {
   w->irqs = calloc(NR_IRQS, sizeof(*w->irqs));
   if (w->irqs == NULL)
@@ -191,8 +191,8 @@ static double perfmon_ratio(uint64_t part, uint64_t whole)
   return whole != 0 ? (double)part * 100.0 / (double)whole : 0.0;
 }
 
-static void perfmon_print_counters(FAR const struct perfmon_window_s *b,
-                                   FAR const struct perfmon_window_s *e)
+static void perfmon_print_counters(const struct perfmon_window_s *b,
+                                   const struct perfmon_window_s *e)
 {
   uint64_t d[BL616CL_PERFMON_NEVENTS];
   uint64_t cycles = e->counters.cycle - b->counters.cycle;
@@ -233,8 +233,8 @@ static void perfmon_print_counters(FAR const struct perfmon_window_s *b,
                        d[BL616CL_PERFMON_BRANCH]));
 }
 
-static void perfmon_print_irqs(FAR const struct perfmon_window_s *b,
-                               FAR const struct perfmon_window_s *e)
+static void perfmon_print_irqs(const struct perfmon_window_s *b,
+                               const struct perfmon_window_s *e)
 {
   uint64_t window = e->counters.cycle - b->counters.cycle;
   uint64_t total = 0;
@@ -312,19 +312,19 @@ static int perfmon_stat(int seconds)
 }
 
 #ifdef CONFIG_BL616CL_PERFMON_PCSAMPLE
-static int perfmon_cmp_func(FAR const void *a, FAR const void *b)
+static int perfmon_cmp_func(const void *a, const void *b)
 {
-  FAR const struct perfmon_func_s *fa = a;
-  FAR const struct perfmon_func_s *fb = b;
+  const struct perfmon_func_s *fa = a;
+  const struct perfmon_func_s *fb = b;
 
   return fa->count < fb->count ? 1 : (fa->count > fb->count ? -1 : 0);
 }
 
-static void perfmon_print_top(FAR const uint16_t *hist, uintptr_t base,
+static void perfmon_print_top(const uint16_t *hist, uintptr_t base,
                               size_t nbuckets, unsigned int shift,
                               uint32_t samples, int top)
 {
-  FAR struct perfmon_func_s *funcs;
+  struct perfmon_func_s *funcs;
   size_t nfuncs = 0;
   size_t used = 0;
   size_t i;
@@ -351,7 +351,7 @@ static void perfmon_print_top(FAR const uint16_t *hist, uintptr_t base,
   for (i = 0; i < nbuckets; i++)
     {
       uintptr_t addr = base + (i << shift);
-      FAR const char *name = NULL;
+      const char *name = NULL;
 
       if (hist[i] == 0)
         {
@@ -361,10 +361,10 @@ static void perfmon_print_top(FAR const uint16_t *hist, uintptr_t base,
 #ifdef CONFIG_ALLSYMS
       if (nfuncs == 0 || addr >= symend)
         {
-          FAR const struct symtab_s *sym;
+          const struct symtab_s *sym;
           size_t size;
 
-          sym = allsyms_findbyvalue((FAR void *)addr, &size);
+          sym = allsyms_findbyvalue((void *)addr, &size);
           if (sym != NULL)
             {
               name = sym->sym_name;
@@ -409,7 +409,7 @@ static int perfmon_prof(int seconds, unsigned int shift, int top, bool raw)
 {
   struct perfmon_window_s b;
   struct perfmon_window_s e;
-  FAR uint16_t *hist;
+  uint16_t *hist;
   uintptr_t base;
   size_t size;
   size_t nbuckets;
@@ -490,7 +490,7 @@ static int perfmon_prof(int seconds, unsigned int shift, int top, bool raw)
  * Public Functions
  ****************************************************************************/
 
-int main(int argc, FAR char *argv[])
+int main(int argc, char *argv[])
 {
   int seconds = PERFMON_DEFAULT_SECONDS;
   int delay = 0;

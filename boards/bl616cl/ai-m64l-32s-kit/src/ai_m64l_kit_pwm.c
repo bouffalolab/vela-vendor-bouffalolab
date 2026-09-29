@@ -30,7 +30,7 @@
 
 int ai_m64l_kit_pwm_initialize(void)
 {
-  FAR struct pwm_lowerhalf_s *pwm;
+  struct pwm_lowerhalf_s *pwm;
 
   pwm = bl616cl_pwm_initialize(AI_M64L_KIT_PWM_CHANNEL,
                                AI_M64L_KIT_PWM_PIN);

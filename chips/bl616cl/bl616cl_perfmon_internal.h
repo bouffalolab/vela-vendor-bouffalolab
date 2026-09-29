@@ -38,6 +38,6 @@ void bl616cl_perfmon_initialize(void);
 
 /* riscv_dispatch_irq() tail: run riscv_doirq() and account for it. */
 
-FAR void *bl616cl_perfmon_dispatch(int irq, FAR uintreg_t *regs);
+void *bl616cl_perfmon_dispatch(int irq, uintreg_t *regs);
 
 #endif

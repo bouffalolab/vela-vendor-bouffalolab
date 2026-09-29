@@ -103,9 +103,9 @@ static inline uint16_t chksum_swap(uint16_t sum)
  *
  ****************************************************************************/
 
-static uint16_t chksum_be(FAR const uint8_t *data, uint16_t len)
+static uint16_t chksum_be(const uint8_t *data, uint16_t len)
 {
-  FAR const uint32_t *word;
+  const uint32_t *word;
   uint64_t sum = 0;
   bool shifted = false;
   uint16_t le;
@@ -124,12 +124,12 @@ static uint16_t chksum_be(FAR const uint8_t *data, uint16_t len)
 
   if (((uintptr_t)data & 2) != 0 && len >= 2)
     {
-      sum  += *(FAR const uint16_t *)data;
+      sum  += *(const uint16_t *)data;
       data += 2;
       len  -= 2;
     }
 
-  word = (FAR const uint32_t *)data;
+  word = (const uint32_t *)data;
   while (len >= 32)
     {
       sum += word[0];
@@ -150,10 +150,10 @@ static uint16_t chksum_be(FAR const uint8_t *data, uint16_t len)
       len -= 4;
     }
 
-  data = (FAR const uint8_t *)word;
+  data = (const uint8_t *)word;
   if (len >= 2)
     {
-      sum  += *(FAR const uint16_t *)data;
+      sum  += *(const uint16_t *)data;
       data += 2;
       len  -= 2;
     }
@@ -191,8 +191,8 @@ static uint16_t chksum_be(FAR const uint8_t *data, uint16_t len)
  *
  ****************************************************************************/
 
-uint16_t checksum(uint16_t sum, FAR const uint8_t *data, uint16_t len,
-                  FAR bool *odd)
+uint16_t checksum(uint16_t sum, const uint8_t *data, uint16_t len,
+                  bool *odd)
 {
   uint32_t total = sum;
 
@@ -230,7 +230,7 @@ uint16_t checksum(uint16_t sum, FAR const uint8_t *data, uint16_t len,
  *
  ****************************************************************************/
 
-uint16_t chksum(uint16_t sum, FAR const uint8_t *data, uint16_t len)
+uint16_t chksum(uint16_t sum, const uint8_t *data, uint16_t len)
 {
   bool odd = false;
 
@@ -253,9 +253,9 @@ uint16_t chksum(uint16_t sum, FAR const uint8_t *data, uint16_t len)
  *
  ****************************************************************************/
 
-uint16_t net_chksum(FAR uint16_t *data, uint16_t len)
+uint16_t net_chksum(uint16_t *data, uint16_t len)
 {
-  return HTONS(chksum(0, (FAR const uint8_t *)data, len));
+  return HTONS(chksum(0, (const uint8_t *)data, len));
 }
 
 #ifdef CONFIG_NET_IPv4
@@ -264,9 +264,9 @@ uint16_t net_chksum(FAR uint16_t *data, uint16_t len)
  * compiled out there when CONFIG_NET_ARCH_CHKSUM is set.
  */
 
-uint16_t ipv4_upperlayer_header_chksum(FAR struct net_driver_s *dev,
+uint16_t ipv4_upperlayer_header_chksum(struct net_driver_s *dev,
                                        uint8_t proto);
-uint16_t ipv4_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
+uint16_t ipv4_upperlayer_payload_chksum(struct net_driver_s *dev,
                                         uint16_t sum);
 
 /****************************************************************************
@@ -286,10 +286,10 @@ uint16_t ipv4_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
  *
  ****************************************************************************/
 
-uint16_t ipv4_upperlayer_header_chksum(FAR struct net_driver_s *dev,
+uint16_t ipv4_upperlayer_header_chksum(struct net_driver_s *dev,
                                        uint8_t proto)
 {
-  FAR struct ipv4_hdr_s *ipv4 = IPv4BUF;
+  struct ipv4_hdr_s *ipv4 = IPv4BUF;
   uint16_t iphdrlen = (ipv4->vhl & IPv4_HLMASK) << 2;
   uint16_t upperlen;
 
@@ -297,7 +297,7 @@ uint16_t ipv4_upperlayer_header_chksum(FAR struct net_driver_s *dev,
 
   /* Pseudo-header: protocol, length, then source and destination. */
 
-  return chksum(upperlen + proto, (FAR uint8_t *)&ipv4->srcipaddr,
+  return chksum(upperlen + proto, (uint8_t *)&ipv4->srcipaddr,
                 2 * sizeof(in_addr_t));
 }
 
@@ -318,10 +318,10 @@ uint16_t ipv4_upperlayer_header_chksum(FAR struct net_driver_s *dev,
  *
  ****************************************************************************/
 
-uint16_t ipv4_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
+uint16_t ipv4_upperlayer_payload_chksum(struct net_driver_s *dev,
                                         uint16_t sum)
 {
-  FAR struct ipv4_hdr_s *ipv4 = IPv4BUF;
+  struct ipv4_hdr_s *ipv4 = IPv4BUF;
 
   return chksum_iob(sum, dev->d_iob, (ipv4->vhl & IPv4_HLMASK) << 2);
 }
@@ -343,7 +343,7 @@ uint16_t ipv4_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
  *
  ****************************************************************************/
 
-uint16_t ipv4_upperlayer_chksum(FAR struct net_driver_s *dev, uint8_t proto)
+uint16_t ipv4_upperlayer_chksum(struct net_driver_s *dev, uint8_t proto)
 {
   uint16_t sum;
 
@@ -367,20 +367,20 @@ uint16_t ipv4_upperlayer_chksum(FAR struct net_driver_s *dev, uint8_t proto)
  *
  ****************************************************************************/
 
-uint16_t ipv4_chksum(FAR struct ipv4_hdr_s *ipv4)
+uint16_t ipv4_chksum(struct ipv4_hdr_s *ipv4)
 {
   uint16_t sum;
 
-  sum = chksum(0, (FAR const uint8_t *)ipv4, (ipv4->vhl & IPv4_HLMASK) << 2);
+  sum = chksum(0, (const uint8_t *)ipv4, (ipv4->vhl & IPv4_HLMASK) << 2);
   return (sum == 0) ? 0xffff : HTONS(sum);
 }
 #endif /* CONFIG_NET_IPv4 */
 
 #ifdef CONFIG_NET_IPv6
 
-uint16_t ipv6_upperlayer_header_chksum(FAR struct net_driver_s *dev,
+uint16_t ipv6_upperlayer_header_chksum(struct net_driver_s *dev,
                                        uint8_t proto, unsigned int iplen);
-uint16_t ipv6_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
+uint16_t ipv6_upperlayer_payload_chksum(struct net_driver_s *dev,
                                         unsigned int iplen, uint16_t sum);
 
 /****************************************************************************
@@ -402,10 +402,10 @@ uint16_t ipv6_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
  *
  ****************************************************************************/
 
-uint16_t ipv6_upperlayer_header_chksum(FAR struct net_driver_s *dev,
+uint16_t ipv6_upperlayer_header_chksum(struct net_driver_s *dev,
                                        uint8_t proto, unsigned int iplen)
 {
-  FAR struct ipv6_hdr_s *ipv6 = IPv6BUF;
+  struct ipv6_hdr_s *ipv6 = IPv6BUF;
   uint16_t upperlen;
 
   DEBUGASSERT(dev != NULL && iplen >= IPv6_HDRLEN);
@@ -415,7 +415,7 @@ uint16_t ipv6_upperlayer_header_chksum(FAR struct net_driver_s *dev,
   upperlen  = ((uint16_t)ipv6->len[0] << 8) + ipv6->len[1];
   upperlen -= (iplen - IPv6_HDRLEN);
 
-  return chksum(upperlen + proto, (FAR uint8_t *)&ipv6->srcipaddr,
+  return chksum(upperlen + proto, (uint8_t *)&ipv6->srcipaddr,
                 2 * sizeof(net_ipv6addr_t));
 }
 
@@ -437,7 +437,7 @@ uint16_t ipv6_upperlayer_header_chksum(FAR struct net_driver_s *dev,
  *
  ****************************************************************************/
 
-uint16_t ipv6_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
+uint16_t ipv6_upperlayer_payload_chksum(struct net_driver_s *dev,
                                         unsigned int iplen, uint16_t sum)
 {
   return chksum_iob(sum, dev->d_iob, iplen);
@@ -461,7 +461,7 @@ uint16_t ipv6_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
  *
  ****************************************************************************/
 
-uint16_t ipv6_upperlayer_chksum(FAR struct net_driver_s *dev,
+uint16_t ipv6_upperlayer_chksum(struct net_driver_s *dev,
                                 uint8_t proto, unsigned int iplen)
 {
   uint16_t sum;

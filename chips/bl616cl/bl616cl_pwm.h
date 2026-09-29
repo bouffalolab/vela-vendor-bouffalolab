@@ -35,7 +35,7 @@
  * Public Function Prototypes
  ****************************************************************************/
 
-FAR struct pwm_lowerhalf_s *bl616cl_pwm_initialize(uint8_t channel,
-                                                   uint8_t pin);
+struct pwm_lowerhalf_s *bl616cl_pwm_initialize(uint8_t channel,
+                                               uint8_t pin);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_PWM_H */

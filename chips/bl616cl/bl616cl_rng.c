@@ -50,9 +50,9 @@
  * Private Function Prototypes
  ****************************************************************************/
 
-static ssize_t bl616cl_rng_read(FAR struct file *filep, FAR char *buffer,
+static ssize_t bl616cl_rng_read(struct file *filep, char *buffer,
                                 size_t buflen);
-static int bl616cl_rng_poll(FAR struct file *filep, FAR struct pollfd *fds,
+static int bl616cl_rng_poll(struct file *filep, struct pollfd *fds,
                             bool setup);
 
 /****************************************************************************
@@ -60,7 +60,7 @@ static int bl616cl_rng_poll(FAR struct file *filep, FAR struct pollfd *fds,
  ****************************************************************************/
 
 static mutex_t g_bl616cl_rng_lock = NXMUTEX_INITIALIZER;
-static FAR struct bflb_device_s *g_bl616cl_trng;
+static struct bflb_device_s *g_bl616cl_trng;
 
 static const struct file_operations g_bl616cl_rng_fops =
 {
@@ -165,7 +165,7 @@ static int bl616cl_rng_wait_idle(uintptr_t ctrladdr)
  *
  ****************************************************************************/
 
-static void bl616cl_rng_store_le32(FAR uint8_t *dest, uint32_t value)
+static void bl616cl_rng_store_le32(uint8_t *dest, uint32_t value)
 {
   dest[0] = value & UINT32_C(0xff);
   dest[1] = (value >> 8) & UINT32_C(0xff);
@@ -288,7 +288,7 @@ fail:
  *
  ****************************************************************************/
 
-static ssize_t bl616cl_rng_read(FAR struct file *filep, FAR char *buffer,
+static ssize_t bl616cl_rng_read(struct file *filep, char *buffer,
                                 size_t buflen)
 {
   uint8_t block[BL616CL_TRNG_BLOCK_SIZE];
@@ -356,7 +356,7 @@ static ssize_t bl616cl_rng_read(FAR struct file *filep, FAR char *buffer,
  *
  ****************************************************************************/
 
-static int bl616cl_rng_poll(FAR struct file *filep, FAR struct pollfd *fds,
+static int bl616cl_rng_poll(struct file *filep, struct pollfd *fds,
                             bool setup)
 {
   UNUSED(filep);
@@ -418,7 +418,7 @@ static int bl616cl_rng_initialize(void)
  *
  ****************************************************************************/
 
-static void bl616cl_rng_register(FAR const char *path)
+static void bl616cl_rng_register(const char *path)
 {
   int ret;
 

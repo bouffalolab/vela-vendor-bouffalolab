@@ -83,7 +83,7 @@ static int bl616cl_setup(struct uart_dev_s *dev);
 static void bl616cl_shutdown(struct uart_dev_s *dev);
 static int bl616cl_attach(struct uart_dev_s *dev);
 static void bl616cl_detach(struct uart_dev_s *dev);
-static int bl616cl_interrupt(int irq, void *context, FAR void *arg);
+static int bl616cl_interrupt(int irq, void *context, void *arg);
 static int bl616cl_ioctl(struct file *filep, int cmd, unsigned long arg);
 static int bl616cl_receive(struct uart_dev_s *dev, unsigned int *status);
 static void bl616cl_rxint(struct uart_dev_s *dev, bool enable);
@@ -476,7 +476,7 @@ static void bl616cl_detach(struct uart_dev_s *dev)
  *
  ****************************************************************************/
 
-static int bl616cl_interrupt(int irq, void *context, FAR void *arg)
+static int bl616cl_interrupt(int irq, void *context, void *arg)
 {
   struct uart_dev_s *dev = arg;
   struct bl616cl_uart_s *priv;

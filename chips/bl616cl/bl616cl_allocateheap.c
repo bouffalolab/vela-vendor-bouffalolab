@@ -95,7 +95,7 @@ extern char g_heaplimit[] asm("__HeapLimit");
  *
  ****************************************************************************/
 
-void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
+void up_allocate_heap(void **heap_start, size_t *heap_size)
 {
   *heap_start = g_heapbase;
   *heap_size = (size_t)(g_heaplimit - g_heapbase);

@@ -124,21 +124,21 @@ struct rtc_ioctl_guarded_query_s
  ****************************************************************************/
 
 static bool rtc_ioctl_snapshot_equal(
-  FAR const struct bl_rtc_ioctl_test_snapshot_s *left,
-  FAR const struct bl_rtc_ioctl_test_snapshot_s *right)
+  const struct bl_rtc_ioctl_test_snapshot_s *left,
+  const struct bl_rtc_ioctl_test_snapshot_s *right)
 {
   return memcmp(left, right, sizeof(*left)) == 0;
 }
 
 static bool rtc_ioctl_guards_valid(
-  FAR const struct bl_rtc_ioctl_test_snapshot_s *snapshot)
+  const struct bl_rtc_ioctl_test_snapshot_s *snapshot)
 {
   return snapshot->guard_head == BL_RTC_IOCTL_TEST_GUARD_HEAD &&
          snapshot->guard_tail == BL_RTC_IOCTL_TEST_GUARD_TAIL;
 }
 
-static void rtc_ioctl_record(FAR struct rtc_ioctl_test_s *test,
-                             FAR const char *name, bool pass,
+static void rtc_ioctl_record(struct rtc_ioctl_test_s *test,
+                             const char *name, bool pass,
                              int ret, int error)
 {
   test->cases++;
@@ -153,8 +153,8 @@ static void rtc_ioctl_record(FAR struct rtc_ioctl_test_s *test,
     }
 }
 
-static void rtc_ioctl_expect_invalid(FAR struct rtc_ioctl_test_s *test,
-                                     FAR const char *name, int cmd,
+static void rtc_ioctl_expect_invalid(struct rtc_ioctl_test_s *test,
+                                     const char *name, int cmd,
                                      unsigned long arg)
 {
   struct bl_rtc_ioctl_test_snapshot_s before;
@@ -176,27 +176,27 @@ static void rtc_ioctl_expect_invalid(FAR struct rtc_ioctl_test_s *test,
 }
 
 static void rtc_ioctl_capture_input(
-  FAR struct rtc_ioctl_input_s *input,
+  struct rtc_ioctl_input_s *input,
   enum bl_rtc_ioctl_test_method_e method, unsigned long arg)
 {
   switch (method)
     {
       case BL_RTC_IOCTL_TEST_METHOD_SETTIME:
         input->method = method;
-        input->value.time = *(FAR const struct rtc_time *)((uintptr_t)arg);
+        input->value.time = *(const struct rtc_time *)((uintptr_t)arg);
         break;
 
 #ifdef CONFIG_RTC_ALARM
       case BL_RTC_IOCTL_TEST_METHOD_SETALARM:
         input->method = method;
         input->value.setalarm =
-          *(FAR const struct rtc_setalarm_s *)((uintptr_t)arg);
+          *(const struct rtc_setalarm_s *)((uintptr_t)arg);
         break;
 
       case BL_RTC_IOCTL_TEST_METHOD_SETRELATIVE:
         input->method = method;
         input->value.setrelative =
-          *(FAR const struct rtc_setrelative_s *)((uintptr_t)arg);
+          *(const struct rtc_setrelative_s *)((uintptr_t)arg);
         break;
 #endif
 
@@ -204,7 +204,7 @@ static void rtc_ioctl_capture_input(
       case BL_RTC_IOCTL_TEST_METHOD_SETPERIODIC:
         input->method = method;
         input->value.setperiodic =
-          *(FAR const struct rtc_setperiodic_s *)((uintptr_t)arg);
+          *(const struct rtc_setperiodic_s *)((uintptr_t)arg);
         break;
 #endif
 
@@ -214,31 +214,31 @@ static void rtc_ioctl_capture_input(
 }
 
 static bool rtc_ioctl_input_unchanged(
-  FAR const struct rtc_ioctl_input_s *input, unsigned long arg)
+  const struct rtc_ioctl_input_s *input, unsigned long arg)
 {
   switch (input->method)
     {
       case BL_RTC_IOCTL_TEST_METHOD_SETTIME:
         return memcmp(&input->value.time,
-                      (FAR const void *)((uintptr_t)arg),
+                      (const void *)((uintptr_t)arg),
                       sizeof(input->value.time)) == 0;
 
 #ifdef CONFIG_RTC_ALARM
       case BL_RTC_IOCTL_TEST_METHOD_SETALARM:
         return memcmp(&input->value.setalarm,
-                      (FAR const void *)((uintptr_t)arg),
+                      (const void *)((uintptr_t)arg),
                       sizeof(input->value.setalarm)) == 0;
 
       case BL_RTC_IOCTL_TEST_METHOD_SETRELATIVE:
         return memcmp(&input->value.setrelative,
-                      (FAR const void *)((uintptr_t)arg),
+                      (const void *)((uintptr_t)arg),
                       sizeof(input->value.setrelative)) == 0;
 #endif
 
 #ifdef CONFIG_RTC_PERIODIC
       case BL_RTC_IOCTL_TEST_METHOD_SETPERIODIC:
         return memcmp(&input->value.setperiodic,
-                      (FAR const void *)((uintptr_t)arg),
+                      (const void *)((uintptr_t)arg),
                       sizeof(input->value.setperiodic)) == 0;
 #endif
 
@@ -248,8 +248,8 @@ static bool rtc_ioctl_input_unchanged(
 }
 
 static void rtc_ioctl_expected_call(
-  FAR struct bl_rtc_ioctl_test_snapshot_s *expected,
-  FAR const struct rtc_ioctl_input_s *input,
+  struct bl_rtc_ioctl_test_snapshot_s *expected,
+  const struct rtc_ioctl_input_s *input,
   enum bl_rtc_ioctl_test_method_e method, int id, int cmd,
   unsigned long arg)
 {
@@ -334,8 +334,8 @@ static void rtc_ioctl_expected_call(
     }
 }
 
-static void rtc_ioctl_expect_calls(FAR struct rtc_ioctl_test_s *test,
-                                   FAR const char *name, int cmd,
+static void rtc_ioctl_expect_calls(struct rtc_ioctl_test_s *test,
+                                   const char *name, int cmd,
                                    unsigned long arg,
                                    enum bl_rtc_ioctl_test_method_e
                                      first_method,
@@ -372,8 +372,8 @@ static void rtc_ioctl_expect_calls(FAR struct rtc_ioctl_test_s *test,
                    ret, error);
 }
 
-static void rtc_ioctl_expect_call(FAR struct rtc_ioctl_test_s *test,
-                                  FAR const char *name, int cmd,
+static void rtc_ioctl_expect_call(struct rtc_ioctl_test_s *test,
+                                  const char *name, int cmd,
                                   unsigned long arg,
                                   enum bl_rtc_ioctl_test_method_e method,
                                   int expected_ret, int expected_id)
@@ -383,8 +383,8 @@ static void rtc_ioctl_expect_call(FAR struct rtc_ioctl_test_s *test,
                          expected_ret, expected_id);
 }
 
-static void rtc_ioctl_expect_errno(FAR struct rtc_ioctl_test_s *test,
-                                   FAR const char *name, int fd, int cmd,
+static void rtc_ioctl_expect_errno(struct rtc_ioctl_test_s *test,
+                                   const char *name, int fd, int cmd,
                                    unsigned long arg, int expected)
 {
   int error;
@@ -398,7 +398,7 @@ static void rtc_ioctl_expect_errno(FAR struct rtc_ioctl_test_s *test,
                    ret, error);
 }
 
-static void rtc_ioctl_run_preflight(FAR struct rtc_ioctl_test_s *test)
+static void rtc_ioctl_run_preflight(struct rtc_ioctl_test_s *test)
 {
   rtc_ioctl_expect_invalid(test, "RTC-PRE-001 RD_TIME NULL",
                            RTC_RD_TIME, 0);
@@ -406,7 +406,7 @@ static void rtc_ioctl_run_preflight(FAR struct rtc_ioctl_test_s *test)
                            RTC_SET_TIME, 0);
 }
 
-static void rtc_ioctl_run_initialize(FAR struct rtc_ioctl_test_s *test)
+static void rtc_ioctl_run_initialize(struct rtc_ioctl_test_s *test)
 {
   static const char *const invalid_names[] = {
     "RTC-INIT-001 NULL lower",
@@ -539,7 +539,7 @@ static void rtc_ioctl_run_initialize(FAR struct rtc_ioctl_test_s *test)
                    0, 0);
 }
 
-static void rtc_ioctl_run_base(FAR struct rtc_ioctl_test_s *test)
+static void rtc_ioctl_run_base(struct rtc_ioctl_test_s *test)
 {
   struct rtc_time set_time;
   struct rtc_time read_time;
@@ -575,7 +575,7 @@ static void rtc_ioctl_run_base(FAR struct rtc_ioctl_test_s *test)
                    0, 0);
 }
 
-static void rtc_ioctl_run_missing(FAR struct rtc_ioctl_test_s *test)
+static void rtc_ioctl_run_missing(struct rtc_ioctl_test_s *test)
 {
   struct rtc_time rtc_time;
   bool have_set_time;
@@ -626,7 +626,7 @@ static void rtc_ioctl_run_missing(FAR struct rtc_ioctl_test_s *test)
 }
 
 #ifdef CONFIG_RTC_ALARM
-static void rtc_ioctl_run_alarm(FAR struct rtc_ioctl_test_s *test)
+static void rtc_ioctl_run_alarm(struct rtc_ioctl_test_s *test)
 {
   struct rtc_setalarm_s setalarm;
   struct rtc_setrelative_s setrelative;
@@ -713,7 +713,7 @@ static void rtc_ioctl_run_alarm(FAR struct rtc_ioctl_test_s *test)
 #endif
 
 #ifdef CONFIG_RTC_PERIODIC
-static void rtc_ioctl_run_periodic(FAR struct rtc_ioctl_test_s *test)
+static void rtc_ioctl_run_periodic(struct rtc_ioctl_test_s *test)
 {
   struct rtc_setperiodic_s periodic;
 
@@ -756,7 +756,7 @@ static void rtc_ioctl_run_periodic(FAR struct rtc_ioctl_test_s *test)
 #endif
 
 #ifdef CONFIG_RTC_IOCTL
-static void rtc_ioctl_run_private(FAR struct rtc_ioctl_test_s *test)
+static void rtc_ioctl_run_private(struct rtc_ioctl_test_s *test)
 {
   const int cmd = _RTCIOC(RTC_USER_IOCBASE);
   const unsigned long arg = 0x12345678;
@@ -767,7 +767,7 @@ static void rtc_ioctl_run_private(FAR struct rtc_ioctl_test_s *test)
 }
 #endif
 
-static int rtc_ioctl_cleanup(FAR struct rtc_ioctl_test_s *test)
+static int rtc_ioctl_cleanup(struct rtc_ioctl_test_s *test)
 {
   struct bl_rtc_ioctl_test_snapshot_s snapshot;
   int ret = OK;
@@ -808,7 +808,7 @@ static int rtc_ioctl_cleanup(FAR struct rtc_ioctl_test_s *test)
   return ret;
 }
 
-static void rtc_ioctl_usage(FAR const char *progname)
+static void rtc_ioctl_usage(const char *progname)
 {
   printf("Usage: %s [-c preflight|initialize|all]\n", progname);
 }
@@ -817,7 +817,7 @@ static void rtc_ioctl_usage(FAR const char *progname)
  * Public Functions
  ****************************************************************************/
 
-int main(int argc, FAR char *argv[])
+int main(int argc, char *argv[])
 {
   struct rtc_ioctl_test_s test =
   {

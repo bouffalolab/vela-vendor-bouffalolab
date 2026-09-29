@@ -80,7 +80,7 @@ struct bl616cl_pwm_test_diag_s
 
 void bl616cl_pwm_test_reset(void);
 int bl616cl_pwm_test_set_fault(enum bl616cl_pwm_test_fault_e fault);
-int bl616cl_pwm_test_get_diag(FAR struct bl616cl_pwm_test_diag_s *diag);
+int bl616cl_pwm_test_get_diag(struct bl616cl_pwm_test_diag_s *diag);
 #endif
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_PWM_H */

@@ -64,7 +64,7 @@ struct bl616cl_dma_test_status_s
  * Clients own all cache clean and invalidate operations for their buffers.
  */
 
-FAR struct dma_dev_s *bl616cl_dma0_device(void);
+struct dma_dev_s *bl616cl_dma0_device(void);
 #endif
 
 #ifdef CONFIG_BL616CL_DMA0_TEST
@@ -77,7 +77,7 @@ void bl616cl_dma_test_set_hold_before_enable(bool hold);
 void bl616cl_dma_test_suppress_put_assert(bool suppress);
 void bl616cl_dma_test_release_hold(void);
 void bl616cl_dma_test_get_status(
-  FAR struct bl616cl_dma_test_status_s *status);
+  struct bl616cl_dma_test_status_s *status);
 #endif
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_DMA_H */

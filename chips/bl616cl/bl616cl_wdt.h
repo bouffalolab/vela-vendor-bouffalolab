@@ -54,7 +54,7 @@
  *
  ****************************************************************************/
 
-int bl616cl_wdt_initialize(FAR const char *devpath);
+int bl616cl_wdt_initialize(const char *devpath);
 
 #endif /* __ASSEMBLY__ */
 

@@ -614,10 +614,10 @@ static xcpt_t bl616cl_wdt_capture(struct watchdog_lowerhalf_s *lower,
  *
  ****************************************************************************/
 
-int bl616cl_wdt_initialize(FAR const char *devpath)
+int bl616cl_wdt_initialize(const char *devpath)
 {
-  FAR struct bl616cl_wdt_lowerhalf_s *priv = &g_bl616cl_wdtdev;
-  FAR void *handle;
+  struct bl616cl_wdt_lowerhalf_s *priv = &g_bl616cl_wdtdev;
+  void *handle;
 
   DEBUGASSERT(devpath != NULL);
 
@@ -641,7 +641,7 @@ int bl616cl_wdt_initialize(FAR const char *devpath)
 #endif
 
   handle = watchdog_register(devpath,
-                             (FAR struct watchdog_lowerhalf_s *)priv);
+                             (struct watchdog_lowerhalf_s *)priv);
   if (handle == NULL)
     {
 #ifdef CONFIG_BL616CL_WDT_CAPTURE
