@@ -27,28 +27,25 @@
  ****************************************************************************/
 
 #include <stdint.h>
-
-#include <bflb_ef_ctrl.h>
+#include <string.h>
 
 #include "bl616cl_mfg_media.h"
 #include "bl616cl_efuse_mac.h"
 
 /****************************************************************************
- * Pre-processor Definitions
+ * Private Data
  ****************************************************************************/
 
-/* chip-id / default WiFi MAC slot (zone 00, same words the soc ef_cfg
- * driver uses for bflb_efuse_get_chipid()). */
+/* Locally administered address used when no factory MAC is provisioned.
+ * mfg media already tried every BL616CL efuse MAC slot, and the chip ID
+ * (bflb_efuse_get_chipid()) is efuse MAC slot 0, so no other per-chip
+ * value is left to make this address unique.
+ */
 
-#define EF_DATA_EF_WIFI_MAC_LOW_OFFSET 0x14
-#define EF_DATA_EF_WIFI_MAC_HIGH_OFFSET 0x18
-
-/* Locally administered fallback prefix used when no factory MAC is
- * provisioned.  02 is the IEEE 802 locally-administered OUI
- * half; the rest is filled from efuse words (or a fixed pattern when the
- * efuse reads back empty). */
-
-#define EF_MAC_FALLBACK_PREFIX "\x02\xE0\x4C"
+static const uint8_t g_fallback_mac[6] =
+{
+  0x02, 0xe0, 0x4c, 0x00, 0x01, 0x02
+};
 
 /****************************************************************************
  * Public Functions
@@ -60,45 +57,22 @@
  * Description:
  *   Resolve the STA MAC address for platform_get_mac(): the factory MAC
  *   from mfg media (RF-parameter flash area, then efuse MAC slots 2..0),
- *   then a deterministic locally administered fallback (fixed prefix +
- *   efuse words) so the interface is always usable on boards without a
- *   provisioned address.
+ *   then a fixed locally administered fallback so the interface is always
+ *   usable on boards without a provisioned address.
+ *
+ * Input Parameters:
+ *   mac - Buffer that receives the 6-byte MAC address.
  *
  * Returned Value:
- *   0 on success (mac filled), negative errno otherwise.
+ *   Always 0; mac is filled with the factory or the fallback address.
  *
  ****************************************************************************/
 
 int bl616_efuse_read_mac_address(uint8_t mac[6])
 {
-  uint32_t low = 0;
-  uint32_t high = 0;
-
-  if (mfg_media_read_macaddr_with_lock(mac, 1) == 0)
+  if (mfg_media_read_macaddr_with_lock(mac, 1) != 0)
     {
-      return 0;
-    }
-
-  /* Fallback: locally administered address, bottom bytes mixed with the
-   * chip-id words so multiple boards differ when efuse has content. */
-
-  bflb_ef_ctrl_read_direct(NULL, EF_DATA_EF_WIFI_MAC_LOW_OFFSET,
-                           &low, 1, 1);
-  bflb_ef_ctrl_read_direct(NULL, EF_DATA_EF_WIFI_MAC_HIGH_OFFSET,
-                           &high, 1, 1);
-
-  mac[0] = (uint8_t)EF_MAC_FALLBACK_PREFIX[0];
-  mac[1] = (uint8_t)EF_MAC_FALLBACK_PREFIX[1];
-  mac[2] = (uint8_t)EF_MAC_FALLBACK_PREFIX[2];
-  mac[3] = (uint8_t)(low >> 24);
-  mac[4] = (uint8_t)(low >> 16);
-  mac[5] = (uint8_t)((low >> 8) ^ high);
-
-  if (mac[3] == 0 && mac[4] == 0 && mac[5] == 0)
-    {
-      mac[3] = 0x00;
-      mac[4] = 0x01;
-      mac[5] = 0x02;
+      memcpy(mac, g_fallback_mac, sizeof(g_fallback_mac));
     }
 
   return 0;
