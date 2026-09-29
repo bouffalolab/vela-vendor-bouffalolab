@@ -163,30 +163,8 @@ static void bl616cl_cache_range_operation(
 
 void bl616cl_cache_early_init(void)
 {
-  uint32_t value;
-
-  UP_DSB();
-  UP_ISB();
-  __DCACHE_IALL();
-
-  value = __get_MHCR();
-  value |= CACHE_MHCR_DE_Msk | CACHE_MHCR_WB_Msk | CACHE_MHCR_WA_Msk |
-           CACHE_MHCR_RS_Msk | CACHE_MHCR_BPE_Msk | CACHE_MHCR_L0BTB_Msk;
-  __set_MHCR(value);
-
-  UP_DSB();
-  UP_ISB();
-
-  UP_DSB();
-  UP_ISB();
-  __ICACHE_IALL();
-
-  value = __get_MHCR();
-  value |= CACHE_MHCR_IE_Msk;
-  __set_MHCR(value);
-
-  UP_DSB();
-  UP_ISB();
+  csi_dcache_enable();
+  csi_icache_enable();
 }
 
 /****************************************************************************

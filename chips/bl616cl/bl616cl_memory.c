@@ -24,7 +24,6 @@
 
 #include <nuttx/config.h>
 
-#include <stdbool.h>
 #include <stdint.h>
 
 #include "riscv_internal.h"
@@ -32,6 +31,7 @@
 #include "bl616cl_memory.h"
 #include "bl616cl_sdk.h"
 #include "bl616cl_glb.h"
+#include "bl616cl_psram.h"
 #include "tzc_sec_reg.h"
 #include "hardware/sf_ctrl_reg.h"
 
@@ -69,22 +69,6 @@ extern uint8_t __LD_CONFIG_EM_SEL;
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
-
-static bool bl616cl_psram_init_done(void)
-{
-  int i;
-
-  for (i = 0; i < 12; i++)
-    {
-      if ((getreg32(GLB_BASE + GLB_GPIO_CFG46_OFFSET + (i * 4)) &
-           GLB_REG_GPIO_0_IE_MSK) == 0)
-        {
-          return false;
-        }
-    }
-
-  return true;
-}
 
 static void bl616cl_psramb_tzc_access_not_lock(uint8_t region,
                                                uint32_t start,
@@ -155,7 +139,7 @@ static void bl616cl_em_select(void)
 
 void bl616cl_memory_early_init(void)
 {
-  if (!bl616cl_psram_init_done())
+  if (!BL616CL_PSRAM_INIT_DONE)
     {
       bl616cl_psramb_tzc_access_not_lock(0, 0, 64 * 1024 * 1024, 0);
     }
