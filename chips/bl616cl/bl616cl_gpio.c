@@ -77,7 +77,7 @@ struct bl616cl_ioe_callback_s
 {
   ioe_pinset_t pinset;          /* Set of pin interrupts registered */
   ioe_callback_t cbfunc;        /* Saved callback function pointer */
-  FAR void *cbarg;              /* Saved callback argument */
+  void *cbarg;                  /* Saved callback argument */
 };
 #endif
 
@@ -86,7 +86,7 @@ struct bl616cl_ioe_callback_s
 struct bl616cl_gpio_dev_s
 {
   struct ioexpander_dev_s dev;    /* Nested structure as public device */
-  FAR struct bflb_device_s *gpio; /* LHAL GPIO device */
+  struct bflb_device_s *gpio;     /* LHAL GPIO device */
   ioe_pinset_t inpins;            /* Bitmap of pins set as inputs */
   ioe_pinset_t invert;            /* Pin value inversion bitmap */
   mutex_t lock;                   /* Mutual exclusion */
@@ -102,23 +102,23 @@ struct bl616cl_gpio_dev_s
  * Private Function Prototypes
  ****************************************************************************/
 
-static int bl616cl_gpio_direction(FAR struct ioexpander_dev_s *dev,
+static int bl616cl_gpio_direction(struct ioexpander_dev_s *dev,
                                   uint8_t pin, int direction);
-static int bl616cl_gpio_option(FAR struct ioexpander_dev_s *dev,
-                               uint8_t pin, int opt, FAR void *value);
-static int bl616cl_gpio_writepin(FAR struct ioexpander_dev_s *dev,
+static int bl616cl_gpio_option(struct ioexpander_dev_s *dev,
+                               uint8_t pin, int opt, void *value);
+static int bl616cl_gpio_writepin(struct ioexpander_dev_s *dev,
                                  uint8_t pin, bool value);
-static int bl616cl_gpio_readpin(FAR struct ioexpander_dev_s *dev,
-                                uint8_t pin, FAR bool *value);
-static int bl616cl_gpio_readbuf(FAR struct ioexpander_dev_s *dev,
-                                uint8_t pin, FAR bool *value);
+static int bl616cl_gpio_readpin(struct ioexpander_dev_s *dev,
+                                uint8_t pin, bool *value);
+static int bl616cl_gpio_readbuf(struct ioexpander_dev_s *dev,
+                                uint8_t pin, bool *value);
 #ifdef CONFIG_IOEXPANDER_INT_ENABLE
-static FAR void *bl616cl_gpio_attach(FAR struct ioexpander_dev_s *dev,
-                                     ioe_pinset_t pinset,
-                                     ioe_callback_t callback,
-                                     FAR void *arg);
-static int bl616cl_gpio_detach(FAR struct ioexpander_dev_s *dev,
-                               FAR void *handle);
+static void *bl616cl_gpio_attach(struct ioexpander_dev_s *dev,
+                                 ioe_pinset_t pinset,
+                                 ioe_callback_t callback,
+                                 void *arg);
+static int bl616cl_gpio_detach(struct ioexpander_dev_s *dev,
+                               void *handle);
 #endif
 
 /****************************************************************************
@@ -168,11 +168,11 @@ static struct bl616cl_gpio_dev_s g_bl616cl_gpio =
  *
  ****************************************************************************/
 
-static int bl616cl_gpio_direction(FAR struct ioexpander_dev_s *dev,
+static int bl616cl_gpio_direction(struct ioexpander_dev_s *dev,
                                   uint8_t pin, int direction)
 {
-  FAR struct bl616cl_gpio_dev_s *priv =
-    (FAR struct bl616cl_gpio_dev_s *)dev;
+  struct bl616cl_gpio_dev_s *priv =
+    (struct bl616cl_gpio_dev_s *)dev;
   uint32_t cfgset;
   int ret;
 
@@ -243,11 +243,11 @@ static int bl616cl_gpio_direction(FAR struct ioexpander_dev_s *dev,
  *
  ****************************************************************************/
 
-static int bl616cl_gpio_option(FAR struct ioexpander_dev_s *dev,
-                               uint8_t pin, int opt, FAR void *value)
+static int bl616cl_gpio_option(struct ioexpander_dev_s *dev,
+                               uint8_t pin, int opt, void *value)
 {
-  FAR struct bl616cl_gpio_dev_s *priv =
-    (FAR struct bl616cl_gpio_dev_s *)dev;
+  struct bl616cl_gpio_dev_s *priv =
+    (struct bl616cl_gpio_dev_s *)dev;
   uintptr_t val = (uintptr_t)value;
   int ret;
 
@@ -359,11 +359,11 @@ static int bl616cl_gpio_option(FAR struct ioexpander_dev_s *dev,
  *
  ****************************************************************************/
 
-static int bl616cl_gpio_writepin(FAR struct ioexpander_dev_s *dev,
+static int bl616cl_gpio_writepin(struct ioexpander_dev_s *dev,
                                  uint8_t pin, bool value)
 {
-  FAR struct bl616cl_gpio_dev_s *priv =
-    (FAR struct bl616cl_gpio_dev_s *)dev;
+  struct bl616cl_gpio_dev_s *priv =
+    (struct bl616cl_gpio_dev_s *)dev;
   int ret;
 
   gpioinfo("pin=%u value=%u\n", pin, value);
@@ -407,11 +407,11 @@ static int bl616cl_gpio_writepin(FAR struct ioexpander_dev_s *dev,
  *
  ****************************************************************************/
 
-static int bl616cl_gpio_readpin(FAR struct ioexpander_dev_s *dev,
-                                uint8_t pin, FAR bool *value)
+static int bl616cl_gpio_readpin(struct ioexpander_dev_s *dev,
+                                uint8_t pin, bool *value)
 {
-  FAR struct bl616cl_gpio_dev_s *priv =
-    (FAR struct bl616cl_gpio_dev_s *)dev;
+  struct bl616cl_gpio_dev_s *priv =
+    (struct bl616cl_gpio_dev_s *)dev;
   int ret;
 
   gpioinfo("pin=%u\n", pin);
@@ -449,8 +449,8 @@ static int bl616cl_gpio_readpin(FAR struct ioexpander_dev_s *dev,
  *
  ****************************************************************************/
 
-static int bl616cl_gpio_readbuf(FAR struct ioexpander_dev_s *dev,
-                                uint8_t pin, FAR bool *value)
+static int bl616cl_gpio_readbuf(struct ioexpander_dev_s *dev,
+                                uint8_t pin, bool *value)
 {
   return bl616cl_gpio_readpin(dev, pin, value);
 }
@@ -502,14 +502,14 @@ static int bl616cl_gpio_pin_from_pinset(ioe_pinset_t pinset)
  *
  ****************************************************************************/
 
-static FAR void *bl616cl_gpio_attach(FAR struct ioexpander_dev_s *dev,
-                                     ioe_pinset_t pinset,
-                                     ioe_callback_t callback,
-                                     FAR void *arg)
+static void *bl616cl_gpio_attach(struct ioexpander_dev_s *dev,
+                                 ioe_pinset_t pinset,
+                                 ioe_callback_t callback,
+                                 void *arg)
 {
-  FAR struct bl616cl_gpio_dev_s *priv =
-    (FAR struct bl616cl_gpio_dev_s *)dev;
-  FAR struct bl616cl_ioe_callback_s *cb = NULL;
+  struct bl616cl_gpio_dev_s *priv =
+    (struct bl616cl_gpio_dev_s *)dev;
+  struct bl616cl_ioe_callback_s *cb = NULL;
   irqstate_t flags;
   int pin;
   int i;
@@ -564,13 +564,13 @@ static FAR void *bl616cl_gpio_attach(FAR struct ioexpander_dev_s *dev,
  *
  ****************************************************************************/
 
-static int bl616cl_gpio_detach(FAR struct ioexpander_dev_s *dev,
-                               FAR void *handle)
+static int bl616cl_gpio_detach(struct ioexpander_dev_s *dev,
+                               void *handle)
 {
-  FAR struct bl616cl_gpio_dev_s *priv =
-    (FAR struct bl616cl_gpio_dev_s *)dev;
-  FAR struct bl616cl_ioe_callback_s *cb =
-    (FAR struct bl616cl_ioe_callback_s *)handle;
+  struct bl616cl_gpio_dev_s *priv =
+    (struct bl616cl_gpio_dev_s *)dev;
+  struct bl616cl_ioe_callback_s *cb =
+    (struct bl616cl_ioe_callback_s *)handle;
   irqstate_t flags;
   int pin;
   int i;
@@ -614,15 +614,15 @@ static int bl616cl_gpio_detach(FAR struct ioexpander_dev_s *dev,
  *
  ****************************************************************************/
 
-static void bl616cl_gpio_irqworker(FAR void *arg)
+static void bl616cl_gpio_irqworker(void *arg)
 {
-  FAR struct bl616cl_gpio_dev_s *priv =
-    (FAR struct bl616cl_gpio_dev_s *)arg;
+  struct bl616cl_gpio_dev_s *priv =
+    (struct bl616cl_gpio_dev_s *)arg;
   int i;
 
   for (i = 0; i < CONFIG_BL616CL_GPIO_INT_NCALLBACKS; i++)
     {
-      FAR struct bl616cl_ioe_callback_s *cb = &priv->cb[i];
+      struct bl616cl_ioe_callback_s *cb = &priv->cb[i];
       int pin;
 
       if (cb->cbfunc == NULL)
@@ -668,10 +668,10 @@ static void bl616cl_gpio_irqworker(FAR void *arg)
  *
  ****************************************************************************/
 
-static void bl616cl_gpio_interrupt(int irq, FAR void *arg)
+static void bl616cl_gpio_interrupt(int irq, void *arg)
 {
-  FAR struct bl616cl_gpio_dev_s *priv =
-    (FAR struct bl616cl_gpio_dev_s *)arg;
+  struct bl616cl_gpio_dev_s *priv =
+    (struct bl616cl_gpio_dev_s *)arg;
 
   DEBUGASSERT(priv != NULL);
 
@@ -706,9 +706,9 @@ static void bl616cl_gpio_interrupt(int irq, FAR void *arg)
  *
  ****************************************************************************/
 
-FAR struct ioexpander_dev_s *bl616cl_gpio_initialize(void)
+struct ioexpander_dev_s *bl616cl_gpio_initialize(void)
 {
-  FAR struct bl616cl_gpio_dev_s *priv = &g_bl616cl_gpio;
+  struct bl616cl_gpio_dev_s *priv = &g_bl616cl_gpio;
 
   if (priv->gpio != NULL)
     {

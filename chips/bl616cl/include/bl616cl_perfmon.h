@@ -86,19 +86,19 @@ struct bl616cl_perfmon_pcstat_s
  * the total time of each interrupt.
  */
 
-void bl616cl_perfmon_read(FAR struct bl616cl_perfmon_counters_s *counters);
+void bl616cl_perfmon_read(struct bl616cl_perfmon_counters_s *counters);
 
 /* Copy min(nirqs, NR_IRQS) entries, indexed by NuttX IRQ number, taken
  * with interrupts disabled.  Returns the number copied.
  */
 
-int bl616cl_perfmon_irq_read(FAR struct bl616cl_perfmon_irq_s *irqs,
+int bl616cl_perfmon_irq_read(struct bl616cl_perfmon_irq_s *irqs,
                              int nirqs);
 
 #ifdef CONFIG_BL616CL_PERFMON_PCSAMPLE
 /* Address range of the XIP code (.text), for sizing a histogram. */
 
-void bl616cl_perfmon_text_range(FAR uintptr_t *start, FAR size_t *size);
+void bl616cl_perfmon_text_range(uintptr_t *start, size_t *size);
 
 /* On every machine timer interrupt that does not interrupt the idle task,
  * count the interrupted PC in hist[(pc - base) >> shift] (saturating at
@@ -107,12 +107,12 @@ void bl616cl_perfmon_text_range(FAR uintptr_t *start, FAR size_t *size);
  * runs and -EINVAL for bad arguments.
  */
 
-int bl616cl_perfmon_pc_start(FAR uint16_t *hist, uintptr_t base,
+int bl616cl_perfmon_pc_start(uint16_t *hist, uintptr_t base,
                              size_t nbuckets, unsigned int shift);
 
 /* Stop sampling and report the tick counts. */
 
-void bl616cl_perfmon_pc_stop(FAR struct bl616cl_perfmon_pcstat_s *stat);
+void bl616cl_perfmon_pc_stop(struct bl616cl_perfmon_pcstat_s *stat);
 #endif
 
 #endif /* CONFIG_BL616CL_PERFMON */

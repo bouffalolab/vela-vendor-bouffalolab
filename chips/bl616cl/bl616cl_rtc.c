@@ -77,7 +77,7 @@
 
 struct bl616cl_rtc_lowerhalf_s
 {
-  FAR const struct rtc_ops_s *ops;
+  const struct rtc_ops_s *ops;
   spinlock_t lock;
   time_t epoch_base;
   uint64_t counter_base;
@@ -87,7 +87,7 @@ struct bl616cl_rtc_lowerhalf_s
 
 #ifdef CONFIG_BL616CL_RTC_ALARM
   rtc_alarm_callback_t alarm_callback;
-  FAR void *alarm_arg;
+  void *alarm_arg;
   struct rtc_time alarm_time;
   time_t alarm_epoch;
   uint32_t alarm_nanosecond;
@@ -101,27 +101,27 @@ struct bl616cl_rtc_lowerhalf_s
  * Private Function Prototypes
  ****************************************************************************/
 
-static int bl616cl_rtc_rdtime(FAR struct rtc_lowerhalf_s *lower,
-                              FAR struct rtc_time *rtctime);
-static int bl616cl_rtc_settime(FAR struct rtc_lowerhalf_s *lower,
-                               FAR const struct rtc_time *rtctime);
-static bool bl616cl_rtc_havesettime(FAR struct rtc_lowerhalf_s *lower);
+static int bl616cl_rtc_rdtime(struct rtc_lowerhalf_s *lower,
+                              struct rtc_time *rtctime);
+static int bl616cl_rtc_settime(struct rtc_lowerhalf_s *lower,
+                               const struct rtc_time *rtctime);
+static bool bl616cl_rtc_havesettime(struct rtc_lowerhalf_s *lower);
 
 #ifdef CONFIG_BL616CL_RTC_ALARM
-static int bl616cl_rtc_setalarm(FAR struct rtc_lowerhalf_s *lower,
-                                FAR const struct lower_setalarm_s
+static int bl616cl_rtc_setalarm(struct rtc_lowerhalf_s *lower,
+                                const struct lower_setalarm_s
                                   *alarminfo);
 static int bl616cl_rtc_setrelative(
-  FAR struct rtc_lowerhalf_s *lower,
-  FAR const struct lower_setrelative_s *alarminfo);
-static int bl616cl_rtc_cancelalarm(FAR struct rtc_lowerhalf_s *lower,
+  struct rtc_lowerhalf_s *lower,
+  const struct lower_setrelative_s *alarminfo);
+static int bl616cl_rtc_cancelalarm(struct rtc_lowerhalf_s *lower,
                                    int alarmid);
-static int bl616cl_rtc_rdalarm(FAR struct rtc_lowerhalf_s *lower,
-                               FAR struct lower_rdalarm_s *alarminfo);
+static int bl616cl_rtc_rdalarm(struct rtc_lowerhalf_s *lower,
+                               struct lower_rdalarm_s *alarminfo);
 #endif
 
 #ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
-static int bl616cl_rtc_destroy(FAR struct rtc_lowerhalf_s *lower);
+static int bl616cl_rtc_destroy(struct rtc_lowerhalf_s *lower);
 #endif
 
 /****************************************************************************
@@ -174,7 +174,7 @@ static struct bl616cl_rtc_lowerhalf_s g_bl616cl_rtc =
  ****************************************************************************/
 
 static uint64_t bl616cl_rtc_ticks_to_seconds(uint64_t ticks,
-                                             FAR uint32_t *nanoseconds)
+                                             uint32_t *nanoseconds)
 {
   uint64_t scaled;
   uint64_t remainder;
@@ -207,7 +207,7 @@ static uint64_t bl616cl_rtc_ticks_to_seconds(uint64_t ticks,
 
 static int bl616cl_rtc_duration_to_ticks(uint64_t seconds,
                                          uint32_t nanoseconds,
-                                         FAR uint64_t *ticks)
+                                         uint64_t *ticks)
 {
   uint64_t denominator;
   uint64_t fraction;
@@ -265,9 +265,9 @@ static int bl616cl_rtc_duration_to_ticks(uint64_t seconds,
  *
  ****************************************************************************/
 
-static int bl616cl_rtc_time_to_epoch(FAR const struct rtc_time *rtctime,
-                                     FAR time_t *epoch,
-                                     FAR uint32_t *nanosecond)
+static int bl616cl_rtc_time_to_epoch(const struct rtc_time *rtctime,
+                                     time_t *epoch,
+                                     uint32_t *nanosecond)
 {
   struct tm converted;
   struct tm input;
@@ -333,8 +333,8 @@ static int bl616cl_rtc_time_to_epoch(FAR const struct rtc_time *rtctime,
  ****************************************************************************/
 
 static int bl616cl_rtc_snapshot_locked(
-  FAR struct bl616cl_rtc_lowerhalf_s *priv,
-  FAR time_t *epoch, FAR uint32_t *nanosecond, FAR uint64_t *counter)
+  struct bl616cl_rtc_lowerhalf_s *priv,
+  time_t *epoch, uint32_t *nanosecond, uint64_t *counter)
 {
   uint64_t base_counter;
   uint64_t elapsed_ticks;
@@ -384,8 +384,8 @@ static int bl616cl_rtc_snapshot_locked(
  ****************************************************************************/
 
 static int bl616cl_rtc_snapshot(
-  FAR struct bl616cl_rtc_lowerhalf_s *priv,
-  FAR time_t *epoch, FAR uint32_t *nanosecond, FAR uint64_t *counter)
+  struct bl616cl_rtc_lowerhalf_s *priv,
+  time_t *epoch, uint32_t *nanosecond, uint64_t *counter)
 {
   irqstate_t flags;
   int ret;
@@ -522,7 +522,7 @@ static int bl616cl_rtc_alarm_delta(time_t current_epoch,
                                    uint32_t current_nanosecond,
                                    time_t target_epoch,
                                    uint32_t target_nanosecond,
-                                   FAR uint64_t *delta_ticks)
+                                   uint64_t *delta_ticks)
 {
   uint64_t seconds;
   uint32_t nanoseconds;
@@ -581,9 +581,9 @@ static int bl616cl_rtc_alarm_delta(time_t current_epoch,
  ****************************************************************************/
 
 static int bl616cl_rtc_program_alarm_locked(
-  FAR struct bl616cl_rtc_lowerhalf_s *priv, time_t target_epoch,
-  uint32_t target_nanosecond, rtc_alarm_callback_t callback, FAR void *arg,
-  FAR const struct rtc_time *alarm_time)
+  struct bl616cl_rtc_lowerhalf_s *priv, time_t target_epoch,
+  uint32_t target_nanosecond, rtc_alarm_callback_t callback, void *arg,
+  const struct rtc_time *alarm_time)
 {
   uint64_t delta_ticks;
   uint64_t current_counter;
@@ -647,11 +647,11 @@ static int bl616cl_rtc_program_alarm_locked(
  *
  ****************************************************************************/
 
-static int bl616cl_rtc_interrupt(int irq, FAR void *context, FAR void *arg)
+static int bl616cl_rtc_interrupt(int irq, void *context, void *arg)
 {
-  FAR struct bl616cl_rtc_lowerhalf_s *priv = arg;
+  struct bl616cl_rtc_lowerhalf_s *priv = arg;
   rtc_alarm_callback_t callback = NULL;
-  FAR void *callback_arg = NULL;
+  void *callback_arg = NULL;
   struct timespec system_time;
   irqstate_t flags;
 
@@ -723,11 +723,11 @@ static int bl616cl_rtc_interrupt(int irq, FAR void *context, FAR void *arg)
  *
  ****************************************************************************/
 
-static int bl616cl_rtc_rdtime(FAR struct rtc_lowerhalf_s *lower,
-                              FAR struct rtc_time *rtctime)
+static int bl616cl_rtc_rdtime(struct rtc_lowerhalf_s *lower,
+                              struct rtc_time *rtctime)
 {
-  FAR struct bl616cl_rtc_lowerhalf_s *priv =
-    (FAR struct bl616cl_rtc_lowerhalf_s *)lower;
+  struct bl616cl_rtc_lowerhalf_s *priv =
+    (struct bl616cl_rtc_lowerhalf_s *)lower;
   struct tm converted;
   uint64_t counter;
   time_t epoch;
@@ -779,11 +779,11 @@ static int bl616cl_rtc_rdtime(FAR struct rtc_lowerhalf_s *lower,
  *
  ****************************************************************************/
 
-static int bl616cl_rtc_settime(FAR struct rtc_lowerhalf_s *lower,
-                               FAR const struct rtc_time *rtctime)
+static int bl616cl_rtc_settime(struct rtc_lowerhalf_s *lower,
+                               const struct rtc_time *rtctime)
 {
-  FAR struct bl616cl_rtc_lowerhalf_s *priv =
-    (FAR struct bl616cl_rtc_lowerhalf_s *)lower;
+  struct bl616cl_rtc_lowerhalf_s *priv =
+    (struct bl616cl_rtc_lowerhalf_s *)lower;
   uint64_t counter;
   time_t epoch;
   uint32_t nanosecond;
@@ -866,10 +866,10 @@ static int bl616cl_rtc_settime(FAR struct rtc_lowerhalf_s *lower,
  *
  ****************************************************************************/
 
-static int bl616cl_rtc_destroy(FAR struct rtc_lowerhalf_s *lower)
+static int bl616cl_rtc_destroy(struct rtc_lowerhalf_s *lower)
 {
-  FAR struct bl616cl_rtc_lowerhalf_s *priv =
-    (FAR struct bl616cl_rtc_lowerhalf_s *)lower;
+  struct bl616cl_rtc_lowerhalf_s *priv =
+    (struct bl616cl_rtc_lowerhalf_s *)lower;
   irqstate_t flags;
 
   if (priv == NULL)
@@ -912,10 +912,10 @@ static int bl616cl_rtc_destroy(FAR struct rtc_lowerhalf_s *lower)
  *
  ****************************************************************************/
 
-static bool bl616cl_rtc_havesettime(FAR struct rtc_lowerhalf_s *lower)
+static bool bl616cl_rtc_havesettime(struct rtc_lowerhalf_s *lower)
 {
-  FAR struct bl616cl_rtc_lowerhalf_s *priv =
-    (FAR struct bl616cl_rtc_lowerhalf_s *)lower;
+  struct bl616cl_rtc_lowerhalf_s *priv =
+    (struct bl616cl_rtc_lowerhalf_s *)lower;
   irqstate_t flags;
   bool time_set;
 
@@ -947,11 +947,11 @@ static bool bl616cl_rtc_havesettime(FAR struct rtc_lowerhalf_s *lower)
  *
  ****************************************************************************/
 
-static int bl616cl_rtc_setalarm(FAR struct rtc_lowerhalf_s *lower,
-                                FAR const struct lower_setalarm_s *alarminfo)
+static int bl616cl_rtc_setalarm(struct rtc_lowerhalf_s *lower,
+                                const struct lower_setalarm_s *alarminfo)
 {
-  FAR struct bl616cl_rtc_lowerhalf_s *priv =
-    (FAR struct bl616cl_rtc_lowerhalf_s *)lower;
+  struct bl616cl_rtc_lowerhalf_s *priv =
+    (struct bl616cl_rtc_lowerhalf_s *)lower;
   time_t epoch;
   uint32_t nanosecond;
   irqstate_t flags;
@@ -1002,11 +1002,11 @@ static int bl616cl_rtc_setalarm(FAR struct rtc_lowerhalf_s *lower,
  ****************************************************************************/
 
 static int bl616cl_rtc_setrelative(
-  FAR struct rtc_lowerhalf_s *lower,
-  FAR const struct lower_setrelative_s *alarminfo)
+  struct rtc_lowerhalf_s *lower,
+  const struct lower_setrelative_s *alarminfo)
 {
-  FAR struct bl616cl_rtc_lowerhalf_s *priv =
-    (FAR struct bl616cl_rtc_lowerhalf_s *)lower;
+  struct bl616cl_rtc_lowerhalf_s *priv =
+    (struct bl616cl_rtc_lowerhalf_s *)lower;
   struct rtc_time alarm_time;
   struct tm converted;
   uint64_t counter;
@@ -1075,11 +1075,11 @@ static int bl616cl_rtc_setrelative(
  *
  ****************************************************************************/
 
-static int bl616cl_rtc_cancelalarm(FAR struct rtc_lowerhalf_s *lower,
+static int bl616cl_rtc_cancelalarm(struct rtc_lowerhalf_s *lower,
                                    int alarmid)
 {
-  FAR struct bl616cl_rtc_lowerhalf_s *priv =
-    (FAR struct bl616cl_rtc_lowerhalf_s *)lower;
+  struct bl616cl_rtc_lowerhalf_s *priv =
+    (struct bl616cl_rtc_lowerhalf_s *)lower;
   irqstate_t flags;
 
   if (priv == NULL || alarmid != 0)
@@ -1116,11 +1116,11 @@ static int bl616cl_rtc_cancelalarm(FAR struct rtc_lowerhalf_s *lower,
  *
  ****************************************************************************/
 
-static int bl616cl_rtc_rdalarm(FAR struct rtc_lowerhalf_s *lower,
-                               FAR struct lower_rdalarm_s *alarminfo)
+static int bl616cl_rtc_rdalarm(struct rtc_lowerhalf_s *lower,
+                               struct lower_rdalarm_s *alarminfo)
 {
-  FAR struct bl616cl_rtc_lowerhalf_s *priv =
-    (FAR struct bl616cl_rtc_lowerhalf_s *)lower;
+  struct bl616cl_rtc_lowerhalf_s *priv =
+    (struct bl616cl_rtc_lowerhalf_s *)lower;
   irqstate_t flags;
 
   if (priv == NULL || alarminfo == NULL || alarminfo->time == NULL ||
@@ -1186,7 +1186,7 @@ uint64_t bl616cl_rtc_counter(void)
 
 int up_rtc_initialize(void)
 {
-  FAR struct bl616cl_rtc_lowerhalf_s *priv = &g_bl616cl_rtc;
+  struct bl616cl_rtc_lowerhalf_s *priv = &g_bl616cl_rtc;
   struct tm converted;
   struct tm start_time;
   time_t start_epoch;
@@ -1246,7 +1246,7 @@ int up_rtc_initialize(void)
   up_enable_irq(BL616CL_IRQ_NUM_HBN_OUT0);
 #endif
 
-  up_rtc_set_lowerhalf((FAR struct rtc_lowerhalf_s *)priv, false);
+  up_rtc_set_lowerhalf((struct rtc_lowerhalf_s *)priv, false);
 
   flags = spin_lock_irqsave(&priv->lock);
   priv->initialized = true;
@@ -1285,7 +1285,7 @@ int bl616cl_rtc_register(int minor)
     }
 
   return rtc_initialize(minor,
-                        (FAR struct rtc_lowerhalf_s *)&g_bl616cl_rtc);
+                        (struct rtc_lowerhalf_s *)&g_bl616cl_rtc);
 }
 
 /****************************************************************************

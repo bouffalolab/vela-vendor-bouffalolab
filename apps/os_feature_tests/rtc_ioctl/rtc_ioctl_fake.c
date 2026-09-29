@@ -32,7 +32,7 @@
 
 struct bl_rtc_ioctl_test_lower_s
 {
-  FAR const struct rtc_ops_s *ops;
+  const struct rtc_ops_s *ops;
   struct bl_rtc_ioctl_test_snapshot_s snapshot;
   struct rtc_time time;
 #ifdef CONFIG_RTC_ALARM
@@ -45,38 +45,38 @@ struct bl_rtc_ioctl_test_lower_s
  * Private Function Prototypes
  ****************************************************************************/
 
-static int bl_rtc_ioctl_test_rdtime(FAR struct rtc_lowerhalf_s *lower,
-                                    FAR struct rtc_time *rtctime);
-static int bl_rtc_ioctl_test_settime(FAR struct rtc_lowerhalf_s *lower,
-                                     FAR const struct rtc_time *rtctime);
+static int bl_rtc_ioctl_test_rdtime(struct rtc_lowerhalf_s *lower,
+                                    struct rtc_time *rtctime);
+static int bl_rtc_ioctl_test_settime(struct rtc_lowerhalf_s *lower,
+                                     const struct rtc_time *rtctime);
 static bool bl_rtc_ioctl_test_havesettime(
-  FAR struct rtc_lowerhalf_s *lower);
+  struct rtc_lowerhalf_s *lower);
 #ifdef CONFIG_RTC_ALARM
 static int bl_rtc_ioctl_test_setalarm(
-  FAR struct rtc_lowerhalf_s *lower,
-  FAR const struct lower_setalarm_s *alarminfo);
+  struct rtc_lowerhalf_s *lower,
+  const struct lower_setalarm_s *alarminfo);
 static int bl_rtc_ioctl_test_setrelative(
-  FAR struct rtc_lowerhalf_s *lower,
-  FAR const struct lower_setrelative_s *alarminfo);
-static int bl_rtc_ioctl_test_cancelalarm(FAR struct rtc_lowerhalf_s *lower,
+  struct rtc_lowerhalf_s *lower,
+  const struct lower_setrelative_s *alarminfo);
+static int bl_rtc_ioctl_test_cancelalarm(struct rtc_lowerhalf_s *lower,
                                          int alarmid);
 static int bl_rtc_ioctl_test_rdalarm(
-  FAR struct rtc_lowerhalf_s *lower,
-  FAR struct lower_rdalarm_s *alarminfo);
+  struct rtc_lowerhalf_s *lower,
+  struct lower_rdalarm_s *alarminfo);
 #endif
 #ifdef CONFIG_RTC_PERIODIC
 static int bl_rtc_ioctl_test_setperiodic(
-  FAR struct rtc_lowerhalf_s *lower,
-  FAR const struct lower_setperiodic_s *alarminfo);
+  struct rtc_lowerhalf_s *lower,
+  const struct lower_setperiodic_s *alarminfo);
 static int bl_rtc_ioctl_test_cancelperiodic(
-  FAR struct rtc_lowerhalf_s *lower, int id);
+  struct rtc_lowerhalf_s *lower, int id);
 #endif
 #ifdef CONFIG_RTC_IOCTL
-static int bl_rtc_ioctl_test_ioctl(FAR struct rtc_lowerhalf_s *lower,
+static int bl_rtc_ioctl_test_ioctl(struct rtc_lowerhalf_s *lower,
                                    int cmd, unsigned long arg);
 #endif
-static int bl_rtc_ioctl_test_destroy(FAR struct rtc_lowerhalf_s *lower);
-static int bl_rtc_initialize_sentinel_ioctl(FAR struct file *filep,
+static int bl_rtc_ioctl_test_destroy(struct rtc_lowerhalf_s *lower);
+static int bl_rtc_initialize_sentinel_ioctl(struct file *filep,
                                             int cmd,
                                             unsigned long arg);
 
@@ -153,24 +153,24 @@ static struct bl_rtc_ioctl_test_lower_s g_bl_rtc_initialize_boundary_lower =
   .ops = &g_bl_rtc_ioctl_test_ops,
 };
 
-static FAR struct bl_rtc_ioctl_test_lower_s *
-bl_rtc_ioctl_test_from_lower(FAR struct rtc_lowerhalf_s *lower)
+static struct bl_rtc_ioctl_test_lower_s *
+bl_rtc_ioctl_test_from_lower(struct rtc_lowerhalf_s *lower)
 {
-  return (FAR struct bl_rtc_ioctl_test_lower_s *)lower;
+  return (struct bl_rtc_ioctl_test_lower_s *)lower;
 }
 
 static void bl_rtc_ioctl_test_record_method(
-  FAR struct bl_rtc_ioctl_test_lower_s *priv,
+  struct bl_rtc_ioctl_test_lower_s *priv,
   enum bl_rtc_ioctl_test_method_e method)
 {
   priv->snapshot.previous_method = priv->snapshot.last_method;
   priv->snapshot.last_method = method;
 }
 
-static int bl_rtc_ioctl_test_rdtime(FAR struct rtc_lowerhalf_s *lower,
-                                    FAR struct rtc_time *rtctime)
+static int bl_rtc_ioctl_test_rdtime(struct rtc_lowerhalf_s *lower,
+                                    struct rtc_time *rtctime)
 {
-  FAR struct bl_rtc_ioctl_test_lower_s *priv =
+  struct bl_rtc_ioctl_test_lower_s *priv =
     bl_rtc_ioctl_test_from_lower(lower);
 
   bl_rtc_ioctl_test_record_method(priv, BL_RTC_IOCTL_TEST_METHOD_RDTIME);
@@ -185,10 +185,10 @@ static int bl_rtc_ioctl_test_rdtime(FAR struct rtc_lowerhalf_s *lower,
   return OK;
 }
 
-static int bl_rtc_ioctl_test_settime(FAR struct rtc_lowerhalf_s *lower,
-                                     FAR const struct rtc_time *rtctime)
+static int bl_rtc_ioctl_test_settime(struct rtc_lowerhalf_s *lower,
+                                     const struct rtc_time *rtctime)
 {
-  FAR struct bl_rtc_ioctl_test_lower_s *priv =
+  struct bl_rtc_ioctl_test_lower_s *priv =
     bl_rtc_ioctl_test_from_lower(lower);
 
   bl_rtc_ioctl_test_record_method(priv, BL_RTC_IOCTL_TEST_METHOD_SETTIME);
@@ -206,9 +206,9 @@ static int bl_rtc_ioctl_test_settime(FAR struct rtc_lowerhalf_s *lower,
 }
 
 static bool bl_rtc_ioctl_test_havesettime(
-  FAR struct rtc_lowerhalf_s *lower)
+  struct rtc_lowerhalf_s *lower)
 {
-  FAR struct bl_rtc_ioctl_test_lower_s *priv =
+  struct bl_rtc_ioctl_test_lower_s *priv =
     bl_rtc_ioctl_test_from_lower(lower);
 
   bl_rtc_ioctl_test_record_method(priv,
@@ -219,10 +219,10 @@ static bool bl_rtc_ioctl_test_havesettime(
 
 #ifdef CONFIG_RTC_ALARM
 static int bl_rtc_ioctl_test_setalarm(
-  FAR struct rtc_lowerhalf_s *lower,
-  FAR const struct lower_setalarm_s *alarminfo)
+  struct rtc_lowerhalf_s *lower,
+  const struct lower_setalarm_s *alarminfo)
 {
-  FAR struct bl_rtc_ioctl_test_lower_s *priv =
+  struct bl_rtc_ioctl_test_lower_s *priv =
     bl_rtc_ioctl_test_from_lower(lower);
 
   bl_rtc_ioctl_test_record_method(priv, BL_RTC_IOCTL_TEST_METHOD_SETALARM);
@@ -242,10 +242,10 @@ static int bl_rtc_ioctl_test_setalarm(
 }
 
 static int bl_rtc_ioctl_test_setrelative(
-  FAR struct rtc_lowerhalf_s *lower,
-  FAR const struct lower_setrelative_s *alarminfo)
+  struct rtc_lowerhalf_s *lower,
+  const struct lower_setrelative_s *alarminfo)
 {
-  FAR struct bl_rtc_ioctl_test_lower_s *priv =
+  struct bl_rtc_ioctl_test_lower_s *priv =
     bl_rtc_ioctl_test_from_lower(lower);
 
   bl_rtc_ioctl_test_record_method(priv,
@@ -264,10 +264,10 @@ static int bl_rtc_ioctl_test_setrelative(
   return OK;
 }
 
-static int bl_rtc_ioctl_test_cancelalarm(FAR struct rtc_lowerhalf_s *lower,
+static int bl_rtc_ioctl_test_cancelalarm(struct rtc_lowerhalf_s *lower,
                                          int alarmid)
 {
-  FAR struct bl_rtc_ioctl_test_lower_s *priv =
+  struct bl_rtc_ioctl_test_lower_s *priv =
     bl_rtc_ioctl_test_from_lower(lower);
 
   bl_rtc_ioctl_test_record_method(priv,
@@ -278,10 +278,10 @@ static int bl_rtc_ioctl_test_cancelalarm(FAR struct rtc_lowerhalf_s *lower,
 }
 
 static int bl_rtc_ioctl_test_rdalarm(
-  FAR struct rtc_lowerhalf_s *lower,
-  FAR struct lower_rdalarm_s *alarminfo)
+  struct rtc_lowerhalf_s *lower,
+  struct lower_rdalarm_s *alarminfo)
 {
-  FAR struct bl_rtc_ioctl_test_lower_s *priv =
+  struct bl_rtc_ioctl_test_lower_s *priv =
     bl_rtc_ioctl_test_from_lower(lower);
 
   bl_rtc_ioctl_test_record_method(priv, BL_RTC_IOCTL_TEST_METHOD_RDALARM);
@@ -301,10 +301,10 @@ static int bl_rtc_ioctl_test_rdalarm(
 
 #ifdef CONFIG_RTC_PERIODIC
 static int bl_rtc_ioctl_test_setperiodic(
-  FAR struct rtc_lowerhalf_s *lower,
-  FAR const struct lower_setperiodic_s *alarminfo)
+  struct rtc_lowerhalf_s *lower,
+  const struct lower_setperiodic_s *alarminfo)
 {
-  FAR struct bl_rtc_ioctl_test_lower_s *priv =
+  struct bl_rtc_ioctl_test_lower_s *priv =
     bl_rtc_ioctl_test_from_lower(lower);
 
   bl_rtc_ioctl_test_record_method(priv,
@@ -324,9 +324,9 @@ static int bl_rtc_ioctl_test_setperiodic(
 }
 
 static int bl_rtc_ioctl_test_cancelperiodic(
-  FAR struct rtc_lowerhalf_s *lower, int id)
+  struct rtc_lowerhalf_s *lower, int id)
 {
-  FAR struct bl_rtc_ioctl_test_lower_s *priv =
+  struct bl_rtc_ioctl_test_lower_s *priv =
     bl_rtc_ioctl_test_from_lower(lower);
 
   bl_rtc_ioctl_test_record_method(priv,
@@ -338,10 +338,10 @@ static int bl_rtc_ioctl_test_cancelperiodic(
 #endif
 
 #ifdef CONFIG_RTC_IOCTL
-static int bl_rtc_ioctl_test_ioctl(FAR struct rtc_lowerhalf_s *lower,
+static int bl_rtc_ioctl_test_ioctl(struct rtc_lowerhalf_s *lower,
                                    int cmd, unsigned long arg)
 {
-  FAR struct bl_rtc_ioctl_test_lower_s *priv =
+  struct bl_rtc_ioctl_test_lower_s *priv =
     bl_rtc_ioctl_test_from_lower(lower);
 
   bl_rtc_ioctl_test_record_method(priv, BL_RTC_IOCTL_TEST_METHOD_IOCTL);
@@ -352,16 +352,16 @@ static int bl_rtc_ioctl_test_ioctl(FAR struct rtc_lowerhalf_s *lower,
 }
 #endif
 
-static int bl_rtc_ioctl_test_destroy(FAR struct rtc_lowerhalf_s *lower)
+static int bl_rtc_ioctl_test_destroy(struct rtc_lowerhalf_s *lower)
 {
-  FAR struct bl_rtc_ioctl_test_lower_s *priv =
+  struct bl_rtc_ioctl_test_lower_s *priv =
     bl_rtc_ioctl_test_from_lower(lower);
 
   priv->snapshot.destroy_calls++;
   return OK;
 }
 
-static int bl_rtc_initialize_sentinel_ioctl(FAR struct file *filep,
+static int bl_rtc_initialize_sentinel_ioctl(struct file *filep,
                                             int cmd,
                                             unsigned long arg)
 {
@@ -372,7 +372,7 @@ static int bl_rtc_initialize_sentinel_ioctl(FAR struct file *filep,
 }
 
 static void bl_rtc_initialize_reset_lower(
-  FAR struct bl_rtc_ioctl_test_lower_s *lower)
+  struct bl_rtc_ioctl_test_lower_s *lower)
 {
   memset(&lower->snapshot, 0, sizeof(lower->snapshot));
   memset(&lower->time, 0, sizeof(lower->time));
@@ -385,8 +385,8 @@ static void bl_rtc_initialize_reset_lower(
   lower->snapshot.last_id = -1;
 }
 
-static int bl_rtc_initialize_sentinel_check(FAR const char *path,
-                                            FAR bool *alive)
+static int bl_rtc_initialize_sentinel_check(const char *path,
+                                            bool *alive)
 {
   int fd;
   int ret;
@@ -413,10 +413,10 @@ static int bl_rtc_initialize_sentinel_check(FAR const char *path,
 }
 
 static int bl_rtc_initialize_invalid_case(int minor,
-                                          FAR struct rtc_lowerhalf_s *lower,
-                                          FAR const char *path,
-                                          FAR int *ret,
-                                          FAR bool *sentinel_ok)
+                                          struct rtc_lowerhalf_s *lower,
+                                          const char *path,
+                                          int *ret,
+                                          bool *sentinel_ok)
 {
   int check_ret;
   int cleanup_ret;
@@ -463,7 +463,7 @@ void bl_rtc_ioctl_test_lower_reset(void)
 }
 
 int bl_rtc_ioctl_test_lower_snapshot(
-  FAR struct bl_rtc_ioctl_test_snapshot_s *snapshot)
+  struct bl_rtc_ioctl_test_snapshot_s *snapshot)
 {
   if (snapshot == NULL)
     {
@@ -475,7 +475,7 @@ int bl_rtc_ioctl_test_lower_snapshot(
 }
 
 int bl_rtc_initialize_test_run(
-  FAR struct bl_rtc_initialize_test_result_s *result)
+  struct bl_rtc_initialize_test_result_s *result)
 {
   static const char *const invalid_paths[] = {
     "/dev/rtc90",
@@ -539,7 +539,7 @@ int bl_rtc_initialize_test_run(
     }
 
   ret = bl_rtc_initialize_invalid_case(
-    -1, (FAR struct rtc_lowerhalf_s *)&g_bl_rtc_initialize_invalid_lower,
+    -1, (struct rtc_lowerhalf_s *)&g_bl_rtc_initialize_invalid_lower,
     invalid_paths[2], &result->invalid_ret[2],
     &result->invalid_sentinel_ok[2]);
   if (ret < 0)
@@ -548,7 +548,7 @@ int bl_rtc_initialize_test_run(
     }
 
   ret = bl_rtc_initialize_invalid_case(
-    1000, (FAR struct rtc_lowerhalf_s *)&g_bl_rtc_initialize_invalid_lower,
+    1000, (struct rtc_lowerhalf_s *)&g_bl_rtc_initialize_invalid_lower,
     invalid_paths[3], &result->invalid_ret[3],
     &result->invalid_sentinel_ok[3]);
   if (ret < 0)
@@ -558,7 +558,7 @@ int bl_rtc_initialize_test_run(
 
   ret = bl_rtc_initialize_invalid_case(
     INT_MIN,
-    (FAR struct rtc_lowerhalf_s *)&g_bl_rtc_initialize_invalid_lower,
+    (struct rtc_lowerhalf_s *)&g_bl_rtc_initialize_invalid_lower,
     invalid_paths[4], &result->invalid_ret[4],
     &result->invalid_sentinel_ok[4]);
   if (ret < 0)
@@ -568,7 +568,7 @@ int bl_rtc_initialize_test_run(
 
   ret = bl_rtc_initialize_invalid_case(
     INT_MAX,
-    (FAR struct rtc_lowerhalf_s *)&g_bl_rtc_initialize_invalid_lower,
+    (struct rtc_lowerhalf_s *)&g_bl_rtc_initialize_invalid_lower,
     invalid_paths[5], &result->invalid_ret[5],
     &result->invalid_sentinel_ok[5]);
   if (ret < 0)
@@ -582,7 +582,7 @@ int bl_rtc_initialize_test_run(
   bl_rtc_initialize_reset_lower(&g_bl_rtc_initialize_owner_lower);
   bl_rtc_initialize_reset_lower(&g_bl_rtc_initialize_challenger_lower);
   result->register_ret = rtc_initialize(
-    97, (FAR struct rtc_lowerhalf_s *)&g_bl_rtc_initialize_owner_lower);
+    97, (struct rtc_lowerhalf_s *)&g_bl_rtc_initialize_owner_lower);
   if (result->register_ret == OK)
     {
       errno = 0;
@@ -612,7 +612,7 @@ int bl_rtc_initialize_test_run(
         {
           ret = rtc_initialize(
             97,
-            (FAR struct rtc_lowerhalf_s *)
+            (struct rtc_lowerhalf_s *)
               &g_bl_rtc_initialize_challenger_lower);
           if (i == 0)
             {
@@ -720,7 +720,7 @@ int bl_rtc_initialize_test_run(
 
   bl_rtc_initialize_reset_lower(&g_bl_rtc_initialize_boundary_lower);
   result->boundary_register_ret = rtc_initialize(
-    999, (FAR struct rtc_lowerhalf_s *)&g_bl_rtc_initialize_boundary_lower);
+    999, (struct rtc_lowerhalf_s *)&g_bl_rtc_initialize_boundary_lower);
   if (result->boundary_register_ret == OK)
     {
       errno = 0;
@@ -805,7 +805,7 @@ int bl_rtc_ioctl_test_lower_register(void)
 
   bl_rtc_ioctl_test_lower_reset();
   ret = rtc_initialize(99,
-    (FAR struct rtc_lowerhalf_s *)&g_bl_rtc_ioctl_test_lower);
+    (struct rtc_lowerhalf_s *)&g_bl_rtc_ioctl_test_lower);
   if (ret < 0)
     {
       return ret;

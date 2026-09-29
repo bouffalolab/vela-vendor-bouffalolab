@@ -76,7 +76,7 @@ static uint64_t g_perfmon_irqcycles[NR_IRQS];
 extern uint8_t _stext[];
 extern uint8_t __bl616cl_text_end[];
 
-static FAR uint16_t *volatile g_perfmon_hist;
+static uint16_t *volatile g_perfmon_hist;
 static uintptr_t g_perfmon_base;
 static size_t g_perfmon_nbuckets;
 static unsigned int g_perfmon_shift;
@@ -108,7 +108,7 @@ static struct bl616cl_perfmon_pcstat_s g_perfmon_pcstat;
 
 static void bl616cl_perfmon_sample(uintptr_t pc)
 {
-  FAR uint16_t *hist = g_perfmon_hist;
+  uint16_t *hist = g_perfmon_hist;
   size_t bucket = (pc - g_perfmon_base) >> g_perfmon_shift;
 
   g_perfmon_pcstat.samples++;
@@ -183,9 +183,9 @@ void bl616cl_perfmon_initialize(void)
  *
  ****************************************************************************/
 
-FAR void *bl616cl_perfmon_dispatch(int irq, FAR uintreg_t *regs)
+void *bl616cl_perfmon_dispatch(int irq, uintreg_t *regs)
 {
-  FAR void *ret;
+  void *ret;
   uint32_t start;
 
 #ifdef CONFIG_BL616CL_PERFMON_PCSAMPLE
@@ -223,7 +223,7 @@ FAR void *bl616cl_perfmon_dispatch(int irq, FAR uintreg_t *regs)
  *
  ****************************************************************************/
 
-void bl616cl_perfmon_read(FAR struct bl616cl_perfmon_counters_s *counters)
+void bl616cl_perfmon_read(struct bl616cl_perfmon_counters_s *counters)
 {
   PERFMON_READ64("mcycle", counters->cycle);
   PERFMON_READ64("minstret", counters->instret);
@@ -261,7 +261,7 @@ void bl616cl_perfmon_read(FAR struct bl616cl_perfmon_counters_s *counters)
  *
  ****************************************************************************/
 
-int bl616cl_perfmon_irq_read(FAR struct bl616cl_perfmon_irq_s *irqs,
+int bl616cl_perfmon_irq_read(struct bl616cl_perfmon_irq_s *irqs,
                              int nirqs)
 {
   irqstate_t flags;
@@ -300,7 +300,7 @@ int bl616cl_perfmon_irq_read(FAR struct bl616cl_perfmon_irq_s *irqs,
  *
  ****************************************************************************/
 
-void bl616cl_perfmon_text_range(FAR uintptr_t *start, FAR size_t *size)
+void bl616cl_perfmon_text_range(uintptr_t *start, size_t *size)
 {
   *start = (uintptr_t)_stext;
   *size = __bl616cl_text_end - _stext;
@@ -327,7 +327,7 @@ void bl616cl_perfmon_text_range(FAR uintptr_t *start, FAR size_t *size)
  *
  ****************************************************************************/
 
-int bl616cl_perfmon_pc_start(FAR uint16_t *hist, uintptr_t base,
+int bl616cl_perfmon_pc_start(uint16_t *hist, uintptr_t base,
                              size_t nbuckets, unsigned int shift)
 {
   irqstate_t flags;
@@ -368,7 +368,7 @@ int bl616cl_perfmon_pc_start(FAR uint16_t *hist, uintptr_t base,
  *
  ****************************************************************************/
 
-void bl616cl_perfmon_pc_stop(FAR struct bl616cl_perfmon_pcstat_s *stat)
+void bl616cl_perfmon_pc_stop(struct bl616cl_perfmon_pcstat_s *stat)
 {
   irqstate_t flags;
 

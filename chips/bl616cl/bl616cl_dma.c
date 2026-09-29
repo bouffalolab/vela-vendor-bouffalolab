@@ -89,7 +89,7 @@ struct bl616cl_dma_chan_s
   sem_t callback_done;
   struct dma_config_s config;
   dma_callback_t callback;
-  FAR void *arg;
+  void *arg;
   size_t request_bytes;
   size_t residual_bytes;
   uint8_t index;
@@ -109,23 +109,23 @@ struct bl616cl_dma_dev_s
  * Private Function Prototypes
  ****************************************************************************/
 
-static FAR struct dma_chan_s *bl616cl_dma_get_chan(
-  FAR struct dma_dev_s *dev, unsigned int ident);
-static void bl616cl_dma_put_chan(FAR struct dma_dev_s *dev,
-                                 FAR struct dma_chan_s *chan);
-static int bl616cl_dma_config(FAR struct dma_chan_s *chan,
-                              FAR const struct dma_config_s *config);
-static int bl616cl_dma_start(FAR struct dma_chan_s *chan,
-                             dma_callback_t callback, FAR void *arg,
+static struct dma_chan_s *bl616cl_dma_get_chan(
+  struct dma_dev_s *dev, unsigned int ident);
+static void bl616cl_dma_put_chan(struct dma_dev_s *dev,
+                                 struct dma_chan_s *chan);
+static int bl616cl_dma_config(struct dma_chan_s *chan,
+                              const struct dma_config_s *config);
+static int bl616cl_dma_start(struct dma_chan_s *chan,
+                             dma_callback_t callback, void *arg,
                              uintptr_t dst, uintptr_t src, size_t len);
-static int bl616cl_dma_start_cyclic(FAR struct dma_chan_s *chan,
-                                    dma_callback_t callback, FAR void *arg,
+static int bl616cl_dma_start_cyclic(struct dma_chan_s *chan,
+                                    dma_callback_t callback, void *arg,
                                     uintptr_t dst, uintptr_t src,
                                     size_t len, size_t period_len);
-static int bl616cl_dma_stop(FAR struct dma_chan_s *chan);
-static int bl616cl_dma_pause(FAR struct dma_chan_s *chan);
-static int bl616cl_dma_resume(FAR struct dma_chan_s *chan);
-static size_t bl616cl_dma_residual(FAR struct dma_chan_s *chan);
+static int bl616cl_dma_stop(struct dma_chan_s *chan);
+static int bl616cl_dma_pause(struct dma_chan_s *chan);
+static int bl616cl_dma_resume(struct dma_chan_s *chan);
+static size_t bl616cl_dma_residual(struct dma_chan_s *chan);
 
 /****************************************************************************
  * Private Data
@@ -183,7 +183,7 @@ static struct bl616cl_dma_test_status_s g_bl616cl_dma_test_status;
  ****************************************************************************/
 
 static uintptr_t bl616cl_dma_channel_base(
-  FAR const struct bl616cl_dma_chan_s *channel)
+  const struct bl616cl_dma_chan_s *channel)
 {
   return DMA_BASE +
          ((uintptr_t)channel->index + 1) * BL616CL_DMA_CHANNEL_OFFSET;
@@ -205,7 +205,7 @@ static uintptr_t bl616cl_dma_channel_base(
  ****************************************************************************/
 
 static void bl616cl_dma_mask_stop_clear(
-  FAR const struct bl616cl_dma_chan_s *channel)
+  const struct bl616cl_dma_chan_s *channel)
 {
   uintptr_t base = bl616cl_dma_channel_base(channel);
   uint32_t config = getreg32(base + DMA_CxCONFIG_OFFSET);
@@ -234,7 +234,7 @@ static void bl616cl_dma_mask_stop_clear(
  ****************************************************************************/
 
 static size_t bl616cl_dma_pending_bytes(
-  FAR const struct bl616cl_dma_chan_s *channel)
+  const struct bl616cl_dma_chan_s *channel)
 {
   uintptr_t base = bl616cl_dma_channel_base(channel);
   size_t pending;
@@ -282,7 +282,7 @@ static bool bl616cl_dma_step_valid(int step, unsigned int width)
  *
  ****************************************************************************/
 
-static int bl616cl_dma_width_encode(unsigned int width, FAR uint8_t *encoded)
+static int bl616cl_dma_width_encode(unsigned int width, uint8_t *encoded)
 {
   switch (width)
     {
@@ -320,7 +320,7 @@ static int bl616cl_dma_width_encode(unsigned int width, FAR uint8_t *encoded)
  ****************************************************************************/
 
 static void bl616cl_dma_callback_done(
-  FAR struct bl616cl_dma_chan_s *channel)
+  struct bl616cl_dma_chan_s *channel)
 {
   irqstate_t flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
 
@@ -381,10 +381,10 @@ static void bl616cl_dma_process_irq(uint8_t tc_status, uint8_t error_status,
 
   for (index = 0; index < BL616CL_DMA_CHANNEL_COUNT; index++)
     {
-      FAR struct bl616cl_dma_chan_s *channel =
+      struct bl616cl_dma_chan_s *channel =
         &g_bl616cl_dma_channels[index];
       dma_callback_t callback = NULL;
-      FAR void *arg = NULL;
+      void *arg = NULL;
       ssize_t result = 0;
       irqstate_t flags;
 
@@ -447,7 +447,7 @@ static void bl616cl_dma_process_irq(uint8_t tc_status, uint8_t error_status,
  *
  ****************************************************************************/
 
-static int bl616cl_dma_interrupt(int irq, FAR void *context, FAR void *arg)
+static int bl616cl_dma_interrupt(int irq, void *context, void *arg)
 {
   uint8_t tc_status;
   uint8_t error_status;
@@ -479,8 +479,8 @@ static int bl616cl_dma_interrupt(int irq, FAR void *context, FAR void *arg)
  *
  ****************************************************************************/
 
-static FAR struct bl616cl_dma_chan_s *bl616cl_dma_from_chan(
-  FAR struct dma_chan_s *chan)
+static struct bl616cl_dma_chan_s *bl616cl_dma_from_chan(
+  struct dma_chan_s *chan)
 {
   unsigned int index;
 
@@ -551,10 +551,10 @@ static bool bl616cl_dma_in_callback_context(void)
  *
  ****************************************************************************/
 
-static FAR struct dma_chan_s *bl616cl_dma_get_chan(
-  FAR struct dma_dev_s *dev, unsigned int ident)
+static struct dma_chan_s *bl616cl_dma_get_chan(
+  struct dma_dev_s *dev, unsigned int ident)
 {
-  FAR struct bl616cl_dma_chan_s *channel;
+  struct bl616cl_dma_chan_s *channel;
   irqstate_t flags;
 
   UNUSED(dev);
@@ -606,10 +606,10 @@ static FAR struct dma_chan_s *bl616cl_dma_get_chan(
  *
  ****************************************************************************/
 
-static void bl616cl_dma_put_chan(FAR struct dma_dev_s *dev,
-                                 FAR struct dma_chan_s *chan)
+static void bl616cl_dma_put_chan(struct dma_dev_s *dev,
+                                 struct dma_chan_s *chan)
 {
-  FAR struct bl616cl_dma_chan_s *channel = bl616cl_dma_from_chan(chan);
+  struct bl616cl_dma_chan_s *channel = bl616cl_dma_from_chan(chan);
   bool wait_for_callback = false;
   irqstate_t flags;
 
@@ -691,10 +691,10 @@ static void bl616cl_dma_put_chan(FAR struct dma_dev_s *dev,
  *
  ****************************************************************************/
 
-static int bl616cl_dma_config(FAR struct dma_chan_s *chan,
-                              FAR const struct dma_config_s *config)
+static int bl616cl_dma_config(struct dma_chan_s *chan,
+                              const struct dma_config_s *config)
 {
-  FAR struct bl616cl_dma_chan_s *channel = bl616cl_dma_from_chan(chan);
+  struct bl616cl_dma_chan_s *channel = bl616cl_dma_from_chan(chan);
   uint8_t width;
   irqstate_t flags;
   int ret;
@@ -773,11 +773,11 @@ static int bl616cl_dma_config(FAR struct dma_chan_s *chan,
  *
  ****************************************************************************/
 
-static int bl616cl_dma_start(FAR struct dma_chan_s *chan,
-                             dma_callback_t callback, FAR void *arg,
+static int bl616cl_dma_start(struct dma_chan_s *chan,
+                             dma_callback_t callback, void *arg,
                              uintptr_t dst, uintptr_t src, size_t len)
 {
-  FAR struct bl616cl_dma_chan_s *channel = bl616cl_dma_from_chan(chan);
+  struct bl616cl_dma_chan_s *channel = bl616cl_dma_from_chan(chan);
   uintptr_t base;
   uint32_t control;
   uint32_t config;
@@ -894,8 +894,8 @@ static int bl616cl_dma_start(FAR struct dma_chan_s *chan,
  *
  ****************************************************************************/
 
-static int bl616cl_dma_start_cyclic(FAR struct dma_chan_s *chan,
-                                    dma_callback_t callback, FAR void *arg,
+static int bl616cl_dma_start_cyclic(struct dma_chan_s *chan,
+                                    dma_callback_t callback, void *arg,
                                     uintptr_t dst, uintptr_t src,
                                     size_t len, size_t period_len)
 {
@@ -925,9 +925,9 @@ static int bl616cl_dma_start_cyclic(FAR struct dma_chan_s *chan,
  *
  ****************************************************************************/
 
-static int bl616cl_dma_stop(FAR struct dma_chan_s *chan)
+static int bl616cl_dma_stop(struct dma_chan_s *chan)
 {
-  FAR struct bl616cl_dma_chan_s *channel = bl616cl_dma_from_chan(chan);
+  struct bl616cl_dma_chan_s *channel = bl616cl_dma_from_chan(chan);
   irqstate_t flags;
 
   if (channel == NULL)
@@ -968,7 +968,7 @@ static int bl616cl_dma_stop(FAR struct dma_chan_s *chan)
  *
  ****************************************************************************/
 
-static int bl616cl_dma_pause(FAR struct dma_chan_s *chan)
+static int bl616cl_dma_pause(struct dma_chan_s *chan)
 {
   UNUSED(chan);
   return -ENOTSUP;
@@ -988,7 +988,7 @@ static int bl616cl_dma_pause(FAR struct dma_chan_s *chan)
  *
  ****************************************************************************/
 
-static int bl616cl_dma_resume(FAR struct dma_chan_s *chan)
+static int bl616cl_dma_resume(struct dma_chan_s *chan)
 {
   UNUSED(chan);
   return -ENOTSUP;
@@ -1009,9 +1009,9 @@ static int bl616cl_dma_resume(FAR struct dma_chan_s *chan)
  *
  ****************************************************************************/
 
-static size_t bl616cl_dma_residual(FAR struct dma_chan_s *chan)
+static size_t bl616cl_dma_residual(struct dma_chan_s *chan)
 {
-  FAR struct bl616cl_dma_chan_s *channel = bl616cl_dma_from_chan(chan);
+  struct bl616cl_dma_chan_s *channel = bl616cl_dma_from_chan(chan);
   size_t residual;
   irqstate_t flags;
 
@@ -1050,7 +1050,7 @@ static size_t bl616cl_dma_residual(FAR struct dma_chan_s *chan)
  *
  ****************************************************************************/
 
-FAR struct dma_dev_s *bl616cl_dma0_device(void)
+struct dma_dev_s *bl616cl_dma0_device(void)
 {
   return g_bl616cl_dma_initialized ? &g_bl616cl_dma_dev.dev : NULL;
 }
@@ -1095,7 +1095,7 @@ void riscv_dma_initialize(void)
 
   for (index = 0; index < BL616CL_DMA_CHANNEL_COUNT; index++)
     {
-      FAR struct bl616cl_dma_chan_s *channel =
+      struct bl616cl_dma_chan_s *channel =
         &g_bl616cl_dma_channels[index];
 
       channel->chan.ops = &g_bl616cl_dma_ops;
@@ -1241,7 +1241,7 @@ void bl616cl_dma_test_release_hold(void)
 
   for (index = 0; index < BL616CL_DMA_CHANNEL_COUNT; index++)
     {
-      FAR struct bl616cl_dma_chan_s *channel =
+      struct bl616cl_dma_chan_s *channel =
         &g_bl616cl_dma_channels[index];
 
       if (channel->state == BL616CL_DMA_RUNNING && channel->held)
@@ -1274,7 +1274,7 @@ void bl616cl_dma_test_release_hold(void)
  ****************************************************************************/
 
 void bl616cl_dma_test_get_status(
-  FAR struct bl616cl_dma_test_status_s *status)
+  struct bl616cl_dma_test_status_s *status)
 {
   irqstate_t flags;
 

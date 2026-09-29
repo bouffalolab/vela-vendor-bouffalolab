@@ -46,8 +46,8 @@
 
 struct app_config_s
 {
-  FAR const char *devpath;
-  FAR const char *case_id;
+  const char *devpath;
+  const char *case_id;
   int hold_s;
   bool verbose;
 };
@@ -60,11 +60,11 @@ struct pwm_point_s
   uint8_t dcpol;
 };
 
-typedef int (*case_runner_t)(FAR const struct app_config_s *cfg);
+typedef int (*case_runner_t)(const struct app_config_s *cfg);
 
 struct case_entry_s
 {
-  FAR const char *id;
+  const char *id;
   case_runner_t run;
 };
 
@@ -72,7 +72,7 @@ struct case_entry_s
  * Private Functions
  ****************************************************************************/
 
-static void print_usage(FAR const char *progname)
+static void print_usage(const char *progname)
 {
   printf("Usage: %s [-c 001..008|all] [-d dev] [-w seconds] [-v]\n",
          progname);
@@ -83,7 +83,7 @@ static void print_usage(FAR const char *progname)
   printf("  -v       Print every diagnostic point\n");
 }
 
-static int pwm_open(FAR const char *devpath)
+static int pwm_open(const char *devpath)
 {
   int fd;
 
@@ -97,7 +97,7 @@ static int pwm_open(FAR const char *devpath)
   return fd;
 }
 
-static int pwm_set(int fd, FAR const struct pwm_point_s *point)
+static int pwm_set(int fd, const struct pwm_point_s *point)
 {
   struct pwm_info_s info;
 
@@ -116,7 +116,7 @@ static int pwm_set(int fd, FAR const struct pwm_point_s *point)
   return 0;
 }
 
-static int pwm_get(int fd, FAR struct pwm_info_s *info)
+static int pwm_get(int fd, struct pwm_info_s *info)
 {
   memset(info, 0, sizeof(*info));
   if (ioctl(fd, PWMIOC_GETCHARACTERISTICS,
@@ -148,7 +148,7 @@ static int pwm_stop(int fd)
   return 0;
 }
 
-static int get_diag(FAR struct bl616cl_pwm_test_diag_s *diag)
+static int get_diag(struct bl616cl_pwm_test_diag_s *diag)
 {
   int ret;
 
@@ -162,8 +162,8 @@ static int get_diag(FAR struct bl616cl_pwm_test_diag_s *diag)
   return ret;
 }
 
-static void print_diag(FAR const char *label,
-                       FAR const struct bl616cl_pwm_test_diag_s *diag)
+static void print_diag(const char *label,
+                       const struct bl616cl_pwm_test_diag_s *diag)
 {
   printf("  %s: calls=%lu/%lu/%lu/%lu src=%luHz actual=%luHz "
          "div=%u period=%u threshold=%u..%u pol=%u stop=%u "
@@ -180,14 +180,14 @@ static void print_diag(FAR const char *label,
          diag->started, diag->last_error, (unsigned long)diag->error_count);
 }
 
-static bool diag_clean(FAR const struct bl616cl_pwm_test_diag_s *diag)
+static bool diag_clean(const struct bl616cl_pwm_test_diag_s *diag)
 {
   return !diag->channel_enabled && !diag->pin_acquired &&
          !diag->clock_enabled && !diag->started;
 }
 
 static int expect_ioctl_errno(int fd, int command, int expected,
-                              FAR const char *operation)
+                              const char *operation)
 {
   int ret;
 
@@ -204,8 +204,8 @@ static int expect_ioctl_errno(int fd, int command, int expected,
   return 0;
 }
 
-static int expect_set_errno(int fd, FAR const struct pwm_point_s *point,
-                            int expected, FAR const char *operation)
+static int expect_set_errno(int fd, const struct pwm_point_s *point,
+                            int expected, const char *operation)
 {
   int ret;
 
@@ -221,7 +221,7 @@ static int expect_set_errno(int fd, FAR const struct pwm_point_s *point,
   return 0;
 }
 
-static int verify_clean(FAR const char *operation)
+static int verify_clean(const char *operation)
 {
   struct bl616cl_pwm_test_diag_s diag;
 
@@ -240,8 +240,8 @@ static uint32_t absolute_difference(uint32_t a, uint32_t b)
   return a >= b ? a - b : b - a;
 }
 
-static int verify_point(FAR const struct pwm_point_s *point,
-                        FAR const struct bl616cl_pwm_test_diag_s *diag,
+static int verify_point(const struct pwm_point_s *point,
+                        const struct bl616cl_pwm_test_diag_s *diag,
                         bool verbose)
 {
   uint64_t product;
@@ -310,7 +310,7 @@ static int verify_point(FAR const struct pwm_point_s *point,
   return 0;
 }
 
-static int set_start_verify(int fd, FAR const struct pwm_point_s *point,
+static int set_start_verify(int fd, const struct pwm_point_s *point,
                             bool already_started, bool verbose)
 {
   struct bl616cl_pwm_test_diag_s diag;
@@ -346,7 +346,7 @@ static int set_start_verify(int fd, FAR const struct pwm_point_s *point,
   return verify_point(point, &diag, verbose);
 }
 
-static int run_case_001(FAR const struct app_config_s *cfg)
+static int run_case_001(const struct app_config_s *cfg)
 {
   /* clang-format off */
 
@@ -427,8 +427,8 @@ out:
   return ret;
 }
 
-static int check_stopped_invalid(int fd, FAR const struct pwm_point_s *point,
-                                 int expected, FAR const char *label)
+static int check_stopped_invalid(int fd, const struct pwm_point_s *point,
+                                 int expected, const char *label)
 {
   struct pwm_info_s info;
 
@@ -444,7 +444,7 @@ static int check_stopped_invalid(int fd, FAR const struct pwm_point_s *point,
   return expect_ioctl_errno(fd, PWMIOC_START, expected, label);
 }
 
-static int run_case_002(FAR const struct app_config_s *cfg)
+static int run_case_002(const struct app_config_s *cfg)
 {
   /* clang-format off */
 
@@ -463,7 +463,7 @@ static int run_case_002(FAR const struct app_config_s *cfg)
     { 1000, DUTY_50, PWM_CPOL_HIGH, 3 },
   };
 
-  FAR const char *labels[] = {
+  const char *labels[] = {
     "zero frequency",
     "frequency above hardware range",
     "undefined cpol",
@@ -571,9 +571,9 @@ out:
   return ret;
 }
 
-static int run_points(FAR const struct app_config_s *cfg,
-                      FAR const struct pwm_point_s *points, size_t count,
-                      FAR const char *case_id)
+static int run_points(const struct app_config_s *cfg,
+                      const struct pwm_point_s *points, size_t count,
+                      const char *case_id)
 {
   int fd;
   int ret = -EIO;
@@ -621,7 +621,7 @@ out:
   return ret;
 }
 
-static int run_case_003(FAR const struct app_config_s *cfg)
+static int run_case_003(const struct app_config_s *cfg)
 {
   static const struct pwm_point_s points[] = {
     { 100, DUTY_75, PWM_CPOL_HIGH, PWM_DCPOL_LOW },
@@ -643,7 +643,7 @@ static int run_case_003(FAR const struct app_config_s *cfg)
   return 0;
 }
 
-static int run_case_004(FAR const struct app_config_s *cfg)
+static int run_case_004(const struct app_config_s *cfg)
 {
   static const struct pwm_point_s points[] = {
     { 1000, DUTY_ZERO, PWM_CPOL_HIGH, PWM_DCPOL_LOW },
@@ -666,7 +666,7 @@ static int run_case_004(FAR const struct app_config_s *cfg)
   return 0;
 }
 
-static int run_case_005(FAR const struct app_config_s *cfg)
+static int run_case_005(const struct app_config_s *cfg)
 {
   static const struct pwm_point_s points[] = {
     { 1000, DUTY_50, PWM_CPOL_LOW, PWM_DCPOL_LOW },
@@ -725,7 +725,7 @@ out:
   return ret;
 }
 
-static int run_case_006(FAR const struct app_config_s *cfg)
+static int run_case_006(const struct app_config_s *cfg)
 {
   /* clang-format off */
 
@@ -831,7 +831,7 @@ out:
   return ret;
 }
 
-static int expect_fault_cleanup(FAR const char *label, int expected_error)
+static int expect_fault_cleanup(const char *label, int expected_error)
 {
   struct bl616cl_pwm_test_diag_s diag;
 
@@ -846,7 +846,7 @@ static int expect_fault_cleanup(FAR const char *label, int expected_error)
   return 0;
 }
 
-static int run_case_007(FAR const struct app_config_s *cfg)
+static int run_case_007(const struct app_config_s *cfg)
 {
   /* clang-format off */
 
@@ -978,7 +978,7 @@ out:
   return ret;
 }
 
-static int expect_missing(FAR const char *path)
+static int expect_missing(const char *path)
 {
   int fd;
 
@@ -1000,7 +1000,7 @@ static int expect_missing(FAR const char *path)
   return 0;
 }
 
-static int run_case_008(FAR const struct app_config_s *cfg)
+static int run_case_008(const struct app_config_s *cfg)
 {
   /* clang-format off */
 
@@ -1046,7 +1046,7 @@ static int run_case_008(FAR const struct app_config_s *cfg)
  * Public Functions
  ****************************************************************************/
 
-int main(int argc, FAR char *argv[])
+int main(int argc, char *argv[])
 {
   /* PWM-002 is first so its START-before-SET assertion observes the zeroed
    * upper-half state on a freshly booted test firmware.

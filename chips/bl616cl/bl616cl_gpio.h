@@ -49,6 +49,6 @@
  *
  ****************************************************************************/
 
-FAR struct ioexpander_dev_s *bl616cl_gpio_initialize(void);
+struct ioexpander_dev_s *bl616cl_gpio_initialize(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_GPIO_H */

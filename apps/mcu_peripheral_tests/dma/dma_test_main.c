@@ -52,27 +52,27 @@ struct dma_event_s
   volatile bool stop_in_callback;
   volatile bool put_in_callback;
   bool block_callback;
-  FAR sem_t *callback_entered;
-  FAR sem_t *callback_release;
-  FAR struct dma_dev_s *dev;
-  FAR struct dma_chan_s *chan;
+  sem_t *callback_entered;
+  sem_t *callback_release;
+  struct dma_dev_s *dev;
+  struct dma_chan_s *chan;
 };
 
 struct dma_get_context_s
 {
-  FAR struct dma_dev_s *dev;
+  struct dma_dev_s *dev;
   unsigned int ident;
   volatile bool started;
   volatile bool returned;
-  FAR struct dma_chan_s *chan;
+  struct dma_chan_s *chan;
 };
 
 struct dma_put_context_s
 {
-  FAR struct dma_dev_s *dev;
-  FAR struct dma_chan_s *chan;
-  FAR sem_t *ready;
-  FAR sem_t *start;
+  struct dma_dev_s *dev;
+  struct dma_chan_s *chan;
+  sem_t *ready;
+  sem_t *start;
   volatile bool started;
   volatile bool returned;
 };
@@ -87,7 +87,7 @@ struct dma_inject_context_s
 struct dma_case_s
 {
   const char *name;
-  int (*run)(FAR struct dma_dev_s *dev);
+  int (*run)(struct dma_dev_s *dev);
 };
 
 /****************************************************************************
@@ -106,10 +106,10 @@ static uint8_t g_parallel_destination[DMA_CHANNEL_COUNT][DMA_SMALL_BYTES]
  * Private Functions
  ****************************************************************************/
 
-static void dma_callback(FAR struct dma_chan_s *chan, FAR void *arg,
+static void dma_callback(struct dma_chan_s *chan, void *arg,
                          ssize_t len)
 {
-  FAR struct dma_event_s *event = arg;
+  struct dma_event_s *event = arg;
 
   event->result = len;
   event->callbacks++;
@@ -135,9 +135,9 @@ static void dma_callback(FAR struct dma_chan_s *chan, FAR void *arg,
     }
 }
 
-static FAR void *dma_get_thread(FAR void *arg)
+static void *dma_get_thread(void *arg)
 {
-  FAR struct dma_get_context_s *context = arg;
+  struct dma_get_context_s *context = arg;
 
   context->started = true;
   context->chan = DMA_GET_CHAN(context->dev, context->ident);
@@ -145,9 +145,9 @@ static FAR void *dma_get_thread(FAR void *arg)
   return NULL;
 }
 
-static FAR void *dma_put_thread(FAR void *arg)
+static void *dma_put_thread(void *arg)
 {
-  FAR struct dma_put_context_s *context = arg;
+  struct dma_put_context_s *context = arg;
 
   context->started = true;
   if (context->ready != NULL)
@@ -167,16 +167,16 @@ static FAR void *dma_put_thread(FAR void *arg)
   return NULL;
 }
 
-static FAR void *dma_inject_thread(FAR void *arg)
+static void *dma_inject_thread(void *arg)
 {
-  FAR struct dma_inject_context_s *context = arg;
+  struct dma_inject_context_s *context = arg;
 
   bl616cl_dma_test_inject_irq(context->tc_status, context->error_status);
   context->returned = true;
   return NULL;
 }
 
-static int wait_sem(FAR sem_t *sem)
+static int wait_sem(sem_t *sem)
 {
   int ret;
 
@@ -189,7 +189,7 @@ static int wait_sem(FAR sem_t *sem)
   return ret < 0 ? -errno : OK;
 }
 
-static int wait_for_flag(FAR const volatile bool *flag)
+static int wait_for_flag(const volatile bool *flag)
 {
   unsigned int i;
 
@@ -225,7 +225,7 @@ static int wait_for_irq_count(uint32_t count)
   return -ETIMEDOUT;
 }
 
-static void fill_pattern(FAR uint8_t *buffer, size_t length, uint8_t seed)
+static void fill_pattern(uint8_t *buffer, size_t length, uint8_t seed)
 {
   size_t i;
 
@@ -235,7 +235,7 @@ static void fill_pattern(FAR uint8_t *buffer, size_t length, uint8_t seed)
     }
 }
 
-static int wait_for_callback(FAR const struct dma_event_s *event)
+static int wait_for_callback(const struct dma_event_s *event)
 {
   unsigned int i;
 
@@ -269,7 +269,7 @@ static void print_irq_status(const char *label)
          (unsigned long)status.rejected_puts);
 }
 
-static int configure_mem2mem(FAR struct dma_chan_s *chan, unsigned int width,
+static int configure_mem2mem(struct dma_chan_s *chan, unsigned int width,
                              int src_step, int dst_step)
 {
   struct dma_config_s config;
@@ -283,8 +283,8 @@ static int configure_mem2mem(FAR struct dma_chan_s *chan, unsigned int width,
   return DMA_CONFIG(chan, &config);
 }
 
-static int start_and_check(FAR struct dma_chan_s *chan,
-                           FAR struct dma_event_s *event,
+static int start_and_check(struct dma_chan_s *chan,
+                           struct dma_event_s *event,
                            uintptr_t destination, uintptr_t source,
                            size_t length, uint8_t channel_bit, bool callback)
 {
@@ -333,13 +333,13 @@ static int start_and_check(FAR struct dma_chan_s *chan,
   return OK;
 }
 
-static int run_width_step_case(FAR struct dma_dev_s *dev)
+static int run_width_step_case(struct dma_dev_s *dev)
 {
   static const unsigned int widths[] = {
     1, 2, 4
   };
 
-  FAR struct dma_chan_s *fixed_chan;
+  struct dma_chan_s *fixed_chan;
   struct dma_event_s fixed_event;
   unsigned int i;
   int ret = OK;
@@ -347,7 +347,7 @@ static int run_width_step_case(FAR struct dma_dev_s *dev)
   printf("[DMA-001] width/step, TC callback and data\n");
   for (i = 0; i < sizeof(widths) / sizeof(widths[0]); i++)
     {
-      FAR struct dma_chan_s *chan = DMA_GET_CHAN(dev, 0);
+      struct dma_chan_s *chan = DMA_GET_CHAN(dev, 0);
       struct dma_event_s event;
       size_t length = 256u * widths[i];
 
@@ -420,9 +420,9 @@ static int run_width_step_case(FAR struct dma_dev_s *dev)
   return OK;
 }
 
-static int run_boundary_case(FAR struct dma_dev_s *dev)
+static int run_boundary_case(struct dma_dev_s *dev)
 {
-  FAR struct dma_chan_s *chan = DMA_GET_CHAN(dev, 1);
+  struct dma_chan_s *chan = DMA_GET_CHAN(dev, 1);
   struct dma_event_s event;
   size_t length = DMA_TRANSFER_MAX_UNITS * 4u;
   int ret;
@@ -459,9 +459,9 @@ static int run_boundary_case(FAR struct dma_dev_s *dev)
   return ret < 0 ? ret : (reject_ret == -E2BIG ? OK : -EIO);
 }
 
-static int run_invalid_atomic_case(FAR struct dma_dev_s *dev)
+static int run_invalid_atomic_case(struct dma_dev_s *dev)
 {
-  FAR struct dma_chan_s *chan = DMA_GET_CHAN(dev, 2);
+  struct dma_chan_s *chan = DMA_GET_CHAN(dev, 2);
   struct dma_config_s invalid;
   struct dma_event_s event;
   uintptr_t source = (uintptr_t)g_source;
@@ -642,9 +642,9 @@ static int run_invalid_atomic_case(FAR struct dma_dev_s *dev)
   return ret;
 }
 
-static int run_parallel_case(FAR struct dma_dev_s *dev)
+static int run_parallel_case(struct dma_dev_s *dev)
 {
-  FAR struct dma_chan_s *channels[DMA_CHANNEL_COUNT];
+  struct dma_chan_s *channels[DMA_CHANNEL_COUNT];
   struct dma_event_s events[DMA_CHANNEL_COUNT];
   unsigned int i;
   int ret = OK;
@@ -708,9 +708,9 @@ static int run_parallel_case(FAR struct dma_dev_s *dev)
   return ret;
 }
 
-static int run_callback_and_injection_case(FAR struct dma_dev_s *dev)
+static int run_callback_and_injection_case(struct dma_dev_s *dev)
 {
-  FAR struct dma_chan_s *chan = DMA_GET_CHAN(dev, 3);
+  struct dma_chan_s *chan = DMA_GET_CHAN(dev, 3);
   struct dma_event_s event;
   struct bl616cl_dma_test_status_s before;
   struct bl616cl_dma_test_status_s after;
@@ -825,11 +825,11 @@ static int run_callback_and_injection_case(FAR struct dma_dev_s *dev)
   return ret;
 }
 
-static int run_hold_and_cache_case(FAR struct dma_dev_s *dev)
+static int run_hold_and_cache_case(struct dma_dev_s *dev)
 {
-  FAR struct dma_chan_s *chan = DMA_GET_CHAN(dev, 4);
-  FAR uint8_t *source_nc;
-  FAR uint8_t *destination_nc;
+  struct dma_chan_s *chan = DMA_GET_CHAN(dev, 4);
+  uint8_t *source_nc;
+  uint8_t *destination_nc;
   struct dma_event_s event;
   uintptr_t source = (uintptr_t)g_source;
   uintptr_t destination = (uintptr_t)g_destination;
@@ -851,8 +851,8 @@ static int run_hold_and_cache_case(FAR struct dma_dev_s *dev)
       return -ERANGE;
     }
 
-  source_nc = (FAR uint8_t *)(source - DMA_CACHE_ALIAS);
-  destination_nc = (FAR uint8_t *)(destination - DMA_CACHE_ALIAS);
+  source_nc = (uint8_t *)(source - DMA_CACHE_ALIAS);
+  destination_nc = (uint8_t *)(destination - DMA_CACHE_ALIAS);
   fill_pattern(g_source, length, 0x84);
   memset(g_destination, 0, length);
   up_clean_dcache(source, source + length);
@@ -921,10 +921,10 @@ static int run_hold_and_cache_case(FAR struct dma_dev_s *dev)
   return ret;
 }
 
-static int run_put_reuse_case(FAR struct dma_dev_s *dev)
+static int run_put_reuse_case(struct dma_dev_s *dev)
 {
-  FAR struct dma_chan_s *channels[DMA_CHANNEL_COUNT];
-  FAR struct dma_chan_s *owned;
+  struct dma_chan_s *channels[DMA_CHANNEL_COUNT];
+  struct dma_chan_s *owned;
   struct dma_get_context_s waiter;
   struct dma_put_context_s puts[2];
   pthread_t waiter_thread;
@@ -1131,10 +1131,10 @@ static int run_put_reuse_case(FAR struct dma_dev_s *dev)
   return ret;
 }
 
-static int run_callback_drain_case(FAR struct dma_dev_s *dev)
+static int run_callback_drain_case(struct dma_dev_s *dev)
 {
-  FAR struct dma_chan_s *chan = DMA_GET_CHAN(dev, 7);
-  FAR struct dma_chan_s *reused;
+  struct dma_chan_s *chan = DMA_GET_CHAN(dev, 7);
+  struct dma_chan_s *reused;
   struct dma_event_s event;
   struct dma_inject_context_s inject;
   struct dma_put_context_s put;
@@ -1258,8 +1258,8 @@ static int run_callback_drain_case(FAR struct dma_dev_s *dev)
   return ret;
 }
 
-static int run_case(FAR const struct dma_case_s *test,
-                    FAR struct dma_dev_s *dev)
+static int run_case(const struct dma_case_s *test,
+                    struct dma_dev_s *dev)
 {
   int ret = test->run(dev);
 
@@ -1272,7 +1272,7 @@ static int run_case(FAR const struct dma_case_s *test,
  * Public Functions
  ****************************************************************************/
 
-int main(int argc, FAR char *argv[])
+int main(int argc, char *argv[])
 {
   static const struct dma_case_s tests[] =
   {
@@ -1286,7 +1286,7 @@ int main(int argc, FAR char *argv[])
     { "DMA-008", run_callback_drain_case },
   };
 
-  FAR struct dma_dev_s *dev;
+  struct dma_dev_s *dev;
   unsigned int i;
   int failures = 0;
 

@@ -155,7 +155,7 @@ static const struct ai_m64l_kit_gpio_pin_s g_ai_m64l_kit_gpio_pins[] =
 
 int ai_m64l_kit_gpio_initialize(void)
 {
-  FAR struct ioexpander_dev_s *ioe;
+  struct ioexpander_dev_s *ioe;
   unsigned int i;
   int ret;
 
@@ -168,7 +168,7 @@ int ai_m64l_kit_gpio_initialize(void)
 
   for (i = 0; i < nitems(g_ai_m64l_kit_gpio_pins); i++)
     {
-      FAR const struct ai_m64l_kit_gpio_pin_s *p =
+      const struct ai_m64l_kit_gpio_pin_s *p =
         &g_ai_m64l_kit_gpio_pins[i];
 
       ret = gpio_lower_half(ioe, p->pin, p->pintype, p->pin);

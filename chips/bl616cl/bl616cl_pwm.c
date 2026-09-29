@@ -84,9 +84,9 @@ enum bl616cl_pwm_operation_e
 
 struct bl616cl_pwm_lowerhalf_s
 {
-  FAR const struct pwm_ops_s *ops;
-  FAR struct bflb_device_s *dev;
-  FAR struct bflb_device_s *gpio;
+  const struct pwm_ops_s *ops;
+  struct bflb_device_s *dev;
+  struct bflb_device_s *gpio;
   uint32_t source_frequency;
   uint32_t actual_frequency;
   uint16_t divider;
@@ -117,12 +117,12 @@ struct bl616cl_pwm_lowerhalf_s
  * Private Function Prototypes
  ****************************************************************************/
 
-static int bl616cl_pwm_setup(FAR struct pwm_lowerhalf_s *lower);
-static int bl616cl_pwm_shutdown(FAR struct pwm_lowerhalf_s *lower);
-static int bl616cl_pwm_start(FAR struct pwm_lowerhalf_s *lower,
-                             FAR const struct pwm_info_s *info);
-static int bl616cl_pwm_stop(FAR struct pwm_lowerhalf_s *lower);
-static int bl616cl_pwm_ioctl(FAR struct pwm_lowerhalf_s *lower, int cmd,
+static int bl616cl_pwm_setup(struct pwm_lowerhalf_s *lower);
+static int bl616cl_pwm_shutdown(struct pwm_lowerhalf_s *lower);
+static int bl616cl_pwm_start(struct pwm_lowerhalf_s *lower,
+                             const struct pwm_info_s *info);
+static int bl616cl_pwm_stop(struct pwm_lowerhalf_s *lower);
+static int bl616cl_pwm_ioctl(struct pwm_lowerhalf_s *lower, int cmd,
                              unsigned long arg);
 
 /****************************************************************************
@@ -172,7 +172,7 @@ static struct bl616cl_pwm_lowerhalf_s g_bl616cl_pwm =
  ****************************************************************************/
 
 static void bl616cl_pwm_record_error(
-  FAR struct bl616cl_pwm_lowerhalf_s *priv, int error)
+  struct bl616cl_pwm_lowerhalf_s *priv, int error)
 {
 #ifdef CONFIG_BL616CL_PWM_TEST
   priv->last_error = error;
@@ -253,7 +253,7 @@ static bool bl616cl_pwm_error_less(uint64_t left_num, uint32_t left_den,
 
 static void bl616cl_pwm_consider_solution(
   uint32_t source, uint32_t frequency, uint32_t divider, uint32_t period,
-  FAR struct bl616cl_pwm_solution_s *best, FAR bool *found)
+  struct bl616cl_pwm_solution_s *best, bool *found)
 {
   uint64_t denominator;
   uint64_t requested;
@@ -307,7 +307,7 @@ static void bl616cl_pwm_consider_solution(
  ****************************************************************************/
 
 static int bl616cl_pwm_solve(uint32_t source, uint32_t frequency,
-                             FAR struct bl616cl_pwm_solution_s *solution)
+                             struct bl616cl_pwm_solution_s *solution)
 {
   uint64_t scaled;
   uint32_t divider;
@@ -375,7 +375,7 @@ static int bl616cl_pwm_solve(uint32_t source, uint32_t frequency,
  ****************************************************************************/
 
 static bool bl616cl_pwm_stopped(
-  FAR struct bl616cl_pwm_lowerhalf_s *priv,
+  struct bl616cl_pwm_lowerhalf_s *priv,
   enum bl616cl_pwm_operation_e operation)
 {
 #ifdef CONFIG_BL616CL_PWM_TEST
@@ -408,7 +408,7 @@ static bool bl616cl_pwm_stopped(
  ****************************************************************************/
 
 static void bl616cl_pwm_drive_stopped_pin(
-  FAR struct bl616cl_pwm_lowerhalf_s *priv)
+  struct bl616cl_pwm_lowerhalf_s *priv)
 {
   if (priv->gpio == NULL)
     {
@@ -443,7 +443,7 @@ static void bl616cl_pwm_drive_stopped_pin(
  ****************************************************************************/
 
 static int bl616cl_pwm_enable_clock(
-  FAR struct bl616cl_pwm_lowerhalf_s *priv)
+  struct bl616cl_pwm_lowerhalf_s *priv)
 {
   int ret;
 
@@ -475,7 +475,7 @@ static int bl616cl_pwm_enable_clock(
  *
  ****************************************************************************/
 
-static int bl616cl_pwm_acquire(FAR struct bl616cl_pwm_lowerhalf_s *priv)
+static int bl616cl_pwm_acquire(struct bl616cl_pwm_lowerhalf_s *priv)
 {
   int ret;
 
@@ -505,7 +505,7 @@ static int bl616cl_pwm_acquire(FAR struct bl616cl_pwm_lowerhalf_s *priv)
  *
  ****************************************************************************/
 
-static void bl616cl_pwm_release(FAR struct bl616cl_pwm_lowerhalf_s *priv)
+static void bl616cl_pwm_release(struct bl616cl_pwm_lowerhalf_s *priv)
 {
   bl616cl_pwm_drive_stopped_pin(priv);
   if (priv->clock_enabled)
@@ -535,7 +535,7 @@ static void bl616cl_pwm_release(FAR struct bl616cl_pwm_lowerhalf_s *priv)
  *
  ****************************************************************************/
 
-static int bl616cl_pwm_force_stop(FAR struct bl616cl_pwm_lowerhalf_s *priv,
+static int bl616cl_pwm_force_stop(struct bl616cl_pwm_lowerhalf_s *priv,
                                   enum bl616cl_pwm_operation_e operation)
 {
   bool deinit_stopped;
@@ -584,7 +584,7 @@ static int bl616cl_pwm_force_stop(FAR struct bl616cl_pwm_lowerhalf_s *priv,
  *
  ****************************************************************************/
 
-static int bl616cl_pwm_validate(FAR const struct pwm_info_s *info)
+static int bl616cl_pwm_validate(const struct pwm_info_s *info)
 {
   if (info == NULL || info->frequency == 0 ||
       (info->cpol != PWM_CPOL_LOW && info->cpol != PWM_CPOL_HIGH) ||
@@ -616,9 +616,9 @@ static int bl616cl_pwm_validate(FAR const struct pwm_info_s *info)
  ****************************************************************************/
 
 static int bl616cl_pwm_readback(
-  FAR struct bl616cl_pwm_lowerhalf_s *priv,
-  FAR const struct pwm_info_s *info,
-  FAR const struct bl616cl_pwm_solution_s *solution)
+  struct bl616cl_pwm_lowerhalf_s *priv,
+  const struct pwm_info_s *info,
+  const struct bl616cl_pwm_solution_s *solution)
 {
   uint64_t denominator;
   uint32_t config0;
@@ -716,8 +716,8 @@ static uint16_t bl616cl_pwm_threshold(uint16_t duty, uint16_t period)
  ****************************************************************************/
 
 static void bl616cl_pwm_channel_configure(
-  FAR struct bl616cl_pwm_lowerhalf_s *priv,
-  FAR const struct pwm_info_s *info, uint16_t period)
+  struct bl616cl_pwm_lowerhalf_s *priv,
+  const struct pwm_info_s *info, uint16_t period)
 {
   struct bflb_pwm_v2_channel_config_s channel;
   bool stop_active;
@@ -764,10 +764,10 @@ static void bl616cl_pwm_channel_configure(
  *
  ****************************************************************************/
 
-static int bl616cl_pwm_setup(FAR struct pwm_lowerhalf_s *lower)
+static int bl616cl_pwm_setup(struct pwm_lowerhalf_s *lower)
 {
-  FAR struct bl616cl_pwm_lowerhalf_s *priv =
-    (FAR struct bl616cl_pwm_lowerhalf_s *)lower;
+  struct bl616cl_pwm_lowerhalf_s *priv =
+    (struct bl616cl_pwm_lowerhalf_s *)lower;
   int ret;
 
 #ifdef CONFIG_BL616CL_PWM_TEST
@@ -812,10 +812,10 @@ static int bl616cl_pwm_setup(FAR struct pwm_lowerhalf_s *lower)
  *
  ****************************************************************************/
 
-static int bl616cl_pwm_shutdown(FAR struct pwm_lowerhalf_s *lower)
+static int bl616cl_pwm_shutdown(struct pwm_lowerhalf_s *lower)
 {
-  FAR struct bl616cl_pwm_lowerhalf_s *priv =
-    (FAR struct bl616cl_pwm_lowerhalf_s *)lower;
+  struct bl616cl_pwm_lowerhalf_s *priv =
+    (struct bl616cl_pwm_lowerhalf_s *)lower;
   int ret;
 
 #ifdef CONFIG_BL616CL_PWM_TEST
@@ -847,11 +847,11 @@ static int bl616cl_pwm_shutdown(FAR struct pwm_lowerhalf_s *lower)
  *
  ****************************************************************************/
 
-static int bl616cl_pwm_start(FAR struct pwm_lowerhalf_s *lower,
-                             FAR const struct pwm_info_s *info)
+static int bl616cl_pwm_start(struct pwm_lowerhalf_s *lower,
+                             const struct pwm_info_s *info)
 {
-  FAR struct bl616cl_pwm_lowerhalf_s *priv =
-    (FAR struct bl616cl_pwm_lowerhalf_s *)lower;
+  struct bl616cl_pwm_lowerhalf_s *priv =
+    (struct bl616cl_pwm_lowerhalf_s *)lower;
   struct bflb_pwm_v2_config_s config;
   struct bl616cl_pwm_solution_s solution;
   bool same_divider;
@@ -976,10 +976,10 @@ static int bl616cl_pwm_start(FAR struct pwm_lowerhalf_s *lower,
  *
  ****************************************************************************/
 
-static int bl616cl_pwm_stop(FAR struct pwm_lowerhalf_s *lower)
+static int bl616cl_pwm_stop(struct pwm_lowerhalf_s *lower)
 {
-  FAR struct bl616cl_pwm_lowerhalf_s *priv =
-    (FAR struct bl616cl_pwm_lowerhalf_s *)lower;
+  struct bl616cl_pwm_lowerhalf_s *priv =
+    (struct bl616cl_pwm_lowerhalf_s *)lower;
 
 #ifdef CONFIG_BL616CL_PWM_TEST
   priv->stop_calls++;
@@ -1005,7 +1005,7 @@ static int bl616cl_pwm_stop(FAR struct pwm_lowerhalf_s *lower)
  *
  ****************************************************************************/
 
-static int bl616cl_pwm_ioctl(FAR struct pwm_lowerhalf_s *lower, int cmd,
+static int bl616cl_pwm_ioctl(struct pwm_lowerhalf_s *lower, int cmd,
                              unsigned long arg)
 {
   UNUSED(lower);
@@ -1035,8 +1035,8 @@ static int bl616cl_pwm_ioctl(FAR struct pwm_lowerhalf_s *lower, int cmd,
  *
  ****************************************************************************/
 
-FAR struct pwm_lowerhalf_s *bl616cl_pwm_initialize(uint8_t channel,
-                                                   uint8_t pin)
+struct pwm_lowerhalf_s *bl616cl_pwm_initialize(uint8_t channel,
+                                               uint8_t pin)
 {
   if (channel != BL616CL_PWM_CHANNEL || pin != BL616CL_PWM_PIN)
     {
@@ -1050,7 +1050,7 @@ FAR struct pwm_lowerhalf_s *bl616cl_pwm_initialize(uint8_t channel,
       return NULL;
     }
 
-  return (FAR struct pwm_lowerhalf_s *)&g_bl616cl_pwm;
+  return (struct pwm_lowerhalf_s *)&g_bl616cl_pwm;
 }
 
 #ifdef CONFIG_BL616CL_PWM_TEST
@@ -1123,7 +1123,7 @@ int bl616cl_pwm_test_set_fault(enum bl616cl_pwm_test_fault_e fault)
  *
  ****************************************************************************/
 
-int bl616cl_pwm_test_get_diag(FAR struct bl616cl_pwm_test_diag_s *diag)
+int bl616cl_pwm_test_get_diag(struct bl616cl_pwm_test_diag_s *diag)
 {
   uint32_t config1;
   bool polarity_high;

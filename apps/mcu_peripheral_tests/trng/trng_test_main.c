@@ -69,12 +69,12 @@ static const size_t g_lengths[] =
  * Private Functions
  ****************************************************************************/
 
-static void trng_usage(FAR const char *progname)
+static void trng_usage(const char *progname)
 {
   printf("Usage: %s <all|lengths|api|stats|concurrent>\n", progname);
 }
 
-static bool trng_all_value(FAR const uint8_t *buffer, size_t len,
+static bool trng_all_value(const uint8_t *buffer, size_t len,
                            uint8_t value)
 {
   size_t i;
@@ -90,7 +90,7 @@ static bool trng_all_value(FAR const uint8_t *buffer, size_t len,
   return true;
 }
 
-static uint32_t trng_checksum(FAR const uint8_t *buffer, size_t len)
+static uint32_t trng_checksum(const uint8_t *buffer, size_t len)
 {
   uint32_t hash = UINT32_C(2166136261);
   size_t i;
@@ -104,7 +104,7 @@ static uint32_t trng_checksum(FAR const uint8_t *buffer, size_t len)
   return hash;
 }
 
-static int trng_read_exact(int fd, FAR uint8_t *buffer, size_t len)
+static int trng_read_exact(int fd, uint8_t *buffer, size_t len)
 {
   ssize_t nread = read(fd, buffer, len);
 
@@ -122,8 +122,8 @@ static int trng_test_lengths(void)
 {
   uint32_t guarded_words[(TRNG_MAX_READ_SIZE + 3 + sizeof(uint32_t) - 1) /
                          sizeof(uint32_t)];
-  FAR uint8_t *guarded = (FAR uint8_t *)guarded_words;
-  FAR uint8_t *buffer = &guarded[1];
+  uint8_t *guarded = (uint8_t *)guarded_words;
+  uint8_t *buffer = &guarded[1];
   int fd;
   size_t i;
 
@@ -248,7 +248,7 @@ static int trng_test_api(void)
 
 static int trng_test_stats(void)
 {
-  FAR uint8_t *buffer;
+  uint8_t *buffer;
   struct timespec start;
   struct timespec end;
   uint64_t elapsed_us;
@@ -341,14 +341,14 @@ static int trng_test_stats(void)
   return 0;
 }
 
-static FAR void *trng_worker(FAR void *arg)
+static void *trng_worker(void *arg)
 {
   static const size_t lengths[] =
   {
     1, 31, 32, 33, 127, 255, 257
   };
 
-  FAR struct trng_worker_s *worker = arg;
+  struct trng_worker_s *worker = arg;
   uint8_t buffer[TRNG_MAX_READ_SIZE];
   uint32_t hash = UINT32_C(2166136261);
   int fd;
@@ -438,7 +438,7 @@ static int trng_test_concurrent(void)
   return 0;
 }
 
-static int trng_run_case(FAR const char *name)
+static int trng_run_case(const char *name)
 {
   if (strcmp(name, "lengths") == 0)
     {
@@ -467,7 +467,7 @@ static int trng_run_case(FAR const char *name)
  * Public Functions
  ****************************************************************************/
 
-int main(int argc, FAR char *argv[])
+int main(int argc, char *argv[])
 {
   static const char *cases[] =
   {

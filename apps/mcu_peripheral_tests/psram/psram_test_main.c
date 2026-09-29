@@ -33,7 +33,7 @@ static uint32_t psram_pattern(size_t index, unsigned int pass)
   return ((uint32_t)index * 0x9e3779b9u) ^ seeds[pass];
 }
 
-int main(int argc, FAR char *argv[])
+int main(int argc, char *argv[])
 {
   volatile uint32_t *cached;
   volatile uint32_t *uncached;
