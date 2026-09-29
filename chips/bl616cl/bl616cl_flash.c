@@ -368,6 +368,19 @@ static void ATTR_TCM_SECTION flash_set_hs(void)
  ****************************************************************************/
 
 /****************************************************************************
+ * Name: bl616cl_flash_early_init
+ ****************************************************************************/
+
+void bl616cl_flash_early_init(void)
+{
+  uint32_t regval;
+
+  regval = getreg32(SF_CTRL_BASE + SF_CTRL_2_OFFSET);
+  regval |= SF_CTRL_SF_IF_BK2_EN | SF_CTRL_SF_IF_BK2_MODE;
+  putreg32(regval, SF_CTRL_BASE + SF_CTRL_2_OFFSET);
+}
+
+/****************************************************************************
  * Name: bl616cl_flash_initialize
  *
  * Description:
