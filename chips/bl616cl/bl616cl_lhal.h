@@ -21,6 +21,10 @@
 #ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_LHAL_H
 #define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_LHAL_H
 
+/****************************************************************************
+ * Included Files
+ ****************************************************************************/
+
 #include <nuttx/config.h>
 #include <errno.h>
 #include <nuttx/arch.h>

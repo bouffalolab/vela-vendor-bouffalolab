@@ -21,6 +21,10 @@
 #ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_SDK_H
 #define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_SDK_H
 
+/****************************************************************************
+ * Included Files
+ ****************************************************************************/
+
 #include "bl616cl_lhal.h"
 
 /* bflb_sf_ctrl.h has one legacy non-prototype declaration. Import it once

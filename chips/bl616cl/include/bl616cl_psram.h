@@ -21,11 +21,24 @@
 #ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_PSRAM_H
 #define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_INCLUDE_BL616CL_PSRAM_H
 
+/****************************************************************************
+ * Included Files
+ ****************************************************************************/
+
 #include <nuttx/config.h>
+
 #include <stddef.h>
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
 #define BL616CL_PSRAM_BASE          (0x88000000)
 #define BL616CL_PSRAM_NOCACHE_BASE  0x18000000u
+
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
 
 #ifdef CONFIG_BL616CL_PSRAM
 /* Returns the usable heap region size, or zero if initialization failed.

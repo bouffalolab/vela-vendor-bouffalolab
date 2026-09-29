@@ -21,9 +21,17 @@
 #ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_HARDWARE_BL616CL_CORE_H
 #define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_HARDWARE_BL616CL_CORE_H
 
+/****************************************************************************
+ * Included Files
+ ****************************************************************************/
+
 #include <stddef.h>
 
 #include "core_rv32.h"
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
 
 /* Reuse the T-Head register layout from drivers/lhal. This header is
  * private and C-only. offsetof follows the actual CORET_Type layout:

@@ -21,8 +21,16 @@
 #ifndef __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_PERFMON_INTERNAL_H
 #define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_PERFMON_INTERNAL_H
 
+/****************************************************************************
+ * Included Files
+ ****************************************************************************/
+
 #include <arch/chip/bl616cl_perfmon.h>
 #include <arch/irq.h>
+
+/****************************************************************************
+ * Public Function Prototypes
+ ****************************************************************************/
 
 /* Select the E907 counter events. */
 

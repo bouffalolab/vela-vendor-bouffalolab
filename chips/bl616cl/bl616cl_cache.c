@@ -47,7 +47,8 @@
 
 /* MHCR access and bitfields come from the T-Head core headers; the cache
  * line size comes from lhal bflb_l1c.h. The E907 cache geometry stays
- * local because the SDK headers do not define it. */
+ * local because the SDK headers do not define it.
+ */
 
 #define BL616CL_ICACHE_SIZE     (32u * 1024u)
 #define BL616CL_DCACHE_SIZE     (16u * 1024u)

@@ -24,7 +24,6 @@
 
 #include <nuttx/config.h>
 
-
 #include <arpa/inet.h>
 #include <assert.h>
 #include <debug.h>
@@ -549,13 +548,16 @@ static void wlan_transmit(struct wlan_priv_s *priv)
 #endif
 
       /* -EAGAIN (too many frames in flight) leaves ownership with this
-       * driver. The completion callback schedules another transmit pass. */
+       * driver. The completion callback schedules another transmit pass.
+       */
+
       ret = priv->ops->send(iob, llhdrlen, offset);
       if (ret == -EAGAIN)
         {
           priv->tx_pending = iob;
           break;
         }
+
       if (ret < 0)
         {
           wlerr("Wi-Fi TX failed: %d\n", ret);
@@ -673,7 +675,6 @@ static int wlan_rx_done(struct wlan_priv_s *priv,
 
   if (len > iob_navail(false) * CONFIG_IOB_BUFSIZE)
     {
-      // wlwarn("ERROR: No enough iob to receive pkt, len: %d\n", len);
       ret = -ENOBUFS;
       goto out;
     }
@@ -687,7 +688,6 @@ static int wlan_rx_done(struct wlan_priv_s *priv,
   iob = iob_tryalloc(false);
   if (iob == NULL)
     {
-      // wlwarn("ERROR: Failed to alloc iob\n");
       ret = -ENOBUFS;
       goto out;
     }
@@ -709,7 +709,6 @@ static int wlan_rx_done(struct wlan_priv_s *priv,
   free_cb(net);
   free_cb = NULL;
 
-  /* wlinfo("free rx buf\n"); */
 recv_frame:
 
   flags = up_irq_save();
@@ -788,8 +787,6 @@ static void wlan_rxpoll(void *arg)
       dev->d_iob = iob;
       dev->d_len = iob->io_pktlen + NET_LL_HDRLEN(dev);
       NETDEV_RXPACKETS(dev);
-
-      // iob_reserve(iob, NET_LL_HDRLEN(dev));
 
 #ifdef CONFIG_NET_PKT
 
@@ -1556,7 +1553,9 @@ static void up_pm_notify(struct pm_callback_s *cb,
       case PM_SLEEP:
 
       default:
+
         /* Should not get here */
+
         break;
     }
 

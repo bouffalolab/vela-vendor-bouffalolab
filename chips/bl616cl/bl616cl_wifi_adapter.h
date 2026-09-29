@@ -52,9 +52,9 @@ extern "C"
 #define SSID_MAX_LEN (32)
 #define PWD_MAX_LEN  (64)
 
-/************************************************************************************
+/****************************************************************************
  * Public Types
- ************************************************************************************/
+ ****************************************************************************/
 
 /* Wi-Fi event callback function */
 
@@ -136,7 +136,6 @@ int8_t rfparam_get_ant_gain(void);
 void rfparam_update_ant_gain(int8_t ant_gain);
 
 int rfparam_set_country_code(const char *country);
-
 
 #ifdef __cplusplus
 }
