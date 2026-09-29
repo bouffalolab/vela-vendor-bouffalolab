@@ -49,7 +49,7 @@ extern "C"
  ****************************************************************************/
 
 /****************************************************************************
- * Name: bl616_wlan_sta_set_linkstatus
+ * Name: bl616cl_wlan_sta_set_linkstatus
  *
  * Description:
  *   Set Wi-Fi station link status
@@ -64,10 +64,10 @@ extern "C"
  *
  ****************************************************************************/
 
-int bl616_wlan_sta_set_linkstatus(bool linkstatus);
+int bl616cl_wlan_sta_set_linkstatus(bool linkstatus);
 
 /****************************************************************************
- * Name: bl616_wlan_sta_initialize
+ * Name: bl616cl_wlan_sta_initialize
  *
  * Description:
  *   Initialize the WLAN station netcard driver
@@ -80,10 +80,10 @@ int bl616_wlan_sta_set_linkstatus(bool linkstatus);
  *
  ****************************************************************************/
 
-int bl616_wlan_sta_initialize(void);
+int bl616cl_wlan_sta_initialize(void);
 
 /****************************************************************************
- * Name: bl616_wlan_sta_get_netdev
+ * Name: bl616cl_wlan_sta_get_netdev
  *
  * Description:
  *   Get Wi-Fi station netcard driver
@@ -96,7 +96,7 @@ int bl616_wlan_sta_initialize(void);
  *
  ****************************************************************************/
 
-struct net_driver_s *bl616_wlan_sta_get_netdev(void);
+struct net_driver_s *bl616cl_wlan_sta_get_netdev(void);
 
 #endif /* CONFIG_BL_COMPONENT_WL80211 */
 #ifdef __cplusplus

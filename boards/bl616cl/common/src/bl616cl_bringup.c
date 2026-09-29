@@ -118,7 +118,7 @@ int bl616cl_bringup(void)
     }
 
 #ifdef CONFIG_BL_COMPONENT_WL80211
-  ret = bl616_wlan_sta_initialize();
+  ret = bl616cl_wlan_sta_initialize();
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize Wi-Fi WLAN: %d\n", ret);

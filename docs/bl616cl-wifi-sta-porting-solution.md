@@ -191,14 +191,14 @@ PBKDF2 则使用 Vela 的 mbedTLS `mbedtls_pkcs5_pbkdf2_hmac()`，避免引入�
 `boards/bl616cl/common/src/bl616cl_bringup.c` 在 `CONFIG_BL_COMPONENT_WL80211` 打开时调用：
 
 ```c
-bl616_wlan_sta_initialize();   /* chips/bl616cl/bl616cl_wlan.h */
+bl616cl_wlan_sta_initialize();   /* chips/bl616cl/bl616cl_wlan.h */
 ```
 
 初始化顺序包括：
 
-1. `bl616_wifi_adapter_init()` 建立 Wi-Fi adapter 和底层控制环境；
+1. `bl616cl_wifi_adapter_init()` 建立 Wi-Fi adapter 和底层控制环境；
 2. 读取 eFuse/MAC 地址；
-3. `bl616_net_initialize()` 注册 BL616CL STA netdev；
+3. `bl616cl_net_initialize()` 注册 BL616CL STA netdev；
 4. 注册 RX callback 和 TX-done callback；
 5. 根据配置启动后续 Wi-Fi 管理流程。
 
@@ -245,12 +245,12 @@ WEXT disconnect
 NuttX socket
   -> TCP/UDP buffered send
   -> NuttX netdev poll / d_txavail
-  -> bl616_wlan TX
+  -> bl616cl_wlan TX
   -> wl80211 NuttX host port（IOB 链直接作为 PBD 段）
   -> Wi-Fi hardware
 
 Wi-Fi hardware
-  -> bl616_wlan RX callback
+  -> bl616cl_wlan RX callback
   -> NuttX IOB / netdev receive path
   -> TCP/UDP/IP
 ```
@@ -277,7 +277,7 @@ TX/RX 的关键原则是：
 - 延迟为 0 的 work 在下一个 tick 才执行（nuttx `96e9f7ccd60`），效果相当于按 tick 批处理。实验改成立即唤醒后，`hpwork` 每来一帧就抢占一次，UDP 收发降到约 20 Mbps，所以不回移 vela/dev 的立即唤醒。
 - UDP 过载时丢包发生在 socket 接收缓冲（应用线程拿不到 CPU），驱动不丢帧；`CONFIG_NETDEV_STATISTICS` 的 `/proc/net/wlan0` 与 `/proc/net/stat` 可以区分这两处。
 - `wifi_fw` 相对应用的优先级（2026-09-27 A/B，三种布局填充）：与 iperf 同为 100 时，UDP RX 60M 过载几乎收满（59.3～59.7，127 时 48～54），TCP TX +0.4～+0.8、TCP RX +0.2，UDP TX −1.0～−1.8；此时协议栈放 `hpwork` 还是优先级 150 的 LPWORK，结果相同（LPWORK 多占约 2.2 KB 堆）。低于应用（90）时 UDP TX 降 6～12。同级时两者互不抢占，应用长时间占用 CPU 会推迟 `wifi_fw`，所以默认取 130，保持高于应用。
-- `bl616_wifi_adapter_init()` 创建 `wifi_fw` 后，先等它第一次阻塞在 `wifi_task_suspend()`（即 `macswl_init()` 已完成）再发消息（vendor `fc4a65c`）。此前 `wifi_fw` 低于初始化线程（100）时，`macswl_init()` 中的 `ke_init()` 会清掉已经发出的 `MM_RESET_REQ`，启动卡住。
+- `bl616cl_wifi_adapter_init()` 创建 `wifi_fw` 后，先等它第一次阻塞在 `wifi_task_suspend()`（即 `macswl_init()` 已完成）再发消息（vendor `fc4a65c`）。此前 `wifi_fw` 低于初始化线程（100）时，`macswl_init()` 中的 `ke_init()` 会清掉已经发出的 `MM_RESET_REQ`，启动卡住。
 
 ## 6. Shared RAM、cache 和 linker
 
@@ -337,7 +337,7 @@ private 的 TX 路径与 master 相同。此前为复制方案加入的 TX pool�
 
 `wl80211.h` 强制使用统一的 tree layout，避免不同 translation unit 对 RB tree entry 的大小和布局理解不一致。这是扫描结果树跨 public header、private core 和 chip adapter 时的 ABI 约束。
 
-scan-result tree 没有锁，Vela 靠 adapter 的 `g_wifi_scan_sem` 保证读写不并发：只有显式扫描写这棵树（连接阶段的扫描写 `connect.c` 自己的候选列表），显式扫描只由 `bl616_wifi_sta_scan()` 发起，`SIOCGIWSCAN` 读取也要先拿同一个信号量，而 `SCAN_DONE` 在扫描 op 出队释放之后才释放它。这个前提在 Vela 打开 `CONFIG_WL80211_P2P` 或出现别的扫描发起方时不再成立，需要重新评估。曾提交的扫描结果锁（BS-1549，gerrit 11413/11423）经评审撤回。
+scan-result tree 没有锁，Vela 靠 adapter 的 `g_wifi_scan_sem` 保证读写不并发：只有显式扫描写这棵树（连接阶段的扫描写 `connect.c` 自己的候选列表），显式扫描只由 `bl616cl_wifi_sta_scan()` 发起，`SIOCGIWSCAN` 读取也要先拿同一个信号量，而 `SCAN_DONE` 在扫描 op 出队释放之后才释放它。这个前提在 Vela 打开 `CONFIG_WL80211_P2P` 或出现别的扫描发起方时不再成立，需要重新评估。曾提交的扫描结果锁（BS-1549，gerrit 11413/11423）经评审撤回。
 
 ## 7. TX 资源所有权与稳定性修复
 
@@ -733,7 +733,7 @@ RX 路径中每帧从 host 槽拷到 IOB 的开销，从 3.0–3.8 万 cycle 降
 
 R2 之后按模块继续排列。perfmon 采样选出四组候选，每组单独接在 Wi-Fi 列表之后：
 
-- glue：Wi-Fi 列表漏掉的 `wl80211_output`、`bl616_wifi_sta_txdone`、`wlan_sta_tx_done`；
+- glue：Wi-Fi 列表漏掉的 `wl80211_output`、`bl616cl_wifi_sta_txdone`、`wlan_sta_tx_done`；
 - libc：`memcpy`、`memset`、`memcmp`；
 - net：socket、UDP/TCP、netdev/ARP/devif 和 IOB，61 个函数，12.4 KiB；
 - sched：信号量慢路径、work queue、`wd_cancel`、`clock_systime_ticks`，8 个函数，0.9 KiB。
