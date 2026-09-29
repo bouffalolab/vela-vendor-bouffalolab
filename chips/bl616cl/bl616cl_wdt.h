@@ -22,6 +22,17 @@
 #define __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_WDT_H
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+/* WFAR/WSAR access keys that unlock one watchdog register write. The
+ * upstream bflb_wdg.c writes them as literals and exports no macro.
+ */
+
+#define BL616CL_WDT_ACCESS_KEY1      0xbabau
+#define BL616CL_WDT_ACCESS_KEY2      0xeb10u
+
+/****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 

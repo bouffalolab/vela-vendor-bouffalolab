@@ -161,8 +161,8 @@ static void bl616cl_wdt_set_action(
   uintptr_t base = priv->wdg->reg_base;
   uint32_t regval;
 
-  putreg16(0xbaba, base + TIMER_WFAR_OFFSET);
-  putreg16(0xeb10, base + TIMER_WSAR_OFFSET);
+  putreg16(BL616CL_WDT_ACCESS_KEY1, base + TIMER_WFAR_OFFSET);
+  putreg16(BL616CL_WDT_ACCESS_KEY2, base + TIMER_WSAR_OFFSET);
   regval = getreg32(base + TIMER_WMER_OFFSET);
   if (capture)
     {

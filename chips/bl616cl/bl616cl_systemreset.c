@@ -27,6 +27,7 @@
 #include <nuttx/arch.h>
 
 #include "bl616cl_systemreset.h"
+#include "bl616cl_wdt.h"
 #include "bl616cl_sdk.h"
 #include "bl616cl_glb.h"
 #include "hardware/timer_reg.h"
@@ -35,22 +36,9 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* Access keys are literals in the upstream WDT implementation; register
- * offsets and fields are imported from the upstream hardware headers.
- */
-
-#define BL616CL_WDT_ACCESS_KEY1      0xbabau
-#define BL616CL_WDT_ACCESS_KEY2      0xeb10u
-
 #define BL616CL_RESET_MAGIC          0xb616c100u
 #define BL616CL_RESET_MAGIC_MASK     0xffffff00u
 #define BL616CL_RESET_REASON_MASK    0xffu
-
-#define BL616CL_HBN_REG(offset) \
-  (*(volatile uint32_t *)(HBN_BASE + (offset)))
-
-#define BL616CL_TIMER_REG(offset) \
-  (*(volatile uint32_t *)(TIMER_BASE + (offset)))
 
 /****************************************************************************
  * Private Data
@@ -68,7 +56,7 @@ static enum bl616cl_reset_reason_e g_bl616cl_reset_reason =
 #ifdef CONFIG_BOARDCTL_RESET_CAUSE
 void bl616cl_reset_reason_initialize(void)
 {
-  uint32_t saved = BL616CL_HBN_REG(HBN_RSV0_OFFSET);
+  uint32_t saved = HBN_Get_Status_Flag();
   uint32_t reason = saved & BL616CL_RESET_REASON_MASK;
   uint32_t timer_status;
 
@@ -76,12 +64,12 @@ void bl616cl_reset_reason_initialize(void)
       reason <= BL616CL_RESET_SOFTWARE)
     {
       g_bl616cl_reset_reason = (enum bl616cl_reset_reason_e)reason;
-      BL616CL_HBN_REG(HBN_RSV0_OFFSET) = 0;
+      HBN_Set_Status_Flag(0);
     }
   else
     {
-      timer_status = BL616CL_TIMER_REG(TIMER_WSR_OFFSET);
-      if ((BL616CL_HBN_REG(HBN_WSR_OFFSET) & HBN_WTS_MSK) != 0 ||
+      timer_status = getreg32(TIMER_BASE + TIMER_WSR_OFFSET);
+      if ((getreg32(HBN_BASE + HBN_WSR_OFFSET) & HBN_WTS_MSK) != 0 ||
           (timer_status & TIMER_WTS) != 0)
         {
           g_bl616cl_reset_reason = BL616CL_RESET_WATCHDOG;
@@ -89,19 +77,16 @@ void bl616cl_reset_reason_initialize(void)
 
       /* WDT status is sticky until cleared with the access key. */
 
-      BL616CL_TIMER_REG(TIMER_WFAR_OFFSET) =
-        BL616CL_WDT_ACCESS_KEY1;
-      BL616CL_TIMER_REG(TIMER_WSAR_OFFSET) =
-        BL616CL_WDT_ACCESS_KEY2;
-      BL616CL_TIMER_REG(TIMER_WSR_OFFSET) =
-        timer_status & ~TIMER_WTS;
+      putreg32(BL616CL_WDT_ACCESS_KEY1, TIMER_BASE + TIMER_WFAR_OFFSET);
+      putreg32(BL616CL_WDT_ACCESS_KEY2, TIMER_BASE + TIMER_WSAR_OFFSET);
+      putreg32(timer_status & ~TIMER_WTS, TIMER_BASE + TIMER_WSR_OFFSET);
     }
 }
 
 void bl616cl_reset_reason_set(enum bl616cl_reset_reason_e reason)
 {
-  BL616CL_HBN_REG(HBN_RSV0_OFFSET) =
-    BL616CL_RESET_MAGIC | ((uint32_t)reason & BL616CL_RESET_REASON_MASK);
+  HBN_Set_Status_Flag(BL616CL_RESET_MAGIC |
+                      ((uint32_t)reason & BL616CL_RESET_REASON_MASK));
 }
 
 enum bl616cl_reset_reason_e bl616cl_reset_reason_get(void)
