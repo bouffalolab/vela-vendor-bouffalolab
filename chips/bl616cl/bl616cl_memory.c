@@ -69,6 +69,25 @@ extern uint8_t __LD_CONFIG_EM_SEL;
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_psramb_tzc_access_not_lock
+ *
+ * Description:
+ *   Program one PSRAMB TZC region without locking it: set its group in the
+ *   control register, write its start and end (1 KiB granularity) and enable
+ *   it.
+ *
+ * Input Parameters:
+ *   region - TZC region index
+ *   start - Region start address
+ *   end - Region end address (exclusive)
+ *   group - Access group encoded in two bits for the region
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 static void bl616cl_psramb_tzc_access_not_lock(uint8_t region,
                                                uint32_t start,
                                                uint32_t end,
@@ -104,6 +123,22 @@ static void bl616cl_psramb_tzc_access_not_lock(uint8_t region,
            TZC_SEC_TZC_PSRAMB_TZSRG_CTRL_OFFSET);
 }
 
+/****************************************************************************
+ * Name: bl616cl_em_select
+ *
+ * Description:
+ *   Choose the WRAM/EM (exchange memory) split from the linker-provided
+ *   __LD_CONFIG_EM_SEL size: 16 KiB gives WRAM 144 KB, 32 KiB gives WRAM 128
+ *   KB, any other value gives WRAM 160 KB with no EM.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 static void bl616cl_em_select(void)
 {
   uintptr_t em_size;
@@ -134,6 +169,18 @@ static void bl616cl_em_select(void)
 
 /****************************************************************************
  * Name: bl616cl_memory_early_init
+ *
+ * Description:
+ *   Early memory setup called at startup. If PSRAM has not been initialized
+ *   yet, open the whole first 64 MiB of PSRAMB in TZC region 0 (not locked),
+ *   then select the EM/WRAM split.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bl616cl_memory_early_init(void)
@@ -148,6 +195,19 @@ void bl616cl_memory_early_init(void)
 
 /****************************************************************************
  * Name: bl616cl_section_load
+ *
+ * Description:
+ *   Initialize RAM sections at startup: copy every entry of the
+ *   __mem_copy_sections table from its load address to its run address and
+ *   zero every entry of the __mem_setz_sections table. Both tables end with a
+ *   sentinel and entries with NULL pointers are skipped.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bl616cl_section_load(void)

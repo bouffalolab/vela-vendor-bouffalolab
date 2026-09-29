@@ -175,6 +175,20 @@ static uart_dev_t g_uart1port =
  ****************************************************************************/
 
 #ifdef HAVE_UART_DEVICE
+/****************************************************************************
+ * Name: bl616cl_disableuartint
+ *
+ * Description:
+ *   Mask the TX, RX and error interrupts of the UART.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 static void bl616cl_disableuartint(struct uart_dev_s *dev)
 {
   struct bl616cl_uart_s *priv = dev->priv;
@@ -185,6 +199,23 @@ static void bl616cl_disableuartint(struct uart_dev_s *dev)
 }
 
 #ifdef CONFIG_SERIAL_TERMIOS
+/****************************************************************************
+ * Name: bl616cl_apply_termios
+ *
+ * Description:
+ *   Apply the baud rate, data bits, stop bits and parity of config to the
+ *   UART with bflb_uart_feature_control(), stopping at the first failure.
+ *
+ * Input Parameters:
+ *   priv - UART whose hardware is programmed.
+ *   config - Settings to apply.
+ *
+ * Returned Value:
+ *   Zero on success; the first negative value returned by
+ *   bflb_uart_feature_control() on failure.
+ *
+ ****************************************************************************/
+
 static int bl616cl_apply_termios(struct bl616cl_uart_s *priv,
                                 const struct bl616cl_uart_s *config)
 {
@@ -216,6 +247,24 @@ static int bl616cl_apply_termios(struct bl616cl_uart_s *priv,
                                    config->parity);
 }
 #endif
+
+/****************************************************************************
+ * Name: bl616cl_validate_baud
+ *
+ * Description:
+ *   Check that a baud rate can be generated from the current UART peripheral
+ *   clock. The rate is rejected if it is zero, if the clock is zero, if twice
+ *   the rate is not below the clock, or if the rounded divisor is zero or not
+ *   below BL616CL_UART_DIVISOR_LIMIT.
+ *
+ * Input Parameters:
+ *   priv - UART whose peripheral clock is used.
+ *   baud - Requested baud rate.
+ *
+ * Returned Value:
+ *   Zero (OK) if the rate is usable; -EINVAL otherwise.
+ *
+ ****************************************************************************/
 
 static int bl616cl_validate_baud(struct bl616cl_uart_s *priv, uint32_t baud)
 {
@@ -249,6 +298,21 @@ static int bl616cl_validate_baud(struct bl616cl_uart_s *priv, uint32_t baud)
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_validate_format
+ *
+ * Description:
+ *   Check the frame format of the UART: 5 to 8 data bits, parity value at
+ *   most 2 and stop bit setting at most 1.
+ *
+ * Input Parameters:
+ *   priv - UART whose configured format is checked.
+ *
+ * Returned Value:
+ *   Zero (OK) if the format is valid; -EINVAL otherwise.
+ *
+ ****************************************************************************/
+
 static int bl616cl_validate_format(const struct bl616cl_uart_s *priv)
 {
   if (priv->data_bits < 5 || priv->data_bits > 8 || priv->parity > 2 ||
@@ -262,6 +326,22 @@ static int bl616cl_validate_format(const struct bl616cl_uart_s *priv)
 
 /****************************************************************************
  * Name: bl616cl_setup
+ *
+ * Description:
+ *   Implement the uart_ops_s setup method. Validate the configured baud rate
+ *   and format, configure the UART with bl616cl_lowputc_config() and mask all
+ *   UART interrupts.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -EINVAL - The baud rate or frame format is invalid.
+ *     -ENODEV - No lhal UART device is available.
+ *     Other errors are returned from bl616cl_lowputc_config().
+ *
  ****************************************************************************/
 
 static int bl616cl_setup(struct uart_dev_s *dev)
@@ -298,6 +378,17 @@ static int bl616cl_setup(struct uart_dev_s *dev)
 
 /****************************************************************************
  * Name: bl616cl_shutdown
+ *
+ * Description:
+ *   Implement the uart_ops_s shutdown method. Mask all UART interrupts and
+ *   disable the UART. Does nothing if the UART was never set up.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
 static void bl616cl_shutdown(struct uart_dev_s *dev)
@@ -315,6 +406,18 @@ static void bl616cl_shutdown(struct uart_dev_s *dev)
 
 /****************************************************************************
  * Name: bl616cl_attach
+ *
+ * Description:
+ *   Implement the uart_ops_s attach method. Attach bl616cl_interrupt() to the
+ *   UART interrupt and enable it if the attach succeeds.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; the negated errno value from irq_attach() on
+ *   failure.
+ *
  ****************************************************************************/
 
 static int bl616cl_attach(struct uart_dev_s *dev)
@@ -333,6 +436,17 @@ static int bl616cl_attach(struct uart_dev_s *dev)
 
 /****************************************************************************
  * Name: bl616cl_detach
+ *
+ * Description:
+ *   Implement the uart_ops_s detach method. Disable and detach the UART
+ *   interrupt.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
 static void bl616cl_detach(struct uart_dev_s *dev)
@@ -345,6 +459,21 @@ static void bl616cl_detach(struct uart_dev_s *dev)
 
 /****************************************************************************
  * Name: bl616cl_interrupt
+ *
+ * Description:
+ *   UART interrupt handler. Transmit pending characters on a TX FIFO
+ *   interrupt with uart_xmitchars(), and receive characters on an RX FIFO or
+ *   receive timeout interrupt with uart_recvchars(). The receive timeout flag
+ *   is cleared.
+ *
+ * Input Parameters:
+ *   irq - IRQ number (unused).
+ *   context - Interrupt register state save area (unused).
+ *   arg - The uart_dev_s instance that was passed to irq_attach().
+ *
+ * Returned Value:
+ *   Always OK.
+ *
  ****************************************************************************/
 
 static int bl616cl_interrupt(int irq, void *context, FAR void *arg)
@@ -380,6 +509,29 @@ static int bl616cl_interrupt(int irq, void *context, FAR void *arg)
 
 /****************************************************************************
  * Name: bl616cl_ioctl
+ *
+ * Description:
+ *   Implement the uart_ops_s ioctl method. Supported commands are
+ *   TIOCSERGSTRUCT (copy of the UART state, with
+ *   CONFIG_SERIAL_TIOCSERGSTRUCT), and TCGETS and TCSETS (with
+ *   CONFIG_SERIAL_TERMIOS). TCSETS validates the baud rate, applies the new
+ *   format and rolls back to the old one if that fails; hardware flow control
+ *   is not supported.
+ *
+ * Input Parameters:
+ *   filep - File structure of the serial device.
+ *   cmd - The ioctl command.
+ *   arg - The ioctl argument.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -EINVAL     - A required pointer is NULL, or the baud rate or data
+ *                   size is invalid.
+ *     -EOPNOTSUPP - CRTSCTS was requested in TCSETS.
+ *     -ENOTTY     - The command is not supported.
+ *     Other errors are returned from bflb_uart_feature_control().
+ *
  ****************************************************************************/
 
 static int bl616cl_ioctl(struct file *filep, int cmd, unsigned long arg)
@@ -560,6 +712,18 @@ static int bl616cl_ioctl(struct file *filep, int cmd, unsigned long arg)
 
 /****************************************************************************
  * Name: bl616cl_receive
+ *
+ * Description:
+ *   Implement the uart_ops_s receive method. Read one character from the
+ *   UART; the reported status is always 0.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *   status - Location to return the receive status, may be NULL.
+ *
+ * Returned Value:
+ *   The received character.
+ *
  ****************************************************************************/
 
 static int bl616cl_receive(struct uart_dev_s *dev, unsigned int *status)
@@ -576,6 +740,17 @@ static int bl616cl_receive(struct uart_dev_s *dev, unsigned int *status)
 
 /****************************************************************************
  * Name: bl616cl_rxint
+ *
+ * Description:
+ *   Implement the uart_ops_s rxint method. Unmask or mask the RX interrupt.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *   enable - true to enable the RX interrupt, false to disable it.
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
 static void bl616cl_rxint(struct uart_dev_s *dev, bool enable)
@@ -590,6 +765,16 @@ static void bl616cl_rxint(struct uart_dev_s *dev, bool enable)
 
 /****************************************************************************
  * Name: bl616cl_rxavailable
+ *
+ * Description:
+ *   Implement the uart_ops_s rxavailable method.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *
+ * Returned Value:
+ *   true if the UART has received data available; false otherwise.
+ *
  ****************************************************************************/
 
 static bool bl616cl_rxavailable(struct uart_dev_s *dev)
@@ -601,6 +786,17 @@ static bool bl616cl_rxavailable(struct uart_dev_s *dev)
 
 /****************************************************************************
  * Name: bl616cl_send
+ *
+ * Description:
+ *   Implement the uart_ops_s send method. Write one character to the UART.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *   ch - Character to send.
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
 static void bl616cl_send(struct uart_dev_s *dev, int ch)
@@ -612,6 +808,19 @@ static void bl616cl_send(struct uart_dev_s *dev, int ch)
 
 /****************************************************************************
  * Name: bl616cl_txint
+ *
+ * Description:
+ *   Implement the uart_ops_s txint method. Enabling unmasks the TX interrupt
+ *   and immediately sends pending characters with uart_xmitchars(); disabling
+ *   masks it.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *   enable - true to enable the TX interrupt, false to disable it.
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
 static void bl616cl_txint(struct uart_dev_s *dev, bool enable)
@@ -635,6 +844,16 @@ static void bl616cl_txint(struct uart_dev_s *dev, bool enable)
 
 /****************************************************************************
  * Name: bl616cl_txready
+ *
+ * Description:
+ *   Implement the uart_ops_s txready method.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *
+ * Returned Value:
+ *   true if the UART can accept another character; false otherwise.
+ *
  ****************************************************************************/
 
 static bool bl616cl_txready(struct uart_dev_s *dev)
@@ -646,6 +865,17 @@ static bool bl616cl_txready(struct uart_dev_s *dev)
 
 /****************************************************************************
  * Name: bl616cl_txempty
+ *
+ * Description:
+ *   Implement the uart_ops_s txempty method. The transmitter is empty when
+ *   the TX FIFO is empty and the TX bus is not busy.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *
+ * Returned Value:
+ *   true if all transmission has completed; false otherwise.
+ *
  ****************************************************************************/
 
 static bool bl616cl_txempty(struct uart_dev_s *dev)
@@ -664,6 +894,20 @@ static bool bl616cl_txempty(struct uart_dev_s *dev)
 
 /****************************************************************************
  * Name: riscv_earlyserialinit
+ *
+ * Description:
+ *   Initialize the console UART for early output. When USE_EARLYSERIALINIT is
+ *   defined and a console device exists, mark it as the console and set it up
+ *   with bl616cl_setup().
+ *
+ *   This is the RISC-V architecture hook for early serial initialization.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
 void riscv_earlyserialinit(void)
@@ -676,6 +920,19 @@ void riscv_earlyserialinit(void)
 
 /****************************************************************************
  * Name: riscv_serialinit
+ *
+ * Description:
+ *   Register the serial devices: /dev/console (when UART0 is the console) and
+ *   /dev/ttyS0 (when CONFIG_BL616CL_UART0 is set).
+ *
+ *   This is the RISC-V architecture hook for serial driver registration.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
 void riscv_serialinit(void)
@@ -690,6 +947,22 @@ void riscv_serialinit(void)
 }
 
 #ifdef CONFIG_BL616CL_UART1
+/****************************************************************************
+ * Name: bl616cl_uart1_register
+ *
+ * Description:
+ *   Set the TX and RX pins of UART1 and register it as /dev/ttyS1.
+ *
+ * Input Parameters:
+ *   txpin - GPIO pin used for UART1 TX.
+ *   rxpin - GPIO pin used for UART1 RX.
+ *
+ * Returned Value:
+ *   The result of uart_register(): zero (OK) on success; a negated errno
+ *   value on failure.
+ *
+ ****************************************************************************/
+
 int bl616cl_uart1_register(uint8_t txpin, uint8_t rxpin)
 {
   g_uart1_config.txpin = txpin;
@@ -700,6 +973,18 @@ int bl616cl_uart1_register(uint8_t txpin, uint8_t rxpin)
 
 /****************************************************************************
  * Name: up_putc
+ *
+ * Description:
+ *   Implement the NuttX up_putc() interface. Output one character on the
+ *   serial console with riscv_lowputc(), sending a carriage return before
+ *   each newline. Does nothing without HAVE_SERIAL_CONSOLE.
+ *
+ * Input Parameters:
+ *   ch - Character to output.
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
 void up_putc(int ch)

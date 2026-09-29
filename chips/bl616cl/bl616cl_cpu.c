@@ -126,6 +126,18 @@ static const pmp_config_entry_t g_bl616cl_pmp_entry[] =
 
 /****************************************************************************
  * Name: bl616cl_thead_cpu_init
+ *
+ * Description:
+ *   Configure the T-Head E907 core: set the THEADISAEE and MM bits in
+ *   MXSTATUS, set the RS bit in MHCR, and clear the SPUSHEN and SPSWAPEN bits
+ *   in MEXSTATUS. Called first from __bl616cl_start().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
 void bl616cl_thead_cpu_init(void)
@@ -147,6 +159,18 @@ void bl616cl_thead_cpu_init(void)
 
 /****************************************************************************
  * Name: bl616cl_pmp_init
+ *
+ * Description:
+ *   Program the PMP regions from g_bl616cl_pmp_entry with rvpmp_init(). The
+ *   PSRAM regions are included only when CONFIG_BL616CL_PSRAM is set. Does
+ *   nothing when CONFIG_PMP_NO_INIT is set.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
 void bl616cl_pmp_init(void)

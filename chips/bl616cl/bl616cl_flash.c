@@ -119,6 +119,21 @@ static const uint32_t g_flash_sdmin_range[] ATTR_TCM_CONST_SECTION =
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: flash_reset_io_cs_delay
+ *
+ * Description:
+ *   Reset the IO delay and CS/clock delay of flash pads 1 to 3 to zero.
+ *   Placed in TCM because it runs with XIP disabled.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 static void ATTR_TCM_SECTION flash_reset_io_cs_delay(void)
 {
   uint8_t pad;
@@ -129,6 +144,24 @@ static void ATTR_TCM_SECTION flash_reset_io_cs_delay(void)
       bflb_sf_ctrl_set_cs_clk_delay(pad, 0, 0);
     }
 }
+
+/****************************************************************************
+ * Name: flash_pll_set
+ *
+ * Description:
+ *   Program the WIFIPLL SDM input, switch the MCU system clock to RC32M while
+ *   the PLL is restarted, select the VCO speed from g_flash_sdmin_range,
+ *   cycle the PLL reset with the required settling delays, then switch the
+ *   MCU system clock back to the 240 MHz WIFIPLL output. Placed in TCM
+ *   because it runs with XIP disabled.
+ *
+ * Input Parameters:
+ *   sdmin - New value of the WIFIPLL SDM input field
+ *
+ * Returned Value:
+ *   Zero if the PLL locked; -1 if it did not lock.
+ *
+ ****************************************************************************/
 
 static int ATTR_TCM_SECTION flash_pll_set(uint32_t sdmin)
 {
@@ -182,6 +215,23 @@ static int ATTR_TCM_SECTION flash_pll_set(uint32_t sdmin)
   return ret;
 }
 
+/****************************************************************************
+ * Name: flash_check_bootheader
+ *
+ * Description:
+ *   Read the flash boot header and verify its CRC32, to test whether flash
+ *   reads work at the current clock and delay setting. Placed in TCM because
+ *   it runs with XIP disabled.
+ *
+ * Input Parameters:
+ *   cfg - Flash configuration used for the read
+ *
+ * Returned Value:
+ *   Zero if the boot header CRC matches; -1 if the read fails or the CRC
+ *   differs.
+ *
+ ****************************************************************************/
+
 static int ATTR_TCM_SECTION flash_check_bootheader(spi_flash_cfg_type *cfg)
 {
   uint8_t data[FLASH_BOOTHEADER_LEN];
@@ -197,9 +247,23 @@ static int ATTR_TCM_SECTION flash_check_bootheader(spi_flash_cfg_type *cfg)
   return arch_memcmp(&crc, data + sizeof(data) - 4, 4) == 0 ? 0 : -1;
 }
 
-/* Scan the sample point by stepping the flash clock and return the delay
- * value of the first failing step after a passing one (0 if none).
- */
+/****************************************************************************
+ * Name: flash_get_delay
+ *
+ * Description:
+ *   Scan the sample point by stepping the flash clock and return the delay
+ *   value of the first failing step after a passing one (0 if none). The scan
+ *   stops early if the PLL fails to lock, and the original PLL setting is
+ *   always restored. Placed in TCM because it runs with XIP disabled.
+ *
+ * Input Parameters:
+ *   cfg - Flash configuration used for the boot header reads
+ *
+ * Returned Value:
+ *   The delay value of the first failing step after a passing one, or 0 if
+ *   there is none.
+ *
+ ****************************************************************************/
 
 static uint8_t ATTR_TCM_SECTION flash_get_delay(spi_flash_cfg_type *cfg)
 {
@@ -238,6 +302,24 @@ static uint8_t ATTR_TCM_SECTION flash_get_delay(spi_flash_cfg_type *cfg)
   return delay;
 }
 
+/****************************************************************************
+ * Name: flash_set_hs_cfg
+ *
+ * Description:
+ *   Apply a high-speed flash controller setting: clock delay 1, clock
+ *   inversion set, the given RX clock inversion, re-initialize the serial
+ *   flash controller and select the 80 MHz MUXPLL flash clock. Placed in TCM
+ *   because it runs with XIP disabled.
+ *
+ * Input Parameters:
+ *   sf - Serial flash controller configuration to update and apply
+ *   rx_clk_invert - RX clock inversion value
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 static void ATTR_TCM_SECTION flash_set_hs_cfg(struct sf_ctrl_cfg_type *sf,
                                               uint8_t rx_clk_invert)
 {
@@ -248,10 +330,23 @@ static void ATTR_TCM_SECTION flash_set_hs_cfg(struct sf_ctrl_cfg_type *sf,
   GLB_Set_SF_CLK(1, GLB_SFLASH_CLK_MUXPLL_80M, 0);
 }
 
-/* Port of SDK board_set_flash_hs(GLB_SFLASH_CLK_MUXPLL_80M).  Runs with XIP
- * disabled, so everything it reaches must be in RAM.  If no delay setting
- * fits, the boot flash clock and pad delays are restored.
- */
+/****************************************************************************
+ * Name: flash_set_hs
+ *
+ * Description:
+ *   Port of SDK board_set_flash_hs(GLB_SFLASH_CLK_MUXPLL_80M). Runs with XIP
+ *   disabled, so everything it reaches must be in RAM. Measure the
+ *   sample-point delay and choose the 1T or 1.5T high-speed setting, adding
+ *   pad delay when the delay falls between the two windows. If no delay
+ *   setting fits, the boot flash clock and pad delays are restored.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
 
 static void ATTR_TCM_SECTION flash_set_hs(void)
 {
@@ -369,6 +464,17 @@ static void ATTR_TCM_SECTION flash_set_hs(void)
 
 /****************************************************************************
  * Name: bl616cl_flash_early_init
+ *
+ * Description:
+ *   Enable the second serial flash interface bank (BK2 enable and mode) in
+ *   SF_CTRL_2 during early startup.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bl616cl_flash_early_init(void)
@@ -386,7 +492,15 @@ void bl616cl_flash_early_init(void)
  * Description:
  *   Initialize the SDK LHAL flash state after RAM-safe sections are loaded
  *   and before the system clock is changed, then calibrate the flash sample
- *   delay and switch the flash clock to 80 MHz like SDK board_init().
+ *   delay and switch the flash clock to 80 MHz like SDK board_init(). Placed
+ *   in TCM because it runs with XIP disabled.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero on success; a nonzero value returned by bflb_flash_init() on
+ *   failure, in which case the clock is not changed.
  *
  ****************************************************************************/
 

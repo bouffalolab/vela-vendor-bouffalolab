@@ -43,6 +43,21 @@
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: chksum_fold
+ *
+ * Description:
+ *   Fold a 64-bit sum into 16 bits by repeatedly adding the carries back in
+ *   (one's complement addition).
+ *
+ * Input Parameters:
+ *   sum - 64-bit partial sum
+ *
+ * Returned Value:
+ *   The folded 16-bit sum.
+ *
+ ****************************************************************************/
+
 static inline uint16_t chksum_fold(uint64_t sum)
 {
   sum = (sum & 0xffffffff) + (sum >> 32);
@@ -50,6 +65,20 @@ static inline uint16_t chksum_fold(uint64_t sum)
   sum = (sum & 0xffff) + (sum >> 16);
   return (uint16_t)((sum & 0xffff) + (sum >> 16));
 }
+
+/****************************************************************************
+ * Name: chksum_swap
+ *
+ * Description:
+ *   Swap the two bytes of a 16-bit value.
+ *
+ * Input Parameters:
+ *   sum - 16-bit value
+ *
+ * Returned Value:
+ *   The byte-swapped value.
+ *
+ ****************************************************************************/
 
 static inline uint16_t chksum_swap(uint16_t sum)
 {
@@ -60,8 +89,17 @@ static inline uint16_t chksum_swap(uint16_t sum)
  * Name: chksum_be
  *
  * Description:
- *   Return the one's complement sum of data as big-endian 16-bit words,
- *   with a trailing odd byte taken as the high byte of a last word.
+ *   Return the one's complement sum of data as big-endian 16-bit words, with
+ *   a trailing odd byte taken as the high byte of a last word. Sum aligned
+ *   32-bit little-endian words for speed and fix up the byte order at the
+ *   end.
+ *
+ * Input Parameters:
+ *   data - Data to sum
+ *   len - Length of data in bytes
+ *
+ * Returned Value:
+ *   The folded 16-bit sum in big-endian word order.
  *
  ****************************************************************************/
 
@@ -137,9 +175,19 @@ static uint16_t chksum_be(FAR const uint8_t *data, uint16_t len)
  * Name: checksum
  *
  * Description:
- *   Continue the raw sum over data and len; see netdev.h.  odd tells
- *   whether the previous region ended on an odd byte, whose word this
- *   region's first byte completes.
+ *   CONFIG_NET_ARCH_CHKSUM architecture implementation. Continue the raw sum
+ *   over data and len; see netdev.h. odd tells whether the previous region
+ *   ended on an odd byte, whose word this region's first byte completes.
+ *
+ * Input Parameters:
+ *   sum - Sum of the previous regions
+ *   data - Data to add
+ *   len - Length of data in bytes
+ *   odd - On entry true if the previous region ended on an odd byte; updated
+ *     to reflect this region
+ *
+ * Returned Value:
+ *   The updated raw sum.
  *
  ****************************************************************************/
 
@@ -167,6 +215,19 @@ uint16_t checksum(uint16_t sum, FAR const uint8_t *data, uint16_t len,
 
 /****************************************************************************
  * Name: chksum
+ *
+ * Description:
+ *   CONFIG_NET_ARCH_CHKSUM architecture implementation. Continue the raw sum
+ *   over one contiguous region that starts on a word boundary.
+ *
+ * Input Parameters:
+ *   sum - Sum of the previous regions
+ *   data - Data to add
+ *   len - Length of data in bytes
+ *
+ * Returned Value:
+ *   The updated raw sum.
+ *
  ****************************************************************************/
 
 uint16_t chksum(uint16_t sum, FAR const uint8_t *data, uint16_t len)
@@ -178,6 +239,18 @@ uint16_t chksum(uint16_t sum, FAR const uint8_t *data, uint16_t len)
 
 /****************************************************************************
  * Name: net_chksum
+ *
+ * Description:
+ *   CONFIG_NET_ARCH_CHKSUM architecture implementation. Calculate the one's
+ *   complement sum of a buffer, converted with HTONS().
+ *
+ * Input Parameters:
+ *   data - Data to sum
+ *   len - Length of data in bytes
+ *
+ * Returned Value:
+ *   The sum in network byte order.
+ *
  ****************************************************************************/
 
 uint16_t net_chksum(FAR uint16_t *data, uint16_t len)
@@ -198,6 +271,19 @@ uint16_t ipv4_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
 
 /****************************************************************************
  * Name: ipv4_upperlayer_header_chksum
+ *
+ * Description:
+ *   CONFIG_NET_ARCH_CHKSUM architecture implementation. Sum the IPv4
+ *   pseudo-header of the packet in dev: the upper-layer length, the protocol,
+ *   and the source and destination addresses.
+ *
+ * Input Parameters:
+ *   dev - Network device holding the packet
+ *   proto - Upper-layer protocol number
+ *
+ * Returned Value:
+ *   The pseudo-header sum.
+ *
  ****************************************************************************/
 
 uint16_t ipv4_upperlayer_header_chksum(FAR struct net_driver_s *dev,
@@ -217,6 +303,19 @@ uint16_t ipv4_upperlayer_header_chksum(FAR struct net_driver_s *dev,
 
 /****************************************************************************
  * Name: ipv4_upperlayer_payload_chksum
+ *
+ * Description:
+ *   CONFIG_NET_ARCH_CHKSUM architecture implementation. Continue the sum over
+ *   the upper-layer payload in the packet IOB chain, skipping the IPv4
+ *   header.
+ *
+ * Input Parameters:
+ *   dev - Network device holding the packet
+ *   sum - Sum of the pseudo-header
+ *
+ * Returned Value:
+ *   The updated sum.
+ *
  ****************************************************************************/
 
 uint16_t ipv4_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
@@ -229,6 +328,19 @@ uint16_t ipv4_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
 
 /****************************************************************************
  * Name: ipv4_upperlayer_chksum
+ *
+ * Description:
+ *   CONFIG_NET_ARCH_CHKSUM architecture implementation. Calculate the
+ *   upper-layer (TCP, UDP, ICMP) checksum of an IPv4 packet from the
+ *   pseudo-header and payload sums.
+ *
+ * Input Parameters:
+ *   dev - Network device holding the packet
+ *   proto - Upper-layer protocol number
+ *
+ * Returned Value:
+ *   The checksum in network byte order; 0xffff if the sum is zero.
+ *
  ****************************************************************************/
 
 uint16_t ipv4_upperlayer_chksum(FAR struct net_driver_s *dev, uint8_t proto)
@@ -242,6 +354,17 @@ uint16_t ipv4_upperlayer_chksum(FAR struct net_driver_s *dev, uint8_t proto)
 
 /****************************************************************************
  * Name: ipv4_chksum
+ *
+ * Description:
+ *   CONFIG_NET_ARCH_CHKSUM architecture implementation. Calculate the
+ *   checksum of an IPv4 header, whose length is taken from the header.
+ *
+ * Input Parameters:
+ *   ipv4 - IPv4 header
+ *
+ * Returned Value:
+ *   The checksum in network byte order; 0xffff if the sum is zero.
+ *
  ****************************************************************************/
 
 uint16_t ipv4_chksum(FAR struct ipv4_hdr_s *ipv4)
@@ -262,6 +385,21 @@ uint16_t ipv6_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
 
 /****************************************************************************
  * Name: ipv6_upperlayer_header_chksum
+ *
+ * Description:
+ *   CONFIG_NET_ARCH_CHKSUM architecture implementation. Sum the IPv6
+ *   pseudo-header of the packet in dev: the upper-layer length (with
+ *   extension headers removed), the protocol, and the source and destination
+ *   addresses.
+ *
+ * Input Parameters:
+ *   dev - Network device holding the packet
+ *   proto - Upper-layer protocol number
+ *   iplen - Length of the IPv6 header including extension headers
+ *
+ * Returned Value:
+ *   The pseudo-header sum.
+ *
  ****************************************************************************/
 
 uint16_t ipv6_upperlayer_header_chksum(FAR struct net_driver_s *dev,
@@ -283,6 +421,20 @@ uint16_t ipv6_upperlayer_header_chksum(FAR struct net_driver_s *dev,
 
 /****************************************************************************
  * Name: ipv6_upperlayer_payload_chksum
+ *
+ * Description:
+ *   CONFIG_NET_ARCH_CHKSUM architecture implementation. Continue the sum over
+ *   the upper-layer payload in the packet IOB chain, skipping iplen bytes of
+ *   IPv6 header.
+ *
+ * Input Parameters:
+ *   dev - Network device holding the packet
+ *   iplen - Length of the IPv6 header including extension headers
+ *   sum - Sum of the pseudo-header
+ *
+ * Returned Value:
+ *   The updated sum.
+ *
  ****************************************************************************/
 
 uint16_t ipv6_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
@@ -293,6 +445,20 @@ uint16_t ipv6_upperlayer_payload_chksum(FAR struct net_driver_s *dev,
 
 /****************************************************************************
  * Name: ipv6_upperlayer_chksum
+ *
+ * Description:
+ *   CONFIG_NET_ARCH_CHKSUM architecture implementation. Calculate the
+ *   upper-layer (TCP, UDP, ICMPv6) checksum of an IPv6 packet from the
+ *   pseudo-header and payload sums.
+ *
+ * Input Parameters:
+ *   dev - Network device holding the packet
+ *   proto - Upper-layer protocol number
+ *   iplen - Length of the IPv6 header including extension headers
+ *
+ * Returned Value:
+ *   The checksum in network byte order; 0xffff if the sum is zero.
+ *
  ****************************************************************************/
 
 uint16_t ipv6_upperlayer_chksum(FAR struct net_driver_s *dev,

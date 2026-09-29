@@ -88,6 +88,24 @@ static struct bl616cl_perfmon_pcstat_s g_perfmon_pcstat;
  ****************************************************************************/
 
 #ifdef CONFIG_BL616CL_PERFMON_PCSAMPLE
+/****************************************************************************
+ * Name: bl616cl_perfmon_sample
+ *
+ * Description:
+ *   Record one program counter sample in the histogram. Count the sample,
+ *   count it as idle if the interrupted task is the idle task, otherwise
+ *   increment the histogram bucket (saturating at UINT16_MAX) or count it as
+ *   outside the histogram range. Only built with
+ *   CONFIG_BL616CL_PERFMON_PCSAMPLE.
+ *
+ * Input Parameters:
+ *   pc - Program counter of the interrupted code
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 static void bl616cl_perfmon_sample(uintptr_t pc)
 {
   FAR uint16_t *hist = g_perfmon_hist;
@@ -116,6 +134,23 @@ static void bl616cl_perfmon_sample(uintptr_t pc)
  * Public Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_perfmon_initialize
+ *
+ * Description:
+ *   Select the events counted by the hardware performance counters: I-cache
+ *   access and miss, conditional branch and mispredict, and D-cache read and
+ *   write access and miss. Event numbers: see enum bl616cl_perfmon_event_e
+ *   and rv_hpm.h.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_perfmon_initialize(void)
 {
   /* Event numbers: see enum bl616cl_perfmon_event_e and rv_hpm.h. */
@@ -129,6 +164,24 @@ void bl616cl_perfmon_initialize(void)
   PERFMON_SET_EVENT("mhpmevent16", 14); /* D-cache write access */
   PERFMON_SET_EVENT("mhpmevent17", 15); /* D-cache write miss */
 }
+
+/****************************************************************************
+ * Name: bl616cl_perfmon_dispatch
+ *
+ * Description:
+ *   Interrupt dispatch wrapper called from riscv_dispatch_irq(). Take a PC
+ *   sample on the machine timer interrupt when sampling is active, run the
+ *   interrupt through riscv_doirq() and accumulate its count and mcycle
+ *   cycles per IRQ.
+ *
+ * Input Parameters:
+ *   irq - NuttX IRQ number
+ *   regs - Saved register context of the interrupted code
+ *
+ * Returned Value:
+ *   The register context to restore, as returned by riscv_doirq().
+ *
+ ****************************************************************************/
 
 FAR void *bl616cl_perfmon_dispatch(int irq, FAR uintreg_t *regs)
 {
@@ -154,6 +207,22 @@ FAR void *bl616cl_perfmon_dispatch(int irq, FAR uintreg_t *regs)
   return ret;
 }
 
+/****************************************************************************
+ * Name: bl616cl_perfmon_read
+ *
+ * Description:
+ *   Read the 64-bit cycle and instruction counters and the eight event
+ *   counters, using a high-low-high sequence so the result is consistent on
+ *   RV32.
+ *
+ * Input Parameters:
+ *   counters - Location to receive the counter values
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_perfmon_read(FAR struct bl616cl_perfmon_counters_s *counters)
 {
   PERFMON_READ64("mcycle", counters->cycle);
@@ -175,6 +244,22 @@ void bl616cl_perfmon_read(FAR struct bl616cl_perfmon_counters_s *counters)
   PERFMON_READ64("mhpmcounter17",
                  counters->event[BL616CL_PERFMON_DCACHE_WRITE_MISS]);
 }
+
+/****************************************************************************
+ * Name: bl616cl_perfmon_irq_read
+ *
+ * Description:
+ *   Copy the per-IRQ interrupt count and accumulated cycles into a caller
+ *   buffer with interrupts disabled.
+ *
+ * Input Parameters:
+ *   irqs - Array to receive the per-IRQ statistics
+ *   nirqs - Number of entries in irqs; limited to NR_IRQS
+ *
+ * Returned Value:
+ *   The number of entries filled.
+ *
+ ****************************************************************************/
 
 int bl616cl_perfmon_irq_read(FAR struct bl616cl_perfmon_irq_s *irqs,
                              int nirqs)
@@ -199,11 +284,48 @@ int bl616cl_perfmon_irq_read(FAR struct bl616cl_perfmon_irq_s *irqs,
 }
 
 #ifdef CONFIG_BL616CL_PERFMON_PCSAMPLE
+/****************************************************************************
+ * Name: bl616cl_perfmon_text_range
+ *
+ * Description:
+ *   Return the range of the kernel text section, from _stext to
+ *   __bl616cl_text_end. Only built with CONFIG_BL616CL_PERFMON_PCSAMPLE.
+ *
+ * Input Parameters:
+ *   start - Location to receive the text start address
+ *   size - Location to receive the text size in bytes
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_perfmon_text_range(FAR uintptr_t *start, FAR size_t *size)
 {
   *start = (uintptr_t)_stext;
   *size = __bl616cl_text_end - _stext;
 }
+
+/****************************************************************************
+ * Name: bl616cl_perfmon_pc_start
+ *
+ * Description:
+ *   Start program counter sampling into a caller-supplied histogram. Each
+ *   bucket covers 2^shift bytes starting at base. The statistics are reset.
+ *   Only built with CONFIG_BL616CL_PERFMON_PCSAMPLE.
+ *
+ * Input Parameters:
+ *   hist - Histogram of 16-bit buckets, nbuckets entries
+ *   base - Address covered by the first bucket
+ *   nbuckets - Number of buckets
+ *   shift - Address shift per bucket, 1 to 16
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *   -EINVAL - hist is NULL, nbuckets is zero or shift is out of range.
+ *   -EBUSY - sampling is already active.
+ *
+ ****************************************************************************/
 
 int bl616cl_perfmon_pc_start(FAR uint16_t *hist, uintptr_t base,
                              size_t nbuckets, unsigned int shift)
@@ -230,6 +352,21 @@ int bl616cl_perfmon_pc_start(FAR uint16_t *hist, uintptr_t base,
   up_irq_restore(flags);
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_perfmon_pc_stop
+ *
+ * Description:
+ *   Stop program counter sampling and return the sample statistics. Only
+ *   built with CONFIG_BL616CL_PERFMON_PCSAMPLE.
+ *
+ * Input Parameters:
+ *   stat - Location to receive the sample statistics
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
 
 void bl616cl_perfmon_pc_stop(FAR struct bl616cl_perfmon_pcstat_s *stat)
 {

@@ -37,33 +37,135 @@
  * Public Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: hal_macsw_lp_rssi_restore
+ *
+ * Description:
+ *   macsw low-power hook (declared in hal_machw.h). Stub: there is no
+ *   saved RSSI to restore in this STA-only, no-low-power build.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Always 0.
+ *
+ ****************************************************************************/
+
 int8_t hal_macsw_lp_rssi_restore(void)
 {
   return 0;
 }
+
+/****************************************************************************
+ * Name: hal_macsw_lp_get_resume_wifi
+ *
+ * Description:
+ *   macsw low-power hook. Stub: no Wi-Fi resume state is kept.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Always 0 (not resuming).
+ *
+ ****************************************************************************/
 
 int hal_macsw_lp_get_resume_wifi(void)
 {
   return 0;
 }
 
+/****************************************************************************
+ * Name: hal_macsw_lp_set_resume_wifi
+ *
+ * Description:
+ *   macsw low-power hook. Stub: does nothing, no resume state is kept.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void hal_macsw_lp_set_resume_wifi(void)
 {
 }
 
+/****************************************************************************
+ * Name: hal_macsw_lp_clear_resume_wifi
+ *
+ * Description:
+ *   macsw low-power hook. Stub: does nothing, no resume state is kept.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void hal_macsw_lp_clear_resume_wifi(void)
 {
 }
+
+/****************************************************************************
+ * Name: hal_macsw_lp_is_wake_by_traffic
+ *
+ * Description:
+ *   macsw low-power hook. Stub: reports that the system was never
+ *   woken by traffic.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Always 0.
+ *
+ ****************************************************************************/
 
 int hal_macsw_lp_is_wake_by_traffic(void)
 {
   return 0;
 }
 
+/****************************************************************************
+ * Name: hal_macsw_lp_is_wake_by_ap_existence_check
+ *
+ * Description:
+ *   macsw low-power hook. Stub: reports that the system was never
+ *   woken by an AP existence check.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Always 0.
+ *
+ ****************************************************************************/
+
 int hal_macsw_lp_is_wake_by_ap_existence_check(void)
 {
   return 0;
 }
+
+/****************************************************************************
+ * Name: hal_macsw_lp_is_wake_by_ap_disconnected
+ *
+ * Description:
+ *   macsw low-power hook. Stub: reports that the system was never
+ *   woken by an AP disconnection.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Always 0.
+ *
+ ****************************************************************************/
 
 int hal_macsw_lp_is_wake_by_ap_disconnected(void)
 {
@@ -78,6 +180,23 @@ int hal_macsw_lp_is_wake_by_ap_disconnected(void)
  * @return 0 on success.
  ****************************************************************************************
  */
+
+/****************************************************************************
+ * Name: macsw_platform_get_time_us
+ *
+ * Description:
+ *   macsw platform hook (macsw_plat.h). Monotonic time source for the
+ *   MAC stack, read from CLOCK_MONOTONIC.
+ *
+ * Input Parameters:
+ *   time_us - Receives the monotonic time in microseconds.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -EIO if clock_gettime() fails.
+ *
+ ****************************************************************************/
+
 int macsw_platform_get_time_us(uint64_t *time_us)
 {
   struct timespec ts;

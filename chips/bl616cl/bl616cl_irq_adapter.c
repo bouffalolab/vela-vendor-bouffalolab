@@ -57,10 +57,43 @@ static struct bl616cl_irq_adapter_s g_bl616cl_irq_adapter
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_raw_irq_valid
+ *
+ * Description:
+ *   Check that a raw interrupt number lies in the CLIC range [0,
+ *   BL616CL_IRQ_CLIC_COUNT).
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   true if irq is a valid raw interrupt number; false otherwise.
+ *
+ ****************************************************************************/
+
 static bool bl616cl_raw_irq_valid(int irq)
 {
   return irq >= 0 && irq < BL616CL_IRQ_CLIC_COUNT;
 }
+
+/****************************************************************************
+ * Name: bl616cl_lhal_interrupt
+ *
+ * Description:
+ *   NuttX interrupt handler shared by all attached lhal ISRs. It calls the
+ *   lhal handler registered in the adapter slot with the raw interrupt number
+ *   and the registered argument.
+ *
+ * Input Parameters:
+ *   irq - NuttX IRQ number
+ *   context - Interrupt register context (unused)
+ *   arg - Pointer to the adapter slot of this interrupt
+ *
+ * Returned Value:
+ *   OK is always returned.
+ *
+ ****************************************************************************/
 
 static int bl616cl_lhal_interrupt(int irq, void *context, void *arg)
 {
@@ -82,6 +115,17 @@ static int bl616cl_lhal_interrupt(int irq, void *context, void *arg)
 
 /****************************************************************************
  * Name: bflb_irq_initialize
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_irq_initialize(). Nothing to do because
+ *   the interrupt controller is set up by up_irqinitialize().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bflb_irq_initialize(void)
@@ -90,6 +134,17 @@ void bflb_irq_initialize(void)
 
 /****************************************************************************
  * Name: bflb_irq_save
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_irq_save(). Disable interrupts through
+ *   up_irq_save().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   The previous interrupt state to pass to bflb_irq_restore().
+ *
  ****************************************************************************/
 
 uintptr_t bflb_irq_save(void)
@@ -99,6 +154,17 @@ uintptr_t bflb_irq_save(void)
 
 /****************************************************************************
  * Name: bflb_irq_restore
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_irq_restore(). Restore the interrupt
+ *   state through up_irq_restore().
+ *
+ * Input Parameters:
+ *   flags - Value returned by bflb_irq_save()
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bflb_irq_restore(uintptr_t flags)
@@ -108,6 +174,22 @@ void bflb_irq_restore(uintptr_t flags)
 
 /****************************************************************************
  * Name: bflb_irq_attach
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_irq_attach(). Record the lhal handler and
+ *   argument in the adapter slot of the raw interrupt and attach the common
+ *   adapter handler to the matching NuttX IRQ.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *   isr - lhal interrupt handler; must not be NULL
+ *   arg - Argument passed to the handler
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -EINVAL - irq is out of range or isr is NULL.
+ *   Other errors are returned by irq_attach().
+ *
  ****************************************************************************/
 
 int bflb_irq_attach(int irq, irq_callback isr, void *arg)
@@ -129,6 +211,19 @@ int bflb_irq_attach(int irq, irq_callback isr, void *arg)
 
 /****************************************************************************
  * Name: bflb_irq_detach
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_irq_detach(). Disable the interrupt,
+ *   clear the adapter slot and detach the NuttX handler.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -EINVAL - irq is out of range.
+ *   Other errors are returned by irq_detach().
+ *
  ****************************************************************************/
 
 int bflb_irq_detach(int irq)
@@ -147,6 +242,17 @@ int bflb_irq_detach(int irq)
 
 /****************************************************************************
  * Name: bflb_irq_enable
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_irq_enable(). Enable the interrupt
+ *   through up_enable_irq(). Out-of-range numbers are ignored.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bflb_irq_enable(int irq)
@@ -159,6 +265,17 @@ void bflb_irq_enable(int irq)
 
 /****************************************************************************
  * Name: bflb_irq_disable
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_irq_disable(). Disable the interrupt
+ *   through up_disable_irq(). Out-of-range numbers are ignored.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bflb_irq_disable(int irq)
@@ -171,6 +288,17 @@ void bflb_irq_disable(int irq)
 
 /****************************************************************************
  * Name: bflb_irq_set_pending
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_irq_set_pending(). Set the CLIC pending
+ *   bit of the interrupt.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bflb_irq_set_pending(int irq)
@@ -180,6 +308,17 @@ void bflb_irq_set_pending(int irq)
 
 /****************************************************************************
  * Name: bflb_irq_clear_pending
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_irq_clear_pending(). Clear the CLIC
+ *   pending bit of the interrupt.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bflb_irq_clear_pending(int irq)
@@ -189,6 +328,17 @@ void bflb_irq_clear_pending(int irq)
 
 /****************************************************************************
  * Name: bflb_irq_set_nlbits
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_irq_set_nlbits(). Program the CLIC nlbits
+ *   field.
+ *
+ * Input Parameters:
+ *   nlbits - Number of level bits
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bflb_irq_set_nlbits(uint8_t nlbits)
@@ -198,6 +348,19 @@ void bflb_irq_set_nlbits(uint8_t nlbits)
 
 /****************************************************************************
  * Name: bflb_irq_set_priority
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_irq_set_priority(). Set the CLIC
+ *   preemption level and sub-priority of the interrupt.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *   preemptprio - Preemption level
+ *   subprio - Sub-priority
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bflb_irq_set_priority(int irq, uint8_t preemptprio, uint8_t subprio)

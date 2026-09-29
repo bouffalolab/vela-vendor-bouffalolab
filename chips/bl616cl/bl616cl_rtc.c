@@ -157,6 +157,22 @@ static struct bl616cl_rtc_lowerhalf_s g_bl616cl_rtc =
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_rtc_ticks_to_seconds
+ *
+ * Description:
+ *   Convert RTC counter ticks to whole seconds and nanoseconds using the RTC
+ *   clock numerator and denominator.
+ *
+ * Input Parameters:
+ *   ticks - RTC counter ticks.
+ *   nanoseconds - Location to return the sub-second part in nanoseconds.
+ *
+ * Returned Value:
+ *   The number of whole seconds.
+ *
+ ****************************************************************************/
+
 static uint64_t bl616cl_rtc_ticks_to_seconds(uint64_t ticks,
                                              FAR uint32_t *nanoseconds)
 {
@@ -171,6 +187,24 @@ static uint64_t bl616cl_rtc_ticks_to_seconds(uint64_t ticks,
 }
 
 #ifdef CONFIG_BL616CL_RTC_ALARM
+/****************************************************************************
+ * Name: bl616cl_rtc_duration_to_ticks
+ *
+ * Description:
+ *   Convert a duration to RTC counter ticks, rounding any fraction up.
+ *   Available only with alarm support.
+ *
+ * Input Parameters:
+ *   seconds - Whole seconds of the duration.
+ *   nanoseconds - Sub-second part in nanoseconds.
+ *   ticks - Location to return the number of ticks.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ERANGE if the duration does not fit in the 48-bit
+ *   RTC counter.
+ *
+ ****************************************************************************/
+
 static int bl616cl_rtc_duration_to_ticks(uint64_t seconds,
                                          uint32_t nanoseconds,
                                          FAR uint64_t *ticks)
@@ -210,6 +244,26 @@ static int bl616cl_rtc_duration_to_ticks(uint64_t seconds,
   return OK;
 }
 #endif
+
+/****************************************************************************
+ * Name: bl616cl_rtc_time_to_epoch
+ *
+ * Description:
+ *   Validate a broken-down time and convert it to seconds since the Epoch. A
+ *   date that does not exist (for example February 30) or is before 1970 is
+ *   rejected. The nanosecond part comes from tm_nsec when
+ *   CONFIG_ARCH_HAVE_RTC_SUBSECONDS is set and is zero otherwise.
+ *
+ * Input Parameters:
+ *   rtctime - Broken-down time to convert.
+ *   epoch - Location to return the seconds since the Epoch.
+ *   nanosecond - Location to return the nanoseconds.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -EINVAL if an argument is NULL or the time is not
+ *   valid.
+ *
+ ****************************************************************************/
 
 static int bl616cl_rtc_time_to_epoch(FAR const struct rtc_time *rtctime,
                                      FAR time_t *epoch,
@@ -259,6 +313,25 @@ static int bl616cl_rtc_time_to_epoch(FAR const struct rtc_time *rtctime,
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_rtc_snapshot_locked
+ *
+ * Description:
+ *   Read the RTC counter and compute the current time as the base time plus
+ *   the ticks elapsed since the base counter. The caller must hold the RTC
+ *   lock.
+ *
+ * Input Parameters:
+ *   priv - RTC state.
+ *   epoch - Location to return the seconds since the Epoch.
+ *   nanosecond - Location to return the nanoseconds.
+ *   counter - Location to return the RTC counter value that was read.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ERANGE if the time exceeds the range of time_t.
+ *
+ ****************************************************************************/
+
 static int bl616cl_rtc_snapshot_locked(
   FAR struct bl616cl_rtc_lowerhalf_s *priv,
   FAR time_t *epoch, FAR uint32_t *nanosecond, FAR uint64_t *counter)
@@ -292,6 +365,24 @@ static int bl616cl_rtc_snapshot_locked(
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_rtc_snapshot
+ *
+ * Description:
+ *   Take the RTC lock and get a time snapshot with
+ *   bl616cl_rtc_snapshot_locked().
+ *
+ * Input Parameters:
+ *   priv - RTC state.
+ *   epoch - Location to return the seconds since the Epoch.
+ *   nanosecond - Location to return the nanoseconds.
+ *   counter - Location to return the RTC counter value that was read.
+ *
+ * Returned Value:
+ *   The result of bl616cl_rtc_snapshot_locked().
+ *
+ ****************************************************************************/
+
 static int bl616cl_rtc_snapshot(
   FAR struct bl616cl_rtc_lowerhalf_s *priv,
   FAR time_t *epoch, FAR uint32_t *nanosecond, FAR uint64_t *counter)
@@ -306,10 +397,45 @@ static int bl616cl_rtc_snapshot(
 }
 
 #ifdef CONFIG_BL616CL_RTC_ALARM
+/****************************************************************************
+ * Name: bl616cl_rtc_clear_alarm_hardware
+ *
+ * Description:
+ *   Clear the RTC alarm interrupt in hardware. Available only with alarm
+ *   support.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 static void bl616cl_rtc_clear_alarm_hardware(void)
 {
   bl616cl_rtc_hw_clear_alarm();
 }
+
+/****************************************************************************
+ * Name: bl616cl_rtc_program_counter
+ *
+ * Description:
+ *   Program the hardware alarm comparator for a target counter value. The
+ *   target is moved to the current counter plus BL616CL_RTC_PROGRAM_GUARD if
+ *   it is expired, too close or beyond the requested delta. After the write
+ *   the remaining time is checked and the programming is retried up to 3
+ *   times with a growing window; the last target is written even if it still
+ *   cannot be verified.
+ *
+ * Input Parameters:
+ *   target_counter - Target RTC counter value.
+ *   requested_delta - Ticks from now to the target, used to check the target.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
 
 static void bl616cl_rtc_program_counter(uint64_t target_counter,
                                         uint64_t requested_delta)
@@ -369,6 +495,29 @@ static void bl616cl_rtc_program_counter(uint64_t target_counter,
     }
 }
 
+/****************************************************************************
+ * Name: bl616cl_rtc_alarm_delta
+ *
+ * Description:
+ *   Compute the number of RTC ticks between the current time and a target
+ *   time.
+ *
+ * Input Parameters:
+ *   current_epoch - Current time in seconds since the Epoch.
+ *   current_nanosecond - Nanoseconds of the current time.
+ *   target_epoch - Target time in seconds since the Epoch.
+ *   target_nanosecond - Nanoseconds of the target time.
+ *   delta_ticks - Location to return the number of ticks.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -ETIME  - The target is not after the current time, or is less than
+ *               BL616CL_RTC_MIN_ALARM_TICKS ticks away.
+ *     -ERANGE - The interval does not fit in the RTC counter.
+ *
+ ****************************************************************************/
+
 static int bl616cl_rtc_alarm_delta(time_t current_epoch,
                                    uint32_t current_nanosecond,
                                    time_t target_epoch,
@@ -406,6 +555,30 @@ static int bl616cl_rtc_alarm_delta(time_t current_epoch,
 
   return *delta_ticks < BL616CL_RTC_MIN_ALARM_TICKS ? -ETIME : OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_rtc_program_alarm_locked
+ *
+ * Description:
+ *   Store the alarm state and program the hardware alarm for a target time.
+ *   The caller must hold the RTC lock.
+ *
+ * Input Parameters:
+ *   priv - RTC state.
+ *   target_epoch - Alarm time in seconds since the Epoch.
+ *   target_nanosecond - Nanoseconds of the alarm time.
+ *   callback - Function called when the alarm expires.
+ *   arg - Argument passed to the callback.
+ *   alarm_time - Broken-down alarm time saved for rdalarm.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -ENODEV - The alarm interrupt is not ready.
+ *     -ETIME  - The alarm time is not far enough in the future.
+ *     -ERANGE - The time or interval is out of range.
+ *
+ ****************************************************************************/
 
 static int bl616cl_rtc_program_alarm_locked(
   FAR struct bl616cl_rtc_lowerhalf_s *priv, time_t target_epoch,
@@ -453,6 +626,26 @@ static int bl616cl_rtc_program_alarm_locked(
 
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_rtc_interrupt
+ *
+ * Description:
+ *   RTC alarm interrupt handler (HBN_OUT0). Ignore the interrupt if no alarm
+ *   is pending; otherwise clear it. If the alarm was set while waiting for
+ *   CLOCK_REALTIME to be synchronized and the system time has not reached the
+ *   alarm time, re-arm the alarm. Else clear the alarm state and call the
+ *   callback outside the lock.
+ *
+ * Input Parameters:
+ *   irq - IRQ number (unused).
+ *   context - Interrupt register state save area (unused).
+ *   arg - The bl616cl_rtc_lowerhalf_s instance.
+ *
+ * Returned Value:
+ *   Always OK.
+ *
+ ****************************************************************************/
 
 static int bl616cl_rtc_interrupt(int irq, FAR void *context, FAR void *arg)
 {
@@ -509,6 +702,27 @@ static int bl616cl_rtc_interrupt(int irq, FAR void *context, FAR void *arg)
 }
 #endif
 
+/****************************************************************************
+ * Name: bl616cl_rtc_rdtime
+ *
+ * Description:
+ *   Implement the rtc_ops_s rdtime method. Return the current time as a
+ *   broken-down time, including nanoseconds when
+ *   CONFIG_ARCH_HAVE_RTC_SUBSECONDS is set.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the RTC lower
+ *           half.
+ *   rtctime - Location to return the current time.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -EINVAL - An argument is NULL.
+ *     -ERANGE - The time is out of range.
+ *
+ ****************************************************************************/
+
 static int bl616cl_rtc_rdtime(FAR struct rtc_lowerhalf_s *lower,
                               FAR struct rtc_time *rtctime)
 {
@@ -542,6 +756,28 @@ static int bl616cl_rtc_rdtime(FAR struct rtc_lowerhalf_s *lower,
 #endif
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_rtc_settime
+ *
+ * Description:
+ *   Implement the rtc_ops_s settime method. Set a new base time from the
+ *   current counter value. An active alarm is re-programmed for the new time;
+ *   if the alarm time has already passed, the callback is deferred until
+ *   CLOCK_REALTIME has been synchronized.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the RTC lower
+ *           half.
+ *   rtctime - The new time to set.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -EINVAL - The lower half or time is NULL or the time is not valid.
+ *     -ERANGE - The active alarm interval is out of range.
+ *
+ ****************************************************************************/
 
 static int bl616cl_rtc_settime(FAR struct rtc_lowerhalf_s *lower,
                                FAR const struct rtc_time *rtctime)
@@ -613,6 +849,23 @@ static int bl616cl_rtc_settime(FAR struct rtc_lowerhalf_s *lower,
 }
 
 #ifndef CONFIG_DISABLE_PSEUDOFS_OPERATIONS
+/****************************************************************************
+ * Name: bl616cl_rtc_destroy
+ *
+ * Description:
+ *   Implement the rtc_ops_s destroy method. Mark the RTC uninitialized, clear
+ *   the alarm state and, with alarm support, disable and detach the RTC alarm
+ *   interrupt.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the RTC lower
+ *           half.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -EINVAL if lower is NULL.
+ *
+ ****************************************************************************/
+
 static int bl616cl_rtc_destroy(FAR struct rtc_lowerhalf_s *lower)
 {
   FAR struct bl616cl_rtc_lowerhalf_s *priv =
@@ -644,6 +897,21 @@ static int bl616cl_rtc_destroy(FAR struct rtc_lowerhalf_s *lower)
 }
 #endif
 
+/****************************************************************************
+ * Name: bl616cl_rtc_havesettime
+ *
+ * Description:
+ *   Implement the rtc_ops_s havesettime method.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the RTC lower
+ *           half.
+ *
+ * Returned Value:
+ *   true if the time has been set since initialization; false otherwise.
+ *
+ ****************************************************************************/
+
 static bool bl616cl_rtc_havesettime(FAR struct rtc_lowerhalf_s *lower)
 {
   FAR struct bl616cl_rtc_lowerhalf_s *priv =
@@ -658,6 +926,27 @@ static bool bl616cl_rtc_havesettime(FAR struct rtc_lowerhalf_s *lower)
 }
 
 #ifdef CONFIG_BL616CL_RTC_ALARM
+/****************************************************************************
+ * Name: bl616cl_rtc_setalarm
+ *
+ * Description:
+ *   Implement the rtc_ops_s setalarm method. Only alarm 0 is supported. The
+ *   alarm time is converted to seconds since the Epoch and programmed.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the RTC lower
+ *           half.
+ *   alarminfo - Alarm ID, callback, callback argument and alarm time.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -EINVAL - An argument is NULL, the alarm ID is not 0, the callback is
+ *               NULL or the time is not valid.
+ *     Other errors are returned from bl616cl_rtc_program_alarm_locked().
+ *
+ ****************************************************************************/
+
 static int bl616cl_rtc_setalarm(FAR struct rtc_lowerhalf_s *lower,
                                 FAR const struct lower_setalarm_s *alarminfo)
 {
@@ -688,6 +977,29 @@ static int bl616cl_rtc_setalarm(FAR struct rtc_lowerhalf_s *lower,
 
   return ret;
 }
+
+/****************************************************************************
+ * Name: bl616cl_rtc_setrelative
+ *
+ * Description:
+ *   Implement the rtc_ops_s setrelative method. Only alarm 0 is supported.
+ *   The alarm is set to the current time plus the relative time.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the RTC lower
+ *           half.
+ *   alarminfo - Alarm ID, callback, callback argument and relative time in
+ *               seconds.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -EINVAL - An argument is NULL, the alarm ID is not 0, the callback is
+ *               NULL or the relative time is not positive.
+ *     -ERANGE - The target time is out of range.
+ *     Other errors are returned from bl616cl_rtc_program_alarm_locked().
+ *
+ ****************************************************************************/
 
 static int bl616cl_rtc_setrelative(
   FAR struct rtc_lowerhalf_s *lower,
@@ -746,6 +1058,23 @@ static int bl616cl_rtc_setrelative(
   return ret;
 }
 
+/****************************************************************************
+ * Name: bl616cl_rtc_cancelalarm
+ *
+ * Description:
+ *   Implement the rtc_ops_s cancelalarm method. Only alarm 0 is supported.
+ *   Clear the alarm state and the alarm hardware.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the RTC lower
+ *           half.
+ *   alarmid - Alarm ID; must be 0.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -EINVAL if lower is NULL or the alarm ID is not 0.
+ *
+ ****************************************************************************/
+
 static int bl616cl_rtc_cancelalarm(FAR struct rtc_lowerhalf_s *lower,
                                    int alarmid)
 {
@@ -768,6 +1097,24 @@ static int bl616cl_rtc_cancelalarm(FAR struct rtc_lowerhalf_s *lower,
   spin_unlock_irqrestore(&priv->lock, flags);
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_rtc_rdalarm
+ *
+ * Description:
+ *   Implement the rtc_ops_s rdalarm method. Only alarm 0 is supported. Return
+ *   the saved alarm time.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the RTC lower
+ *           half.
+ *   alarminfo - Alarm ID and location to return the alarm time.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -EINVAL if an argument is NULL or the alarm ID is
+ *   not 0.
+ *
+ ****************************************************************************/
 
 static int bl616cl_rtc_rdalarm(FAR struct rtc_lowerhalf_s *lower,
                                FAR struct lower_rdalarm_s *alarminfo)
@@ -793,6 +1140,20 @@ static int bl616cl_rtc_rdalarm(FAR struct rtc_lowerhalf_s *lower,
  * Public Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_rtc_counter
+ *
+ * Description:
+ *   Read the 48-bit RTC hardware counter.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   The RTC counter value.
+ *
+ ****************************************************************************/
+
 uint64_t bl616cl_rtc_counter(void)
 {
   uint32_t high;
@@ -801,6 +1162,27 @@ uint64_t bl616cl_rtc_counter(void)
   bl616cl_rtc_hw_counter(&low, &high);
   return (((uint64_t)high << 32) | low) & BL616CL_RTC_COUNTER_MASK;
 }
+
+/****************************************************************************
+ * Name: up_rtc_initialize
+ *
+ * Description:
+ *   Implement the NuttX up_rtc_initialize() interface. Initialize the RTC
+ *   hardware, set the base time to CONFIG_START_YEAR, CONFIG_START_MONTH and
+ *   CONFIG_START_DAY, attach and enable the HBN_OUT0 alarm interrupt when
+ *   alarm support is enabled, and register the lower half with
+ *   up_rtc_set_lowerhalf().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -EINVAL - The configured start date is not valid.
+ *     Other errors are returned from irq_attach().
+ *
+ ****************************************************************************/
 
 int up_rtc_initialize(void)
 {
@@ -872,6 +1254,23 @@ int up_rtc_initialize(void)
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_rtc_register
+ *
+ * Description:
+ *   Register the RTC as an RTC character device with rtc_initialize().
+ *
+ * Input Parameters:
+ *   minor - Device minor number of the RTC device.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -ENODEV - up_rtc_initialize() has not completed.
+ *     Other errors are returned from rtc_initialize().
+ *
+ ****************************************************************************/
+
 int bl616cl_rtc_register(int minor)
 {
   irqstate_t flags;
@@ -889,10 +1288,40 @@ int bl616cl_rtc_register(int minor)
                         (FAR struct rtc_lowerhalf_s *)&g_bl616cl_rtc);
 }
 
+/****************************************************************************
+ * Name: bl616cl_rtc_clock_numerator
+ *
+ * Description:
+ *   Get the numerator of the RTC clock frequency ratio; the RTC counter runs
+ *   at numerator / denominator Hz.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   The numerator of the RTC clock frequency.
+ *
+ ****************************************************************************/
+
 uint32_t bl616cl_rtc_clock_numerator(void)
 {
   return BL616CL_RTC_CLOCK_NUMERATOR;
 }
+
+/****************************************************************************
+ * Name: bl616cl_rtc_clock_denominator
+ *
+ * Description:
+ *   Get the denominator of the RTC clock frequency ratio; the RTC counter
+ *   runs at numerator / denominator Hz.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   The denominator of the RTC clock frequency.
+ *
+ ****************************************************************************/
 
 uint32_t bl616cl_rtc_clock_denominator(void)
 {

@@ -98,6 +98,21 @@ static struct bl616cl_oneshot_lowerhalf_s g_bl616cl_oneshot =
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_oneshot_clamp_delay
+ *
+ * Description:
+ *   Limit a delay to the range BL616CL_ONESHOT_MIN_DELAY to
+ *   BL616CL_ONESHOT_MAX_DELAY.
+ *
+ * Input Parameters:
+ *   delay - Requested delay in oneshot clock counts.
+ *
+ * Returned Value:
+ *   The delay limited to the supported range.
+ *
+ ****************************************************************************/
+
 static uint32_t bl616cl_oneshot_clamp_delay(clkcnt_t delay)
 {
   if (delay < BL616CL_ONESHOT_MIN_DELAY)
@@ -112,6 +127,21 @@ static uint32_t bl616cl_oneshot_clamp_delay(clkcnt_t delay)
 
   return (uint32_t)delay;
 }
+
+/****************************************************************************
+ * Name: bl616cl_oneshot_mtime
+ *
+ * Description:
+ *   Read the 64-bit CORET mtime counter. The high word is read again until it
+ *   is stable to avoid a torn read.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   The 64-bit mtime value.
+ *
+ ****************************************************************************/
 
 static uint64_t bl616cl_oneshot_mtime(void)
 {
@@ -130,6 +160,21 @@ static uint64_t bl616cl_oneshot_mtime(void)
   return ((uint64_t)high << 32) | low;
 }
 
+/****************************************************************************
+ * Name: bl616cl_oneshot_clear_counter
+ *
+ * Description:
+ *   Clear the timer counter by setting and then clearing the
+ *   TIMER_TCR1_CNT_CLR bit in the timer TCER register.
+ *
+ * Input Parameters:
+ *   priv - Oneshot lower half.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 static void bl616cl_oneshot_clear_counter(
   struct bl616cl_oneshot_lowerhalf_s *priv)
 {
@@ -139,6 +184,23 @@ static void bl616cl_oneshot_clear_counter(
   putreg32(regval | TIMER_TCR1_CNT_CLR, regaddr);
   putreg32(regval & ~TIMER_TCR1_CNT_CLR, regaddr);
 }
+
+/****************************************************************************
+ * Name: bl616cl_oneshot_configure
+ *
+ * Description:
+ *   Initialize the hardware timer with bflb_timer_init(): preload counter
+ *   mode, XTAL clock with BL616CL_ONESHOT_CLOCK_DIV, comparator 0 set to the
+ *   delay and the other comparators at their maximum.
+ *
+ * Input Parameters:
+ *   priv - Oneshot lower half.
+ *   delay - Comparator 0 value in timer counts.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
 
 static void bl616cl_oneshot_configure(
   struct bl616cl_oneshot_lowerhalf_s *priv, uint32_t delay)
@@ -156,6 +218,22 @@ static void bl616cl_oneshot_configure(
   bflb_timer_init(priv->dev, &config);
 }
 
+/****************************************************************************
+ * Name: bl616cl_oneshot_stop_locked
+ *
+ * Description:
+ *   Stop the timer: mask and disable the interrupt, stop the hardware and
+ *   clear any pending timer and interrupt state. The caller must be in a
+ *   critical section, or in the timer interrupt handler.
+ *
+ * Input Parameters:
+ *   priv - Oneshot lower half.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 static void bl616cl_oneshot_stop_locked(
   struct bl616cl_oneshot_lowerhalf_s *priv)
 {
@@ -166,6 +244,24 @@ static void bl616cl_oneshot_stop_locked(
   bflb_irq_clear_pending(priv->dev->irq_num);
   priv->running = false;
 }
+
+/****************************************************************************
+ * Name: bl616cl_oneshot_start_locked
+ *
+ * Description:
+ *   Start a one-shot countdown. The delay is clamped, a running countdown is
+ *   stopped first, and the counter is cleared before the timer is configured
+ *   and started with its interrupt enabled. The caller must be in a critical
+ *   section.
+ *
+ * Input Parameters:
+ *   priv - Oneshot lower half.
+ *   delay - Delay in oneshot clock counts.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
 
 static void bl616cl_oneshot_start_locked(
   struct bl616cl_oneshot_lowerhalf_s *priv, clkcnt_t delay)
@@ -187,6 +283,23 @@ static void bl616cl_oneshot_start_locked(
   priv->running = true;
 }
 
+/****************************************************************************
+ * Name: bl616cl_oneshot_handler
+ *
+ * Description:
+ *   Timer interrupt handler. If the comparator 0 interrupt is pending, stop
+ *   the timer and call oneshot_process_callback() when a callback is
+ *   registered.
+ *
+ * Input Parameters:
+ *   irq - IRQ number (unused).
+ *   arg - The bl616cl_oneshot_lowerhalf_s instance.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 static void bl616cl_oneshot_handler(int irq, void *arg)
 {
   struct bl616cl_oneshot_lowerhalf_s *priv = arg;
@@ -206,12 +319,43 @@ static void bl616cl_oneshot_handler(int irq, void *arg)
     }
 }
 
+/****************************************************************************
+ * Name: bl616cl_oneshot_current
+ *
+ * Description:
+ *   Implement the oneshot_operations_s current method. The value comes from
+ *   the free-running CORET mtime counter.
+ *
+ * Input Parameters:
+ *   lower - Oneshot lower half (unused).
+ *
+ * Returned Value:
+ *   The current counter value.
+ *
+ ****************************************************************************/
+
 static clkcnt_t bl616cl_oneshot_current(
   struct oneshot_lowerhalf_s *lower)
 {
   UNUSED(lower);
   return bl616cl_oneshot_mtime();
 }
+
+/****************************************************************************
+ * Name: bl616cl_oneshot_start
+ *
+ * Description:
+ *   Implement the oneshot_operations_s start method. Start the timer to
+ *   expire after the given delay.
+ *
+ * Input Parameters:
+ *   lower - Oneshot lower half.
+ *   delay - Delay in oneshot clock counts; clamped to the supported range.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
 
 static void bl616cl_oneshot_start(struct oneshot_lowerhalf_s *lower,
                                   clkcnt_t delay)
@@ -224,6 +368,23 @@ static void bl616cl_oneshot_start(struct oneshot_lowerhalf_s *lower,
   bl616cl_oneshot_start_locked(priv, delay);
   leave_critical_section(flags);
 }
+
+/****************************************************************************
+ * Name: bl616cl_oneshot_start_absolute
+ *
+ * Description:
+ *   Implement the oneshot_operations_s start_absolute method. The delay is
+ *   the expected time minus the current mtime value; if that time has already
+ *   passed the minimum delay is used.
+ *
+ * Input Parameters:
+ *   lower - Oneshot lower half.
+ *   expected - Expiration time in counter units of bl616cl_oneshot_current().
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
 
 static void bl616cl_oneshot_start_absolute(
   struct oneshot_lowerhalf_s *lower, clkcnt_t expected)
@@ -242,6 +403,21 @@ static void bl616cl_oneshot_start_absolute(
   leave_critical_section(flags);
 }
 
+/****************************************************************************
+ * Name: bl616cl_oneshot_cancel
+ *
+ * Description:
+ *   Implement the oneshot_operations_s cancel method. Stop the timer without
+ *   calling the callback.
+ *
+ * Input Parameters:
+ *   lower - Oneshot lower half.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 static void bl616cl_oneshot_cancel(struct oneshot_lowerhalf_s *lower)
 {
   struct bl616cl_oneshot_lowerhalf_s *priv =
@@ -253,6 +429,20 @@ static void bl616cl_oneshot_cancel(struct oneshot_lowerhalf_s *lower)
   leave_critical_section(flags);
 }
 
+/****************************************************************************
+ * Name: bl616cl_oneshot_max_delay
+ *
+ * Description:
+ *   Implement the oneshot_operations_s max_delay method.
+ *
+ * Input Parameters:
+ *   lower - Oneshot lower half (unused).
+ *
+ * Returned Value:
+ *   BL616CL_ONESHOT_MAX_DELAY.
+ *
+ ****************************************************************************/
+
 static clkcnt_t bl616cl_oneshot_max_delay(
   struct oneshot_lowerhalf_s *lower)
 {
@@ -262,6 +452,26 @@ static clkcnt_t bl616cl_oneshot_max_delay(
 
 /****************************************************************************
  * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: bl616cl_oneshot_initialize
+ *
+ * Description:
+ *   Initialize the oneshot lower half on TIMER1 and register it as a oneshot
+ *   device. The timer is stopped with its interrupt attached, and the driver
+ *   is registered with oneshot_register() at BL616CL_ONESHOT_CLOCK_FREQUENCY.
+ *
+ * Input Parameters:
+ *   devpath - The device path to register.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -ENODEV - The TIMER1 lhal device was not found.
+ *     Other errors are returned from bflb_irq_attach() and
+ *     oneshot_register().
+ *
  ****************************************************************************/
 
 int bl616cl_oneshot_initialize(const char *devpath)
