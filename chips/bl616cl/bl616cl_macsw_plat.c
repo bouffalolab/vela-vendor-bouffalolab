@@ -1,9 +1,9 @@
 /****************************************************************************
  * vendor/bouffalolab/chips/bl616cl/bl616cl_macsw_plat.c
  *
- * BL616CL platform hooks for the macsw core: low-power interface stubs for
- * the STA-only, no-low-power build, and the monotonic time source.  The
- * macsw core calls the low-power hooks from the wifi_main startup and the
+ * BL616CL platform hooks for the macsw core: Wi-Fi task suspend/resume,
+ * the time sources, and low-power interface stubs for the STA-only,
+ * no-low-power build.  The macsw core calls the low-power hooks from the wifi_main startup and the
  * wake-up paths; without the low-power firmware path they report "no
  * low-power state" and keep the MAC in full-power mode.
  *
@@ -29,9 +29,30 @@
  ****************************************************************************/
 
 #include <assert.h>
+#include <debug.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <time.h>
+
+#include <nuttx/semaphore.h>
+#include <nuttx/signal.h>
+
+#include "coexm.h"
+#include "macsw.h"
+#include "macsw_plat.h"
+
+#include "bl616cl_macsw_plat.h"
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+/* Wi-Fi task notification: wifi_task_resume() posts, wifi_task_suspend()
+ * waits.
+ */
+
+static sem_t g_wifi_notify_sem = SEM_INITIALIZER(0);
 
 /****************************************************************************
  * Public Functions
@@ -172,15 +193,6 @@ int hal_macsw_lp_is_wake_by_ap_disconnected(void)
   return 0;
 }
 
-/**
- ****************************************************************************************
- * @brief Monotonic time source for the MAC stack (macsw_plat.h).
- *
- * @param[out] time_us Monotonic time in microseconds.
- * @return 0 on success.
- ****************************************************************************************
- */
-
 /****************************************************************************
  * Name: macsw_platform_get_time_us
  *
@@ -210,4 +222,111 @@ int macsw_platform_get_time_us(uint64_t *time_us)
 
   *time_us = (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000;
   return 0;
+}
+
+/****************************************************************************
+ * Name: wifi_task_suspend
+ *
+ * Description:
+ *   macsw platform hook.  Suspend the Wi-Fi task until it is notified by
+ *   wifi_task_resume().  Waits on g_wifi_notify_sem, bracketed by the
+ *   coex_coord_on_wifi_suspend_enter()/coex_coord_on_wifi_wake() calls.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void wifi_task_suspend(void)
+{
+  bool slept_committed = coex_coord_on_wifi_suspend_enter();
+
+  /* Wait for notification using semaphore */
+
+  nxsem_wait(&g_wifi_notify_sem);
+
+  coex_coord_on_wifi_wake(slept_committed);
+}
+
+/****************************************************************************
+ * Name: wifi_task_resume
+ *
+ * Description:
+ *   macsw platform hook.  Resume the Wi-Fi task by posting
+ *   g_wifi_notify_sem.  NuttX semaphores are the same in ISR and task
+ *   context, so isr is not used.  A post failure is only logged.
+ *
+ * Input Parameters:
+ *   isr - Whether called from interrupt context (unused).
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void wifi_task_resume(bool isr)
+{
+  int ret;
+
+  /* NuttX doesn't distinguish between ISR and task context for semaphores */
+
+  ret = nxsem_post(&g_wifi_notify_sem);
+
+  if (ret != 0)
+    {
+      wlerr("failed to resume WiFi task: %d\n", ret);
+    }
+}
+
+/****************************************************************************
+ * Name: wifi_sys_now_ms
+ *
+ * Description:
+ *   macsw platform hook.  Get system time in milliseconds, from
+ *   CLOCK_MONOTONIC.
+ *
+ * Input Parameters:
+ *   isr - Whether called from interrupt context (unused).
+ *
+ * Returned Value:
+ *   System time in milliseconds.
+ *
+ ****************************************************************************/
+
+uint32_t wifi_sys_now_ms(bool isr)
+{
+  struct timespec ts;
+
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+/****************************************************************************
+ * Name: bl616cl_macsw_wait_suspended
+ *
+ * Description:
+ *   Wait until the Wi-Fi task first blocks in wifi_task_suspend(), that is,
+ *   until g_wifi_notify_sem has a waiter.  Polling keeps
+ *   wifi_task_suspend(), which is on the hot path, unchanged.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void bl616cl_macsw_wait_suspended(void)
+{
+  int semcount;
+
+  while (nxsem_get_value(&g_wifi_notify_sem, &semcount) == OK &&
+         semcount >= 0)
+    {
+      nxsig_usleep(1000);
+    }
 }

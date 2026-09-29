@@ -36,7 +36,6 @@
 #include <nuttx/wqueue.h>
 #include <nuttx/mutex.h>
 #include <nuttx/sched.h>
-#include <nuttx/signal.h>
 #include <nuttx/wdog.h>
 #include <nuttx/wireless/wireless.h>
 #include <nuttx/wireless/ieee80211/ieee80211.h>
@@ -44,12 +43,12 @@
 #include "bl616cl_sdk.h"
 #include "bl616cl_glb.h"
 
+#include "bl616cl_macsw_plat.h"
 #include "bl616cl_wifi_adapter.h"
 #include "bl616cl_wlan.h"
 
 #include "wl80211.h"
 #include "macsw.h"
-#include "coexm.h"
 
 /* rfparam_adapter.h has legacy non-prototype declarations. */
 
@@ -112,10 +111,6 @@ static struct
 /* Wi-Fi event private data */
 
 static mutex_t g_wifiexcl_lock = NXMUTEX_INITIALIZER;
-
-/* Semaphore for task notification synchronization */
-
-static sem_t g_wifi_notify_sem = SEM_INITIALIZER(0);
 
 /* Main wifi stack entry point */
 
@@ -728,116 +723,6 @@ void __assert_func(const char *file, int line,
   PANIC();
 }
 
-/**
- ************************************************************************
- * Name: wifi_task_suspend
- *
- * Description:
- *  Suspend the WiFi task
- *
- * Input Parameters:
- *  None
- *
- * Returned Value:
- * None
- * ***********************************************************************
- */
-
-/****************************************************************************
- * Name: wifi_task_suspend
- *
- * Description:
- *   macsw platform hook.  Suspend the Wi-Fi task until it is notified by
- *   wifi_task_resume().  Waits on g_wifi_notify_sem, bracketed by the
- *   coex_coord_on_wifi_suspend_enter()/coex_coord_on_wifi_wake() calls.
- *
- * Input Parameters:
- *   None
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-void wifi_task_suspend(void)
-{
-  bool slept_committed = coex_coord_on_wifi_suspend_enter();
-
-  /* Wait for notification using semaphore */
-
-  nxsem_wait(&g_wifi_notify_sem);
-
-  coex_coord_on_wifi_wake(slept_committed);
-}
-
-/**
- ************************************************************************
- * Name: wifi_task_resume
- *
- * Description:
- *  Resume the WiFi task
- *
- * Input Parameters:
- *  isr - Whether called from interrupt context
- *
- * Returned Value:
- * None
- * ***********************************************************************
- */
-
-/****************************************************************************
- * Name: wifi_task_resume
- *
- * Description:
- *   macsw platform hook.  Resume the Wi-Fi task by posting
- *   g_wifi_notify_sem.  NuttX semaphores are the same in ISR and task
- *   context, so isr is not used.  A post failure is only logged.
- *
- * Input Parameters:
- *   isr - Whether called from interrupt context (unused).
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-void wifi_task_resume(bool isr)
-{
-  int ret;
-
-  /* NuttX doesn't distinguish between ISR and task context for semaphores */
-
-  ret = nxsem_post(&g_wifi_notify_sem);
-
-  if (ret != 0)
-    {
-      wlerr("failed to resume WiFi task: %d\n", ret);
-    }
-}
-
-/****************************************************************************
- * Name: wifi_sys_now_ms
- *
- * Description:
- *   macsw platform hook.  Get system time in milliseconds, from
- *   CLOCK_MONOTONIC.
- *
- * Input Parameters:
- *   isr - Whether called from interrupt context (unused).
- *
- * Returned Value:
- *   System time in milliseconds.
- *
- ****************************************************************************/
-
-uint32_t wifi_sys_now_ms(bool isr)
-{
-  struct timespec ts;
-
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
-
 /****************************************************************************
  * Name: bl616cl_wifi_adapter_init
  *
@@ -854,8 +739,6 @@ uint32_t wifi_sys_now_ms(bool isr)
 
 int bl616cl_wifi_adapter_init(void)
 {
-  int semcount;
-
   wlinfo("Starting wifi ...\r\n");
 
   /* enable wifi clock (bit-mask argument of GLB_PER_Clock_UnGate) */
@@ -890,15 +773,10 @@ int bl616cl_wifi_adapter_init(void)
   /* macswl_init() in the new task resets the kernel message queue and
    * memory, so send nothing before the task is done with it, that is, until
    * it first waits in wifi_task_suspend().  A Wi-Fi task below the priority
-   * of this thread used to lose the first request and hang boot.  Polling
-   * keeps wifi_task_suspend(), which is on the hot path, unchanged.
+   * of this thread used to lose the first request and hang boot.
    */
 
-  while (nxsem_get_value(&g_wifi_notify_sem, &semcount) == OK &&
-         semcount >= 0)
-    {
-      nxsig_usleep(1000);
-    }
+  bl616cl_macsw_wait_suspended();
 
   uint8_t eth_mac[6];
   platform_get_mac(WL80211_VIF_STA, eth_mac);
