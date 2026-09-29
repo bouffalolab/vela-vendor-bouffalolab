@@ -26,8 +26,6 @@
 
 #include <stdint.h>
 
-#include "riscv_internal.h"
-
 #include "bl616cl_clockconfig.h"
 #include "bl616cl_sdk.h"
 #include "bl616cl_clock.h"
@@ -75,16 +73,4 @@ void bl616cl_timer_clock_init(void)
 
   CPU_Set_MTimer_CLK(ENABLE, BL_MTIMER_SOURCE_CLOCK_MCU_XCLK,
                     div - 1);
-}
-
-/****************************************************************************
- * Name: bl616cl_pinmux_early_uart
- ****************************************************************************/
-
-void bl616cl_pinmux_early_uart(void)
-{
-  putreg32(0xffffffff, GLB_BASE + GLB_UART_CFG1_OFFSET);
-  putreg32(0x0000ffff, GLB_BASE + GLB_UART_CFG2_OFFSET);
-
-  HBN_Hw_Pu_Pd_Cfg(DISABLE);
 }
