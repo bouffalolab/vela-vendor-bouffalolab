@@ -1553,15 +1553,6 @@ int bl616cl_wifi_sta_auth(struct iwreq *iwr, bool set)
           return -ENOTCONN;
         }
 
-#if 0
-      ret = bl616_wifi_sta_find_ap_info(&ap_info);
-      if (ret)
-        {
-          wlerr("ERROR: Failed to get AP record ret=%d\n", ret);
-          return -ENOSYS;
-        }
-#endif
-
       cmd = iwr->u.param.flags & IW_AUTH_INDEX;
       switch (cmd)
         {
@@ -1613,8 +1604,6 @@ int bl616cl_wifi_sta_auth(struct iwreq *iwr, bool set)
 int bl616cl_wifi_sta_freq(struct iwreq *iwr, bool set)
 {
   struct iwreq *req = (struct iwreq *)iwr;
-
-  /* FIXME: wl80211 use uint8_t, wifi_mgmr use int */
   uint8_t channel;
 
   if (set && (iwr->u.freq.flags == IW_FREQ_FIXED))
