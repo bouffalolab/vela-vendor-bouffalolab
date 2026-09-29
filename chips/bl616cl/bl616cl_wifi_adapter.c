@@ -41,7 +41,8 @@
 #include <nuttx/wireless/wireless.h>
 #include <nuttx/wireless/ieee80211/ieee80211.h>
 
-#include "bl616cl_wifi_glb.h"
+#include "bl616cl_sdk.h"
+#include "bl616cl_glb.h"
 
 #include "bl616cl_wifi_adapter.h"
 #include "bl616cl_wlan.h"
