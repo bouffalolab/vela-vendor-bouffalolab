@@ -630,7 +630,7 @@ source build/envsetup.sh
 注意事项：
 
 - `vela menuconfig` 退出时会**自动回写板级 defconfig**；实验性改动要么不提交、用完恢复，要么单独提交并经过评审。
-- 改动 `BL616CL_WRAM_SIZE`/`BL616CL_EM_*` 等链接脚本相关 CONFIG 后必须 `vela clean`（增量构建会静默沿用旧内存布局）。
+- 改动 `BL616CL_EM_*` 等链接脚本相关 CONFIG 后必须 `vela clean`（增量构建会静默沿用旧内存布局）。
 - 模块产物在 `cmake_out/ai-m64l-32s-kit_nsh-peripherals/wasm/`；设备侧需要可访问这些文件（ROMFS 只读、编译期生成；实验可先走 `/data` 分区或用 `INSTALL_NAME` 打进 romfs）。
 - 烧录/串口操作按仓库技能（`vela flash` + `bl-module-reset`），不要手写 DTR/RTS 时序。
 
