@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_macsw_plat.c
+ * vendor/bouffalolab/chips/bl616cl/bl616cl_macsw_plat.c
  *
  * BL616CL platform hooks for the macsw core: low-power interface stubs for
  * the STA-only, no-low-power build, and the monotonic time source.  The

@@ -1,5 +1,5 @@
 /****************************************************************************
- * apps/vendor/bouffalolab/chips/bl616cl/bl616cl_efuse_mac.h
+ * vendor/bouffalolab/chips/bl616cl/bl616cl_efuse_mac.h
  *
  * BL616CL efuse STA MAC-address resolution for the wl80211 host port.
  *
