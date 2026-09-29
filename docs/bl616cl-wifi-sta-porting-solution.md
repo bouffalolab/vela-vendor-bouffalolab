@@ -157,7 +157,7 @@ chips/bl616cl/
 ├── bl616cl_wlan.[ch]            # netdev/WEXT/收发回调
 ├── bl616cl_wifi_adapter.[ch]    # adapter 和控制流程
 ├── bl616cl_efuse_mac.[ch]       # bl616_efuse_read_mac_address()：出厂 MAC（mfg media）与本地管理回退
-└── bl616cl_macsw_plat.c         # macsw 低功耗 hook 与单调时间源
+└── bl616cl_macsw_plat.[ch]      # macsw 平台 hook：wifi 任务挂起/唤醒、时间源、低功耗桩
 ```
 
 public 与 chip 之间的接口：chip 实现 `bl616_wifi_event_handler()`、`bl616_efuse_read_mac_address()`，并通过 `internal_register_recv_cb()`、`internal_register_txdone_cb()` 注册 RX 与 TX 完成回调。
