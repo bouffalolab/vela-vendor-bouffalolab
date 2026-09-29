@@ -167,12 +167,42 @@ static struct bl616cl_dma_test_status_s g_bl616cl_dma_test_status;
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_dma_channel_base
+ *
+ * Description:
+ *   Compute the register base address of a DMA channel from DMA_BASE and
+ *   the channel index.
+ *
+ * Input Parameters:
+ *   channel - Channel state.
+ *
+ * Returned Value:
+ *   The channel register base address.
+ *
+ ****************************************************************************/
+
 static uintptr_t bl616cl_dma_channel_base(
   FAR const struct bl616cl_dma_chan_s *channel)
 {
   return DMA_BASE +
          ((uintptr_t)channel->index + 1) * BL616CL_DMA_CHANNEL_OFFSET;
 }
+
+/****************************************************************************
+ * Name: bl616cl_dma_mask_stop_clear
+ *
+ * Description:
+ *   Mask the channel interrupts, disable the channel and clear its
+ *   terminal-count and error interrupt status.
+ *
+ * Input Parameters:
+ *   channel - Channel state.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
 
 static void bl616cl_dma_mask_stop_clear(
   FAR const struct bl616cl_dma_chan_s *channel)
@@ -188,6 +218,21 @@ static void bl616cl_dma_mask_stop_clear(
   putreg32(bit, DMA_BASE + DMA_INTERRCLR_OFFSET);
 }
 
+/****************************************************************************
+ * Name: bl616cl_dma_pending_bytes
+ *
+ * Description:
+ *   Read the remaining transfer size from the channel control register
+ *   and convert it to bytes, capped at the requested length.
+ *
+ * Input Parameters:
+ *   channel - Channel state.
+ *
+ * Returned Value:
+ *   The number of bytes not yet transferred.
+ *
+ ****************************************************************************/
+
 static size_t bl616cl_dma_pending_bytes(
   FAR const struct bl616cl_dma_chan_s *channel)
 {
@@ -200,10 +245,42 @@ static size_t bl616cl_dma_pending_bytes(
   return pending > channel->request_bytes ? channel->request_bytes : pending;
 }
 
+/****************************************************************************
+ * Name: bl616cl_dma_step_valid
+ *
+ * Description:
+ *   Check an address step: the hardware supports either a fixed address
+ *   (0) or an increment equal to the transfer width.
+ *
+ * Input Parameters:
+ *   step - Address step in bytes.
+ *   width - Transfer width in bytes.
+ *
+ * Returned Value:
+ *   True if the step is valid; false otherwise.
+ *
+ ****************************************************************************/
+
 static bool bl616cl_dma_step_valid(int step, unsigned int width)
 {
   return step == 0 || step == (int)width;
 }
+
+/****************************************************************************
+ * Name: bl616cl_dma_width_encode
+ *
+ * Description:
+ *   Convert a transfer width in bytes to the hardware width encoding (1,
+ *   2 and 4 bytes are supported).
+ *
+ * Input Parameters:
+ *   width - Transfer width in bytes.
+ *   encoded - Location that receives the hardware encoding.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -EINVAL if the width is not supported.
+ *
+ ****************************************************************************/
 
 static int bl616cl_dma_width_encode(unsigned int width, FAR uint8_t *encoded)
 {
@@ -226,6 +303,22 @@ static int bl616cl_dma_width_encode(unsigned int width, FAR uint8_t *encoded)
     }
 }
 
+/****************************************************************************
+ * Name: bl616cl_dma_callback_done
+ *
+ * Description:
+ *   Mark a completion callback as finished. If the channel is being
+ *   released and this was the last callback in flight, wake the releasing
+ *   thread.
+ *
+ * Input Parameters:
+ *   channel - Channel state.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 static void bl616cl_dma_callback_done(
   FAR struct bl616cl_dma_chan_s *channel)
 {
@@ -241,6 +334,26 @@ static void bl616cl_dma_callback_done(
 
   spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
 }
+
+/****************************************************************************
+ * Name: bl616cl_dma_process_irq
+ *
+ * Description:
+ *   Handle terminal-count and error status bits. For each running channel
+ *   it records the residual, updates the state, stops the channel and
+ *   invokes the client callback with the byte count or -EIO. Also used by
+ *   the test injection path.
+ *
+ * Input Parameters:
+ *   tc_status - Terminal-count status bit mask, one bit per channel.
+ *   error_status - Error status bit mask, one bit per channel.
+ *   hardware_irq - True if called from the hardware interrupt; false for
+ *     test injection (only used for test statistics).
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
 
 static void bl616cl_dma_process_irq(uint8_t tc_status, uint8_t error_status,
                                     bool hardware_irq)
@@ -317,6 +430,23 @@ static void bl616cl_dma_process_irq(uint8_t tc_status, uint8_t error_status,
     }
 }
 
+/****************************************************************************
+ * Name: bl616cl_dma_interrupt
+ *
+ * Description:
+ *   DMA0 interrupt handler. Read and clear the terminal-count and error
+ *   status, then dispatch them to bl616cl_dma_process_irq().
+ *
+ * Input Parameters:
+ *   irq - IRQ number (unused).
+ *   context - Interrupt register context (unused).
+ *   arg - Argument passed to irq_attach (unused).
+ *
+ * Returned Value:
+ *   OK, always.
+ *
+ ****************************************************************************/
+
 static int bl616cl_dma_interrupt(int irq, FAR void *context, FAR void *arg)
 {
   uint8_t tc_status;
@@ -335,6 +465,20 @@ static int bl616cl_dma_interrupt(int irq, FAR void *context, FAR void *arg)
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_dma_from_chan
+ *
+ * Description:
+ *   Find the driver channel state that embeds the given dma_chan_s.
+ *
+ * Input Parameters:
+ *   chan - DMA channel handle.
+ *
+ * Returned Value:
+ *   The channel state; NULL if chan is not a channel of this driver.
+ *
+ ****************************************************************************/
+
 static FAR struct bl616cl_dma_chan_s *bl616cl_dma_from_chan(
   FAR struct dma_chan_s *chan)
 {
@@ -350,6 +494,23 @@ static FAR struct bl616cl_dma_chan_s *bl616cl_dma_from_chan(
 
   return NULL;
 }
+
+/****************************************************************************
+ * Name: bl616cl_dma_in_callback_context
+ *
+ * Description:
+ *   Report whether the caller runs in a completion callback context,
+ *   where releasing a channel is not allowed. With
+ *   CONFIG_BL616CL_DMA0_TEST, a thread running injected test callbacks
+ *   also counts.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   True in interrupt (or injected callback) context; false otherwise.
+ *
+ ****************************************************************************/
 
 static bool bl616cl_dma_in_callback_context(void)
 {
@@ -370,6 +531,25 @@ static bool bl616cl_dma_in_callback_context(void)
   return up_interrupt_context();
 #endif
 }
+
+/****************************************************************************
+ * Name: bl616cl_dma_get_chan
+ *
+ * Description:
+ *   Implement the dma_dev_s get_chan method. Wait for the requested
+ *   channel to become available and take ownership of it, resetting its
+ *   state. Cannot be called from interrupt context.
+ *
+ * Input Parameters:
+ *   dev - DMA device (unused).
+ *   ident - Channel index, 0 to BL616CL_DMA_CHANNEL_COUNT - 1.
+ *
+ * Returned Value:
+ *   The channel handle on success; NULL if ident is invalid, called from
+ *   interrupt context, the wait was interrupted or the channel is not
+ *   free.
+ *
+ ****************************************************************************/
 
 static FAR struct dma_chan_s *bl616cl_dma_get_chan(
   FAR struct dma_dev_s *dev, unsigned int ident)
@@ -408,6 +588,23 @@ static FAR struct dma_chan_s *bl616cl_dma_get_chan(
   spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
   return &channel->chan;
 }
+
+/****************************************************************************
+ * Name: bl616cl_dma_put_chan
+ *
+ * Description:
+ *   Implement the dma_dev_s put_chan method. Stop the channel, wait for
+ *   callbacks in flight, clear its state and make it available again.
+ *   Calling it from a callback context is rejected (DEBUGASSERT).
+ *
+ * Input Parameters:
+ *   dev - DMA device (unused).
+ *   chan - Channel handle to release.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
 
 static void bl616cl_dma_put_chan(FAR struct dma_dev_s *dev,
                                  FAR struct dma_chan_s *chan)
@@ -474,6 +671,26 @@ static void bl616cl_dma_put_chan(FAR struct dma_dev_s *dev,
   nxsem_post(&channel->available);
 }
 
+/****************************************************************************
+ * Name: bl616cl_dma_config
+ *
+ * Description:
+ *   Implement the dma_ops_s config method. Only memory-to-memory
+ *   transfers with equal 1, 2 or 4 byte source and destination widths, no
+ *   DRQ, and fixed or width-sized steps are accepted.
+ *
+ * Input Parameters:
+ *   chan - DMA channel handle returned by get_chan.
+ *   config - Channel configuration.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure: -EINVAL for a
+ *   bad handle or unsupported configuration, -ENOTSUP if priority,
+ *   timeout or option is set, -EBUSY if the channel is running, releasing
+ *   or has callbacks in flight, -EPERM if the channel is not owned.
+ *
+ ****************************************************************************/
+
 static int bl616cl_dma_config(FAR struct dma_chan_s *chan,
                               FAR const struct dma_config_s *config)
 {
@@ -531,6 +748,30 @@ static int bl616cl_dma_config(FAR struct dma_chan_s *chan,
   spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_dma_start
+ *
+ * Description:
+ *   Implement the dma_ops_s start method. Validate the alignment and
+ *   length, program the source, destination and control registers, then
+ *   enable the channel. The callback is invoked on completion with the
+ *   byte count or a negated errno value.
+ *
+ * Input Parameters:
+ *   chan - DMA channel handle returned by get_chan.
+ *   callback - Completion callback; may be NULL.
+ *   arg - Argument passed to the callback.
+ *   dst - Destination address.
+ *   src - Source address.
+ *   len - Transfer length in bytes.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure: -EINVAL for a
+ *   bad state, length or alignment, -EBUSY if a transfer or callback is
+ *   in progress, -E2BIG if the length exceeds the hardware limit.
+ *
+ ****************************************************************************/
 
 static int bl616cl_dma_start(FAR struct dma_chan_s *chan,
                              dma_callback_t callback, FAR void *arg,
@@ -632,6 +873,27 @@ static int bl616cl_dma_start(FAR struct dma_chan_s *chan,
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_dma_start_cyclic
+ *
+ * Description:
+ *   Implement the dma_ops_s start_cyclic method. Cyclic transfers are not
+ *   supported.
+ *
+ * Input Parameters:
+ *   chan - DMA channel handle returned by get_chan.
+ *   callback - Completion callback (unused).
+ *   arg - Callback argument (unused).
+ *   dst - Destination address (unused).
+ *   src - Source address (unused).
+ *   len - Total length (unused).
+ *   period_len - Period length (unused).
+ *
+ * Returned Value:
+ *   -ENOTSUP, always.
+ *
+ ****************************************************************************/
+
 static int bl616cl_dma_start_cyclic(FAR struct dma_chan_s *chan,
                                     dma_callback_t callback, FAR void *arg,
                                     uintptr_t dst, uintptr_t src,
@@ -646,6 +908,22 @@ static int bl616cl_dma_start_cyclic(FAR struct dma_chan_s *chan,
   UNUSED(period_len);
   return -ENOTSUP;
 }
+
+/****************************************************************************
+ * Name: bl616cl_dma_stop
+ *
+ * Description:
+ *   Implement the dma_ops_s stop method. If a transfer is running, record
+ *   the residual bytes, mark the channel stopped and disable it.
+ *
+ * Input Parameters:
+ *   chan - DMA channel handle returned by get_chan.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -EINVAL for a bad handle; -EPERM if the channel
+ *   is not owned.
+ *
+ ****************************************************************************/
 
 static int bl616cl_dma_stop(FAR struct dma_chan_s *chan)
 {
@@ -676,17 +954,60 @@ static int bl616cl_dma_stop(FAR struct dma_chan_s *chan)
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_dma_pause
+ *
+ * Description:
+ *   Implement the dma_ops_s pause method. Pausing is not supported.
+ *
+ * Input Parameters:
+ *   chan - DMA channel handle returned by get_chan.
+ *
+ * Returned Value:
+ *   -ENOTSUP, always.
+ *
+ ****************************************************************************/
+
 static int bl616cl_dma_pause(FAR struct dma_chan_s *chan)
 {
   UNUSED(chan);
   return -ENOTSUP;
 }
 
+/****************************************************************************
+ * Name: bl616cl_dma_resume
+ *
+ * Description:
+ *   Implement the dma_ops_s resume method. Resuming is not supported.
+ *
+ * Input Parameters:
+ *   chan - DMA channel handle returned by get_chan.
+ *
+ * Returned Value:
+ *   -ENOTSUP, always.
+ *
+ ****************************************************************************/
+
 static int bl616cl_dma_resume(FAR struct dma_chan_s *chan)
 {
   UNUSED(chan);
   return -ENOTSUP;
 }
+
+/****************************************************************************
+ * Name: bl616cl_dma_residual
+ *
+ * Description:
+ *   Implement the dma_ops_s residual method. For a running channel the
+ *   value is refreshed from the hardware.
+ *
+ * Input Parameters:
+ *   chan - DMA channel handle returned by get_chan.
+ *
+ * Returned Value:
+ *   The number of bytes not yet transferred; 0 for an invalid handle.
+ *
+ ****************************************************************************/
 
 static size_t bl616cl_dma_residual(FAR struct dma_chan_s *chan)
 {
@@ -714,10 +1035,42 @@ static size_t bl616cl_dma_residual(FAR struct dma_chan_s *chan)
  * Public Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_dma0_device
+ *
+ * Description:
+ *   Return the DMA0 controller device, for clients to call get_chan and
+ *   put_chan on.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   The DMA device if riscv_dma_initialize() succeeded; NULL otherwise.
+ *
+ ****************************************************************************/
+
 FAR struct dma_dev_s *bl616cl_dma0_device(void)
 {
   return g_bl616cl_dma_initialized ? &g_bl616cl_dma_dev.dev : NULL;
 }
+
+/****************************************************************************
+ * Name: riscv_dma_initialize
+ *
+ * Description:
+ *   Initialize the DMA0 controller: enable its clock and the controller,
+ *   set up the eight channels and their semaphores, and attach and enable
+ *   the DMA0 interrupt. On failure, everything is undone and the
+ *   controller stays unavailable.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
 
 void riscv_dma_initialize(void)
 {
@@ -789,6 +1142,23 @@ errout:
 }
 
 #ifdef CONFIG_BL616CL_DMA0_TEST
+/****************************************************************************
+ * Name: bl616cl_dma_test_inject_irq
+ *
+ * Description:
+ *   Test hook: feed software terminal-count and error status into the
+ *   interrupt processing path, marking the caller as running in callback
+ *   context.
+ *
+ * Input Parameters:
+ *   tc_status - Terminal-count status bit mask.
+ *   error_status - Error status bit mask.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_dma_test_inject_irq(uint8_t tc_status, uint8_t error_status)
 {
   irqstate_t flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
@@ -803,6 +1173,21 @@ void bl616cl_dma_test_inject_irq(uint8_t tc_status, uint8_t error_status)
   spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
 }
 
+/****************************************************************************
+ * Name: bl616cl_dma_test_set_hold_before_enable
+ *
+ * Description:
+ *   Test hook: when set, later transfers are programmed but not enabled
+ *   until bl616cl_dma_test_release_hold() is called.
+ *
+ * Input Parameters:
+ *   hold - True to hold new transfers before enable.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_dma_test_set_hold_before_enable(bool hold)
 {
   irqstate_t flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
@@ -811,6 +1196,21 @@ void bl616cl_dma_test_set_hold_before_enable(bool hold)
   spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
 }
 
+/****************************************************************************
+ * Name: bl616cl_dma_test_suppress_put_assert
+ *
+ * Description:
+ *   Test hook: control whether put_chan called from a callback context
+ *   triggers DEBUGASSERT. Rejected calls are counted either way.
+ *
+ * Input Parameters:
+ *   suppress - True to suppress the assertion.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_dma_test_suppress_put_assert(bool suppress)
 {
   irqstate_t flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
@@ -818,6 +1218,21 @@ void bl616cl_dma_test_suppress_put_assert(bool suppress)
   g_bl616cl_dma_test_suppress_put_assert = suppress;
   spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
 }
+
+/****************************************************************************
+ * Name: bl616cl_dma_test_release_hold
+ *
+ * Description:
+ *   Test hook: enable all running channels that are being held before
+ *   enable.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
 
 void bl616cl_dma_test_release_hold(void)
 {
@@ -841,6 +1256,22 @@ void bl616cl_dma_test_release_hold(void)
 
   spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
 }
+
+/****************************************************************************
+ * Name: bl616cl_dma_test_get_status
+ *
+ * Description:
+ *   Test hook: copy the interrupt and callback statistics collected by
+ *   the driver.
+ *
+ * Input Parameters:
+ *   status - Location that receives the statistics; nothing is done if
+ *     NULL.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
 
 void bl616cl_dma_test_get_status(
   FAR struct bl616cl_dma_test_status_s *status)

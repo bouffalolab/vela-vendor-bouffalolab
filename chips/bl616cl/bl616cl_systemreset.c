@@ -54,6 +54,26 @@ static enum bl616cl_reset_reason_e g_bl616cl_reset_reason =
  ****************************************************************************/
 
 #ifdef CONFIG_BOARDCTL_RESET_CAUSE
+/****************************************************************************
+ * Name: bl616cl_reset_reason_initialize
+ *
+ * Description:
+ *   Determine the reset reason at boot. If the HBN status flag holds a valid
+ *   reset-reason word (magic 0xb616c1xx, reason not above
+ *   BL616CL_RESET_SOFTWARE) left by bl616cl_reset_reason_set(), use it and
+ *   clear the flag. Otherwise report a watchdog reset if the HBN or timer
+ *   watchdog status is set, and clear the sticky timer watchdog status. The
+ *   default is BL616CL_RESET_POWER_ON. Only built with
+ *   CONFIG_BOARDCTL_RESET_CAUSE.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_reset_reason_initialize(void)
 {
   uint32_t saved = HBN_Get_Status_Flag();
@@ -83,17 +103,67 @@ void bl616cl_reset_reason_initialize(void)
     }
 }
 
+/****************************************************************************
+ * Name: bl616cl_reset_reason_set
+ *
+ * Description:
+ *   Record a reset reason in the HBN status flag, tagged with a magic value,
+ *   so that it survives the next reset and is picked up by
+ *   bl616cl_reset_reason_initialize(). Only built with
+ *   CONFIG_BOARDCTL_RESET_CAUSE.
+ *
+ * Input Parameters:
+ *   reason - Reset reason to record; only the low 8 bits are stored
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_reset_reason_set(enum bl616cl_reset_reason_e reason)
 {
   HBN_Set_Status_Flag(BL616CL_RESET_MAGIC |
                       ((uint32_t)reason & BL616CL_RESET_REASON_MASK));
 }
 
+/****************************************************************************
+ * Name: bl616cl_reset_reason_get
+ *
+ * Description:
+ *   Return the reset reason determined at boot by
+ *   bl616cl_reset_reason_initialize(). Only built with
+ *   CONFIG_BOARDCTL_RESET_CAUSE.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   The reset reason.
+ *
+ ****************************************************************************/
+
 enum bl616cl_reset_reason_e bl616cl_reset_reason_get(void)
 {
   return g_bl616cl_reset_reason;
 }
 #endif
+
+/****************************************************************************
+ * Name: up_systemreset
+ *
+ * Description:
+ *   NuttX architecture interface: reset the chip. Switch the 32K clock to RC
+ *   and power off the 32K crystal, disable global and machine external
+ *   interrupts, software-reset the WiFi, BTDM and BLE2 blocks, wait 10 ms and
+ *   trigger a software power-on reset.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Does not return.
+ *
+ ****************************************************************************/
 
 void up_systemreset(void)
 {

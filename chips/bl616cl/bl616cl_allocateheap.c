@@ -43,8 +43,11 @@
  * Public Functions
  ****************************************************************************/
 
+extern char g_heapbase[] asm("__HeapBase");
+extern char g_heaplimit[] asm("__HeapLimit");
+
 /****************************************************************************
- * Name: up_allocate_heap/up_allocate_kheap
+ * Name: up_allocate_heap
  *
  * Description:
  *   This function will be called to dynamically set aside the heap region.
@@ -80,10 +83,17 @@
  *     Kernel heap.  Size determined by CONFIG_MM_KERNEL_HEAPSIZE.
  *     User heap.  Extends to the end of SRAM.
  *
+ *   This implementation returns the region between the linker symbols
+ *   __HeapBase and __HeapLimit.
+ *
+ * Input Parameters:
+ *   heap_start - Location to return the start address of the heap.
+ *   heap_size  - Location to return the size of the heap in bytes.
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
-
-extern char g_heapbase[] asm("__HeapBase");
-extern char g_heaplimit[] asm("__HeapLimit");
 
 void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
 {
@@ -91,6 +101,7 @@ void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
   *heap_size = (size_t)(g_heaplimit - g_heapbase);
 }
 
+#if CONFIG_MM_REGIONS > 1
 /****************************************************************************
  * Name: riscv_addregion
  *
@@ -98,9 +109,18 @@ void up_allocate_heap(FAR void **heap_start, size_t *heap_size)
  *   Memory may be added in non-contiguous chunks.  Additional chunks are
  *   added by calling this function.
  *
+ *   This implementation adds the PSRAM to the user heap with umm_addregion()
+ *   when CONFIG_BL616CL_PSRAM is set and PSRAM was detected (non-zero size).
+ *   It is compiled only when CONFIG_MM_REGIONS is greater than 1.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
-#if CONFIG_MM_REGIONS > 1
 void riscv_addregion(void)
 {
 #ifdef CONFIG_BL616CL_PSRAM

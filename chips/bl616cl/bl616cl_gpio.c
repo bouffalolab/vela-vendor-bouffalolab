@@ -462,6 +462,9 @@ static int bl616cl_gpio_readbuf(FAR struct ioexpander_dev_s *dev,
  * Description:
  *   Extract the single pin number encoded in a pinset bitmap.
  *
+ * Input Parameters:
+ *   pinset - Pin bitmap; exactly one bit must be set
+ *
  * Returned Value:
  *   The pin number on success; a negated errno value if the pinset is
  *   empty or selects more than one pin.
@@ -603,6 +606,12 @@ static int bl616cl_gpio_detach(FAR struct ioexpander_dev_s *dev,
  *   Handle GPIO interrupt events. This function executes in the context of
  *   the high priority worker thread.
  *
+ * Input Parameters:
+ *   arg - Pointer to the GPIO device state (struct bl616cl_gpio_dev_s)
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 static void bl616cl_gpio_irqworker(FAR void *arg)
@@ -650,6 +659,13 @@ static void bl616cl_gpio_irqworker(FAR void *arg)
  *   high priority worker thread and masks the controller IRQ until the
  *   work completes.
  *
+ * Input Parameters:
+ *   irq - IRQ number (unused)
+ *   arg - Pointer to the GPIO device state (struct bl616cl_gpio_dev_s)
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 static void bl616cl_gpio_interrupt(int irq, FAR void *arg)
@@ -681,6 +697,9 @@ static void bl616cl_gpio_interrupt(int irq, FAR void *arg)
  * Description:
  *   Initialize the BL616CL GPIO controller as an I/O expander device.
  *   See the header file for the detailed contract.
+ *
+ * Input Parameters:
+ *   None
  *
  * Returned Value:
  *   A pointer to the I/O expander instance on success; NULL on failure.

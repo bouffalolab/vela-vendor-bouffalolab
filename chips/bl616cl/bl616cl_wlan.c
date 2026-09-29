@@ -310,7 +310,7 @@ static void up_pm_notify(struct pm_callback_s *cb,
  */
 
 /****************************************************************************
- * Function: wlan_cache_txpkt_tail
+ * Name: wlan_cache_txpkt_tail
  *
  * Description:
  *   Cache packet from dev->d_buf into tail of TX ready queue.
@@ -340,18 +340,7 @@ static inline void wlan_cache_txpkt_tail(struct wlan_priv_s *priv)
 }
 
 /****************************************************************************
- * Name: wlan_upper_queue_work
- *
- * Description:
- *   Called when there is any work to do.
- *
- * Input Parameters:
- *   dev - Reference to the NuttX driver state structure
- *
- ****************************************************************************/
-
-/****************************************************************************
- * Function: wlan_recvframe
+ * Name: wlan_recvframe
  *
  * Description:
  *   Try to receive RX packet from RX done packet queue.
@@ -360,7 +349,7 @@ static inline void wlan_cache_txpkt_tail(struct wlan_priv_s *priv)
  *   priv - Reference to the driver state structure
  *
  * Returned Value:
- *   RX packet if success or NULl if no packet in queue.
+ *   RX packet if success or NULL if no packet in queue.
  *
  ****************************************************************************/
 
@@ -380,7 +369,7 @@ static struct iob_s *wlan_recvframe(struct wlan_priv_s *priv)
 
 #ifdef CONFIG_BL616CL_WLAN_RX_ZEROCOPY
 /****************************************************************************
- * Function: wlan_rx_slot_free
+ * Name: wlan_rx_slot_free
  *
  * Description:
  *   io_free callback of a wrapped RX slot: give the slot back to wl80211.
@@ -389,6 +378,9 @@ static struct iob_s *wlan_recvframe(struct wlan_priv_s *priv)
  *
  * Input Parameters:
  *   iob - The IOB header, which sits on the rx_info of the slot
+ *
+ * Returned Value:
+ *   None
  *
  ****************************************************************************/
 
@@ -403,7 +395,7 @@ static void wlan_rx_slot_free(void *iob)
 }
 
 /****************************************************************************
- * Function: wlan_rx_wrap
+ * Name: wlan_rx_wrap
  *
  * Description:
  *   Wrap a received frame in its host RX slot as an IOB.  The IOB header
@@ -447,7 +439,7 @@ static struct iob_s *wlan_rx_wrap(struct net_driver_s *dev, void *rxhdr,
 }
 
 /****************************************************************************
- * Function: wlan_tx_headroom
+ * Name: wlan_tx_headroom
  *
  * Description:
  *   wl80211_output() writes the TX header in front of the frame, inside
@@ -600,7 +592,7 @@ static void wlan_tx_done(struct wlan_priv_s *priv)
 }
 
 /****************************************************************************
- * Function: wlan_rx_done
+ * Name: wlan_rx_done
  *
  * Description:
  *   Wi-Fi RX done callback function. If this is called, it means receiving
@@ -610,10 +602,16 @@ static void wlan_tx_done(struct wlan_priv_s *priv)
  *   priv   - Reference to the driver state structure
  *   buffer - Wi-Fi received packet buffer
  *   len    - Length of received packet
- *   eb     - Wi-Fi receive callback input eb pointer
+ *   net    - Wi-Fi receive callback input pointer (rx_info of the slot, or a
+ *            ready IOB when free is NULL)
+ *   free   - Callback that releases the Wi-Fi buffer, or NULL if net is
+ *            already an IOB
  *
  * Returned Value:
- *   0 on success or a negated errno on failure
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -EINVAL if the frame is larger than WLAN_BUF_SIZE; -ENOBUFS if no IOB
+ *   is available or the frame cannot be queued.  If the interface is down
+ *   the frame is dropped and zero is returned.
  *
  ****************************************************************************/
 
@@ -751,7 +749,7 @@ out:
 }
 
 /****************************************************************************
- * Function: wlan_rxpoll
+ * Name: wlan_rxpoll
  *
  * Description:
  *   Try to receive packets from RX done queue and pass packets into IP
@@ -920,7 +918,7 @@ static int wlan_txpoll(struct net_driver_s *dev)
 }
 
 /****************************************************************************
- * Function: wlan_dopoll
+ * Name: wlan_dopoll
  *
  * Description:
  *   The function is called in order to perform an out-of-sequence TX poll.
@@ -955,7 +953,7 @@ static void wlan_dopoll(struct wlan_priv_s *priv)
 }
 
 /****************************************************************************
- * Function: wlan_txtimeout_work
+ * Name: wlan_txtimeout_work
  *
  * Description:
  *   Perform TX timeout related work from the worker thread
@@ -964,7 +962,7 @@ static void wlan_dopoll(struct wlan_priv_s *priv)
  *   arg - The argument passed when work_queue() as called.
  *
  * Returned Value:
- *   OK on success
+ *   None
  *
  ****************************************************************************/
 
@@ -989,15 +987,14 @@ static void wlan_txtimeout_work(void *arg)
 }
 
 /****************************************************************************
- * Function: wlan_txtimeout_expiry
+ * Name: wlan_txtimeout_expiry
  *
  * Description:
  *   Our TX watchdog timed out.  Called from the timer callback handler.
  *   The last TX never completed.  Reset the hardware and start again.
  *
  * Input Parameters:
- *   argc - The number of available arguments
- *   arg  - The first argument
+ *   arg - The driver state structure, cast to wdparm_t
  *
  * Returned Value:
  *   None
@@ -1236,23 +1233,26 @@ static int wlan_txavail(struct net_driver_s *dev)
   return OK;
 }
 
+#ifdef CONFIG_NETDEV_IOCTL
 /****************************************************************************
  * Name: wlan_ioctl
  *
  * Description:
- *   Handle network IOCTL commands directed to this device.
+ *   Handle network IOCTL commands directed to this device.  Wi-Fi
+ *   commands are dispatched to the wlan_ops_s callbacks of the driver.
  *
  * Input Parameters:
  *   dev - Reference to the NuttX driver state structure
  *   cmd - The IOCTL command
- *   arg - The argument for the IOCTL command
+ *   arg - The argument for the IOCTL command (struct iwreq pointer)
  *
  * Returned Value:
- *   OK on success; Negated errno on failure.
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -ENOSYS for SIOCSIWRATE; -ENOTTY for an unrecognized command; other
+ *   errors come from the wlan_ops_s callbacks.
  *
  ****************************************************************************/
 
-#ifdef CONFIG_NETDEV_IOCTL
 static int wlan_ioctl(struct net_driver_s *dev, int cmd, unsigned long arg)
 {
   int ret;
@@ -1475,9 +1475,10 @@ static int wlan_ioctl(struct net_driver_s *dev, int cmd, unsigned long arg)
  * Input Parameters:
  *   devno    - The device number
  *   mac_addr - MAC address
+ *   ops      - Wi-Fi operations of this device
  *
  * Returned Value:
- *   OK on success; Negated errno on failure.
+ *   Zero (OK) on success; a negated errno value on failure.
  *
  ****************************************************************************/
 
@@ -1530,15 +1531,24 @@ static int bl616cl_net_initialize(int devno,
   return OK;
 }
 
+#ifdef CONFIG_PM
 /****************************************************************************
  * Name: up_pm_notify
  *
  * Description:
- *   Notify power management event
+ *   Notify power management event.  Currently no state change needs any
+ *   action, so it does nothing.
+ *
+ * Input Parameters:
+ *   cb       - The power management callback structure
+ *   domain   - The power management domain
+ *   pmstate  - The new power state
+ *
+ * Returned Value:
+ *   None
  *
  ****************************************************************************/
 
-#ifdef CONFIG_PM
 static void up_pm_notify(struct pm_callback_s *cb,
                          int domain,
                          enum pm_state_e pmstate)
@@ -1563,17 +1573,17 @@ static void up_pm_notify(struct pm_callback_s *cb,
 }
 
 /****************************************************************************
- * Name: bl616cl_net_initialize
+ * Name: bl616cl_wlan_pm_init
  *
  * Description:
- *   Initialize the bl616 driver
+ *   Initialize the power management wakelock "wlan0" of the station
+ *   driver (PM_IDLE_DOMAIN, PM_NORMAL).
  *
  * Input Parameters:
- *   devno    - The device number
- *   mac_addr - MAC address
+ *   None
  *
  * Returned Value:
- *   OK on success; Negated errno on failure.
+ *   OK (zero) always.
  *
  ****************************************************************************/
 
@@ -1591,19 +1601,20 @@ static int bl616cl_wlan_pm_init(void)
 #endif  /* CONFIG_PM */
 
 /****************************************************************************
- * Function: wlan_sta_rx_done
+ * Name: wlan_sta_rx_done
  *
  * Description:
  *   Wi-Fi station RX done callback function. If this is called, it means
  *   station receiveing packet.
  *
  * Input Parameters:
+ *   net    - Wi-Fi receive callback input pointer
  *   buffer - Wi-Fi received packet buffer
  *   len    - Length of received packet
  *   eb     - Wi-Fi receive callback input eb pointer
  *
  * Returned Value:
- *   0 on success or a negated errno on failure
+ *   Zero (OK) on success; a negated errno value on failure.
  *
  ****************************************************************************/
 
@@ -1622,10 +1633,7 @@ static int wlan_sta_rx_done(void *net, void *buffer, uint16_t len, void *eb)
  *   station sending next packet.
  *
  * Input Parameters:
- *   ifidx  - The interface ID that the TX callback has been triggered from.
- *   data   - Pointer to the data transmitted.
- *   len    - Length of the data transmitted.
- *   status - True if data was transmitted successfully or false if failed.
+ *   arg - Callback argument (unused)
  *
  * Returned Value:
  *   None
@@ -1649,7 +1657,7 @@ static void wlan_sta_tx_done(void *arg)
  * Description:
  *   Get Wi-Fi station netcard driver
  *
- * Parameters:
+ * Input Parameters:
  *   None
  *
  * Returned Value:
@@ -1668,13 +1676,13 @@ struct net_driver_s *bl616cl_wlan_sta_get_netdev(void)
  * Description:
  *   Set Wi-Fi station link status
  *
- * Parameters:
+ * Input Parameters:
  *   linkstatus - true Notifies the networking layer about an available
- *                carrier, false Notifies the networking layer about an
- *                disappeared carrier.
+ *                 carrier, false Notifies the networking layer about an
+ *                 disappeared carrier.
  *
  * Returned Value:
- *   OK on success; Negated errno on failure.
+ *   Zero (OK) on success; a negated errno value on failure.
  *
  ****************************************************************************/
 

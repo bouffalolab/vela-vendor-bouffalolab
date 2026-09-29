@@ -46,6 +46,15 @@
  *   This function is called during start-up to initialize the timer
  *   interrupt.
  *
+ *   Enable the MTIMER clock and register the RISC-V mtimer oneshot lower
+ *   half as the system alarm with up_alarm_set_lowerhalf().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
 void up_timer_initialize(void)

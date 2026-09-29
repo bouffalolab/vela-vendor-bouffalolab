@@ -54,6 +54,12 @@ static int8_t g_rfparam_ant_gain;
  *   Return the currently applied antenna gain (dB). Zero until the RF
  *   calibration parameter flow provides a real value.
  *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   The stored antenna gain in dB.
+ *
  ****************************************************************************/
 
 int8_t rfparam_get_ant_gain(void)
@@ -69,6 +75,12 @@ int8_t rfparam_get_ant_gain(void)
  *   PHY/RF power management when the RF calibration parameter flow is
  *   ported for BL616CL.
  *
+ * Input Parameters:
+ *   ant_gain - Antenna gain in dB to store.
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void rfparam_update_ant_gain(int8_t ant_gain)
@@ -82,6 +94,9 @@ void rfparam_update_ant_gain(int8_t ant_gain)
  * Description:
  *   Country-code setter for the WLAN ioctl path. Not supported by the
  *   current BL616CL rfparam flow; reported explicitly to the caller.
+ *
+ * Input Parameters:
+ *   country - Country code string (unused).
  *
  * Returned Value:
  *   -EOPNOTSUPP always (see TODO above).

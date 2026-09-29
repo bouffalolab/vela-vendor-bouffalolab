@@ -155,6 +155,22 @@ static struct bl616cl_pwm_lowerhalf_s g_bl616cl_pwm =
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_pwm_record_error
+ *
+ * Description:
+ *   Remember the last result and count failures for the test diagnostics.
+ *   Does nothing when CONFIG_BL616CL_PWM_TEST is disabled.
+ *
+ * Input Parameters:
+ *   priv - PWM lower-half state
+ *   error - Result to record (OK or a negated errno value)
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 static void bl616cl_pwm_record_error(
   FAR struct bl616cl_pwm_lowerhalf_s *priv, int error)
 {
@@ -169,6 +185,26 @@ static void bl616cl_pwm_record_error(
   UNUSED(error);
 #endif
 }
+
+/****************************************************************************
+ * Name: bl616cl_pwm_error_less
+ *
+ * Description:
+ *   Compare two frequency errors given as fractions (num / den) without
+ *   overflowing 64 bits. Integer quotients are compared first, then the
+ *   remainders by cross-multiplication.
+ *
+ * Input Parameters:
+ *   left_num  - Numerator of the left error
+ *   left_den  - Denominator of the left error
+ *   right_num - Numerator of the right error
+ *   right_den - Denominator of the right error
+ *
+ * Returned Value:
+ *   true if the left error is strictly smaller than the right error; false
+ *   otherwise.
+ *
+ ****************************************************************************/
 
 static bool bl616cl_pwm_error_less(uint64_t left_num, uint32_t left_den,
                                    uint64_t right_num, uint32_t right_den)
@@ -192,6 +228,28 @@ static bool bl616cl_pwm_error_less(uint64_t left_num, uint32_t left_den,
 
   return left_remainder * right_den < right_remainder * left_den;
 }
+
+/****************************************************************************
+ * Name: bl616cl_pwm_consider_solution
+ *
+ * Description:
+ *   Evaluate one divider/period pair for the requested frequency and keep it
+ *   in best if it is the first valid candidate or has a smaller error. Ties
+ *   prefer the smaller divider. Periods outside the hardware limits are
+ *   ignored.
+ *
+ * Input Parameters:
+ *   source    - Source clock frequency in Hz
+ *   frequency - Requested PWM frequency in Hz
+ *   divider   - Candidate clock divider
+ *   period    - Candidate counter period
+ *   best      - Best solution so far, updated in place
+ *   found     - Set to true once a solution is stored in best
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
 
 static void bl616cl_pwm_consider_solution(
   uint32_t source, uint32_t frequency, uint32_t divider, uint32_t period,
@@ -227,6 +285,26 @@ static void bl616cl_pwm_consider_solution(
       *found = true;
     }
 }
+
+/****************************************************************************
+ * Name: bl616cl_pwm_solve
+ *
+ * Description:
+ *   Find the divider and period whose output frequency is closest to the
+ *   requested one, by searching around the rounded period for each divider.
+ *
+ * Input Parameters:
+ *   source    - Source clock frequency in Hz
+ *   frequency - Requested PWM frequency in Hz
+ *   solution  - Location that receives the best divider, period and actual
+ *               frequency
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure. Errors: -ERANGE
+ *   if source is 0, solution is NULL, the frequency is too high, or no valid
+ *   pair exists; -EINVAL if frequency is 0.
+ *
+ ****************************************************************************/
 
 static int bl616cl_pwm_solve(uint32_t source, uint32_t frequency,
                              FAR struct bl616cl_pwm_solution_s *solution)
@@ -280,6 +358,22 @@ static int bl616cl_pwm_solve(uint32_t source, uint32_t frequency,
   return found ? OK : -ERANGE;
 }
 
+/****************************************************************************
+ * Name: bl616cl_pwm_stopped
+ *
+ * Description:
+ *   Check whether the PWM counter has stopped by reading the STOP status bit.
+ *   With the test fault injection, a matching fault forces the result.
+ *
+ * Input Parameters:
+ *   priv - PWM lower-half state
+ *   operation - Operation being checked, used for test fault injection
+ *
+ * Returned Value:
+ *   true if the counter is stopped; false otherwise.
+ *
+ ****************************************************************************/
+
 static bool bl616cl_pwm_stopped(
   FAR struct bl616cl_pwm_lowerhalf_s *priv,
   enum bl616cl_pwm_operation_e operation)
@@ -297,6 +391,21 @@ static bool bl616cl_pwm_stopped(
   return (getreg32(priv->dev->reg_base + PWM_MC0_CONFIG0_OFFSET) &
           PWM_STS_STOP) != 0;
 }
+
+/****************************************************************************
+ * Name: bl616cl_pwm_drive_stopped_pin
+ *
+ * Description:
+ *   Reconfigure the output pin as a plain GPIO output and drive it to the
+ *   idle level given by the duty polarity (dcpol). Marks the pin as released.
+ *
+ * Input Parameters:
+ *   priv - PWM lower-half state
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
 
 static void bl616cl_pwm_drive_stopped_pin(
   FAR struct bl616cl_pwm_lowerhalf_s *priv)
@@ -319,6 +428,20 @@ static void bl616cl_pwm_drive_stopped_pin(
   priv->pin_acquired = false;
 }
 
+/****************************************************************************
+ * Name: bl616cl_pwm_enable_clock
+ *
+ * Description:
+ *   Enable the PWM0 peripheral clock if it is not already enabled.
+ *
+ * Input Parameters:
+ *   priv - PWM lower-half state
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
 static int bl616cl_pwm_enable_clock(
   FAR struct bl616cl_pwm_lowerhalf_s *priv)
 {
@@ -338,6 +461,20 @@ static int bl616cl_pwm_enable_clock(
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_pwm_acquire
+ *
+ * Description:
+ *   Enable the PWM clock and route the output pin to the PWM function.
+ *
+ * Input Parameters:
+ *   priv - PWM lower-half state
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
 static int bl616cl_pwm_acquire(FAR struct bl616cl_pwm_lowerhalf_s *priv)
 {
   int ret;
@@ -353,6 +490,21 @@ static int bl616cl_pwm_acquire(FAR struct bl616cl_pwm_lowerhalf_s *priv)
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_pwm_release
+ *
+ * Description:
+ *   Return the output pin to its idle level, gate the PWM clock and clear the
+ *   channel and started flags.
+ *
+ * Input Parameters:
+ *   priv - PWM lower-half state
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 static void bl616cl_pwm_release(FAR struct bl616cl_pwm_lowerhalf_s *priv)
 {
   bl616cl_pwm_drive_stopped_pin(priv);
@@ -365,6 +517,23 @@ static void bl616cl_pwm_release(FAR struct bl616cl_pwm_lowerhalf_s *priv)
   priv->channel_enabled = false;
   priv->started = false;
 }
+
+/****************************************************************************
+ * Name: bl616cl_pwm_force_stop
+ *
+ * Description:
+ *   Stop the channel and counter, de-initialize the PWM block and release the
+ *   pin and clock. The stop state is checked after each step.
+ *
+ * Input Parameters:
+ *   priv - PWM lower-half state
+ *   operation - Operation being performed, used for test fault injection
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure. -ETIMEDOUT if the
+ *   counter did not report stopped.
+ *
+ ****************************************************************************/
 
 static int bl616cl_pwm_force_stop(FAR struct bl616cl_pwm_lowerhalf_s *priv,
                                   enum bl616cl_pwm_operation_e operation)
@@ -399,6 +568,22 @@ static int bl616cl_pwm_force_stop(FAR struct bl616cl_pwm_lowerhalf_s *priv,
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_pwm_validate
+ *
+ * Description:
+ *   Validate the requested PWM parameters: non-NULL info, non-zero frequency
+ *   and valid cpol and dcpol values.
+ *
+ * Input Parameters:
+ *   info - Requested PWM characteristics
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure. -EINVAL for
+ *   invalid parameters.
+ *
+ ****************************************************************************/
+
 static int bl616cl_pwm_validate(FAR const struct pwm_info_s *info)
 {
   if (info == NULL || info->frequency == 0 ||
@@ -410,6 +595,25 @@ static int bl616cl_pwm_validate(FAR const struct pwm_info_s *info)
 
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_pwm_readback
+ *
+ * Description:
+ *   Read back the PWM registers and check that they match the computed
+ *   solution and the requested polarity. Updates the cached divider, period
+ *   and actual frequency.
+ *
+ * Input Parameters:
+ *   priv - PWM lower-half state
+ *   info     - Requested PWM characteristics
+ *   solution - Divider, period and actual frequency that were programmed
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure. -EIO if a
+ *   register value or the resulting frequency differs from the request.
+ *
+ ****************************************************************************/
 
 static int bl616cl_pwm_readback(
   FAR struct bl616cl_pwm_lowerhalf_s *priv,
@@ -458,6 +662,23 @@ static int bl616cl_pwm_readback(
   return priv->actual_frequency == solution->actual ? OK : -EIO;
 }
 
+/****************************************************************************
+ * Name: bl616cl_pwm_threshold
+ *
+ * Description:
+ *   Convert a 16-bit duty value to a compare threshold for the given period.
+ *   Zero maps to 0, full scale maps to period - 1, others are rounded and
+ *   clamped below the period.
+ *
+ * Input Parameters:
+ *   duty   - Duty cycle, 0 to 65535
+ *   period - Counter period
+ *
+ * Returned Value:
+ *   The threshold value.
+ *
+ ****************************************************************************/
+
 static uint16_t bl616cl_pwm_threshold(uint16_t duty, uint16_t period)
 {
   uint32_t threshold;
@@ -475,6 +696,24 @@ static uint16_t bl616cl_pwm_threshold(uint16_t duty, uint16_t period)
   threshold = ((uint32_t)duty * period + 0x8000) >> 16;
   return threshold < period ? threshold : period - 1;
 }
+
+/****************************************************************************
+ * Name: bl616cl_pwm_channel_configure
+ *
+ * Description:
+ *   Configure the channel polarity, stop and brake states from the requested
+ *   cpol/dcpol, and program its threshold from the duty. Caches the polarity
+ *   settings.
+ *
+ * Input Parameters:
+ *   priv - PWM lower-half state
+ *   info   - Requested PWM characteristics
+ *   period - Counter period used to scale the duty
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
 
 static void bl616cl_pwm_channel_configure(
   FAR struct bl616cl_pwm_lowerhalf_s *priv,
@@ -510,6 +749,21 @@ static void bl616cl_pwm_channel_configure(
   priv->dcpol = info->dcpol;
 }
 
+/****************************************************************************
+ * Name: bl616cl_pwm_setup
+ *
+ * Description:
+ *   Implement the pwm_ops_s setup method. Enable the clock and put the block
+ *   in a known stopped state. Does nothing if already set up.
+ *
+ * Input Parameters:
+ *   lower - Lower-half PWM device structure
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
 static int bl616cl_pwm_setup(FAR struct pwm_lowerhalf_s *lower)
 {
   FAR struct bl616cl_pwm_lowerhalf_s *priv =
@@ -542,6 +796,22 @@ static int bl616cl_pwm_setup(FAR struct pwm_lowerhalf_s *lower)
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_pwm_shutdown
+ *
+ * Description:
+ *   Implement the pwm_ops_s shutdown method. Force the PWM output stopped and
+ *   release the pin and clock.
+ *
+ * Input Parameters:
+ *   lower - Lower-half PWM device structure
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure. -ETIMEDOUT if the
+ *   counter did not stop.
+ *
+ ****************************************************************************/
+
 static int bl616cl_pwm_shutdown(FAR struct pwm_lowerhalf_s *lower)
 {
   FAR struct bl616cl_pwm_lowerhalf_s *priv =
@@ -555,6 +825,27 @@ static int bl616cl_pwm_shutdown(FAR struct pwm_lowerhalf_s *lower)
   priv->initialized = false;
   return ret;
 }
+
+/****************************************************************************
+ * Name: bl616cl_pwm_start
+ *
+ * Description:
+ *   Implement the pwm_ops_s start method. Compute the divider and period,
+ *   then either update the running period and threshold in place (same
+ *   divider) or re-initialize and start the block. The registers are read
+ *   back to verify the result.
+ *
+ * Input Parameters:
+ *   lower - Lower-half PWM device structure
+ *   info  - Requested PWM characteristics
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure. Errors: -EINVAL
+ *   for invalid parameters; -ERANGE if the frequency cannot be generated;
+ *   -ETIMEDOUT if init or start did not take effect; -EIO on readback
+ *   mismatch.
+ *
+ ****************************************************************************/
 
 static int bl616cl_pwm_start(FAR struct pwm_lowerhalf_s *lower,
                              FAR const struct pwm_info_s *info)
@@ -669,6 +960,22 @@ static int bl616cl_pwm_start(FAR struct pwm_lowerhalf_s *lower,
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_pwm_stop
+ *
+ * Description:
+ *   Implement the pwm_ops_s stop method. Force the PWM output stopped and
+ *   release the pin and clock.
+ *
+ * Input Parameters:
+ *   lower - Lower-half PWM device structure
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure. -ETIMEDOUT if the
+ *   counter did not stop.
+ *
+ ****************************************************************************/
+
 static int bl616cl_pwm_stop(FAR struct pwm_lowerhalf_s *lower)
 {
   FAR struct bl616cl_pwm_lowerhalf_s *priv =
@@ -681,6 +988,23 @@ static int bl616cl_pwm_stop(FAR struct pwm_lowerhalf_s *lower)
                                 BL616CL_PWM_OPERATION_STOP);
 }
 
+/****************************************************************************
+ * Name: bl616cl_pwm_ioctl
+ *
+ * Description:
+ *   Implement the pwm_ops_s ioctl method. No device-specific commands are
+ *   supported.
+ *
+ * Input Parameters:
+ *   lower - Lower-half PWM device structure
+ *   cmd   - The ioctl command
+ *   arg   - The ioctl argument
+ *
+ * Returned Value:
+ *   -ENOTTY always.
+ *
+ ****************************************************************************/
+
 static int bl616cl_pwm_ioctl(FAR struct pwm_lowerhalf_s *lower, int cmd,
                              unsigned long arg)
 {
@@ -692,6 +1016,23 @@ static int bl616cl_pwm_ioctl(FAR struct pwm_lowerhalf_s *lower, int cmd,
 
 /****************************************************************************
  * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: bl616cl_pwm_initialize
+ *
+ * Description:
+ *   Get the PWM lower half. Only the fixed channel and pin of this port are
+ *   supported. Looks up the PWM and GPIO devices.
+ *
+ * Input Parameters:
+ *   channel - PWM channel number; must be BL616CL_PWM_CHANNEL
+ *   pin     - GPIO pin number; must be BL616CL_PWM_PIN
+ *
+ * Returned Value:
+ *   A pointer to the PWM lower half on success; NULL if the channel or pin is
+ *   unsupported or a device lookup fails.
+ *
  ****************************************************************************/
 
 FAR struct pwm_lowerhalf_s *bl616cl_pwm_initialize(uint8_t channel,
@@ -713,6 +1054,20 @@ FAR struct pwm_lowerhalf_s *bl616cl_pwm_initialize(uint8_t channel,
 }
 
 #ifdef CONFIG_BL616CL_PWM_TEST
+/****************************************************************************
+ * Name: bl616cl_pwm_test_reset
+ *
+ * Description:
+ *   Clear the test fault, call counters and last error.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 void bl616cl_pwm_test_reset(void)
 {
   g_bl616cl_pwm.fault = BL616CL_PWM_TEST_FAULT_NONE;
@@ -723,6 +1078,21 @@ void bl616cl_pwm_test_reset(void)
   g_bl616cl_pwm.error_count = 0;
   g_bl616cl_pwm.last_error = OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_pwm_test_set_fault
+ *
+ * Description:
+ *   Select the fault to inject into later operations.
+ *
+ * Input Parameters:
+ *   fault - Fault to inject, BL616CL_PWM_TEST_FAULT_NONE to disable
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure. -EINVAL if the
+ *   fault value is out of range.
+ *
+ ****************************************************************************/
 
 int bl616cl_pwm_test_set_fault(enum bl616cl_pwm_test_fault_e fault)
 {
@@ -735,6 +1105,23 @@ int bl616cl_pwm_test_set_fault(enum bl616cl_pwm_test_fault_e fault)
   g_bl616cl_pwm.fault = fault;
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_pwm_test_get_diag
+ *
+ * Description:
+ *   Copy the call counters, last error, cached settings and the current
+ *   polarity state to a diagnostics structure. Polarity is read from the
+ *   registers while the clock is enabled.
+ *
+ * Input Parameters:
+ *   diag - Location that receives the diagnostics
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure. -EINVAL if diag
+ *   is NULL.
+ *
+ ****************************************************************************/
 
 int bl616cl_pwm_test_get_diag(FAR struct bl616cl_pwm_test_diag_s *diag)
 {

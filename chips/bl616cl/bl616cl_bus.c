@@ -49,6 +49,19 @@
 
 /****************************************************************************
  * Name: bl616cl_bus_error_interrupt
+ *
+ * Description:
+ *   Bus error and bus timeout interrupt handler. Both events are treated as
+ *   fatal and cause a PANIC().
+ *
+ * Input Parameters:
+ *   irq - IRQ number (unused)
+ *   context - Interrupt register context (unused)
+ *   arg - Handler argument (unused)
+ *
+ * Returned Value:
+ *   OK; PANIC() does not normally return.
+ *
  ****************************************************************************/
 
 static int bl616cl_bus_error_interrupt(int irq, void *context, void *arg)
@@ -63,6 +76,17 @@ static int bl616cl_bus_error_interrupt(int irq, void *context, void *arg)
 
 /****************************************************************************
  * Name: bl616cl_bus_error_enable
+ *
+ * Description:
+ *   Disable the bus decoder error and enable the MCU infrastructure bus
+ *   timeout in MCU_BUS_CFG0.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 static void bl616cl_bus_error_enable(void)
@@ -87,6 +111,15 @@ static void bl616cl_bus_error_enable(void)
  *
  * Description:
  *   Enable BL616CL MCU bus error and timeout traps after core bring-up.
+ *   Attach the panic handler to the BMX MCU bus error and timeout interrupts,
+ *   enable the bus timeout and enable both interrupts.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   Errors are returned by irq_attach().
  *
  ****************************************************************************/
 

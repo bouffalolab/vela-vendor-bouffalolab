@@ -133,17 +133,17 @@ static struct bl616cl_wdt_lowerhalf_s g_bl616cl_wdtdev =
  ****************************************************************************/
 
 /****************************************************************************
- * Name: bl616cl_wdt_start
+ * Name: bl616cl_wdt_ms_to_ticks
  *
  * Description:
- *   Start the watchdog timer, resetting the counter to the current timeout.
+ *   Convert a timeout in milliseconds to WDT compare ticks at the 1024 Hz
+ *   WDT clock, rounding up.
  *
  * Input Parameters:
- *   lower - A pointer the publicly visible representation of the
- *           "lower-half" driver state structure.
+ *   timeout - Timeout in milliseconds.
  *
- * Returned Values:
- *   Zero on success; a negated errno value on failure.
+ * Returned Value:
+ *   The compare value in WDT clock ticks, truncated to 16 bits.
  *
  ****************************************************************************/
 
@@ -155,6 +155,23 @@ static uint16_t bl616cl_wdt_ms_to_ticks(uint32_t timeout)
 }
 
 #ifdef CONFIG_BL616CL_WDT_CAPTURE
+/****************************************************************************
+ * Name: bl616cl_wdt_set_action
+ *
+ * Description:
+ *   Select the action taken when the WDT compare matches: interrupt
+ *   (capture) or chip reset. The WMER write is unlocked with the access keys
+ *   first.
+ *
+ * Input Parameters:
+ *   priv - Pointer to the WDT lower-half driver state.
+ *   capture - True: raise an interrupt only; false: reset the chip.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 static void bl616cl_wdt_set_action(
   struct bl616cl_wdt_lowerhalf_s *priv, bool capture)
 {
@@ -177,6 +194,21 @@ static void bl616cl_wdt_set_action(
 }
 #endif
 
+/****************************************************************************
+ * Name: bl616cl_wdt_clear_irq
+ *
+ * Description:
+ *   Clear the WDT compare interrupt flag and, when capture support is
+ *   enabled, the pending interrupt at the interrupt controller.
+ *
+ * Input Parameters:
+ *   priv - Pointer to the WDT lower-half driver state.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 static void bl616cl_wdt_clear_irq(
   struct bl616cl_wdt_lowerhalf_s *priv)
 {
@@ -185,6 +217,22 @@ static void bl616cl_wdt_clear_irq(
   bflb_irq_clear_pending(priv->wdg->irq_num);
 #endif
 }
+
+/****************************************************************************
+ * Name: bl616cl_wdt_configure
+ *
+ * Description:
+ *   Program the WDT with the 32 kHz clock source and divider, the compare
+ *   value derived from priv->timeout, and interrupt mode if a capture
+ *   handler is set, otherwise reset mode.
+ *
+ * Input Parameters:
+ *   priv - Pointer to the WDT lower-half driver state.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
 
 static void bl616cl_wdt_configure(struct bl616cl_wdt_lowerhalf_s *priv)
 {
@@ -201,6 +249,22 @@ static void bl616cl_wdt_configure(struct bl616cl_wdt_lowerhalf_s *priv)
 #endif
   bflb_wdg_init(priv->wdg, &cfg);
 }
+
+/****************************************************************************
+ * Name: bl616cl_wdt_start
+ *
+ * Description:
+ *   Start the watchdog timer, resetting the counter to the current timeout.
+ *
+ * Input Parameters:
+ *   lower - A pointer the publicly visible representation of the
+ *           "lower-half" driver state structure.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure (-EBUSY if
+ *   the watchdog is already started).
+ *
+ ****************************************************************************/
 
 static int bl616cl_wdt_start(struct watchdog_lowerhalf_s *lower)
 {
@@ -445,6 +509,24 @@ static int bl616cl_wdt_settimeout(struct watchdog_lowerhalf_s *lower,
 }
 
 #ifdef CONFIG_BL616CL_WDT_CAPTURE
+/****************************************************************************
+ * Name: bl616cl_wdt_handler
+ *
+ * Description:
+ *   WDT compare interrupt handler. Clear the interrupt flag and pending
+ *   state, then invoke the registered capture handler with the upper-half
+ *   handle.
+ *
+ * Input Parameters:
+ *   irq - The IRQ number.
+ *   context - The interrupt register context.
+ *   arg - Pointer to the WDT lower-half driver state.
+ *
+ * Returned Value:
+ *   OK is always returned.
+ *
+ ****************************************************************************/
+
 static int bl616cl_wdt_handler(int irq, void *context, void *arg)
 {
   struct bl616cl_wdt_lowerhalf_s *priv = arg;
@@ -462,6 +544,25 @@ static int bl616cl_wdt_handler(int irq, void *context, void *arg)
 
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_wdt_capture
+ *
+ * Description:
+ *   Implement the watchdog_ops_s capture operation. Register or remove
+ *   (NULL) the capture callback. If the WDT is running, switch the compare
+ *   action between interrupt and reset accordingly and enable or disable the
+ *   IRQ.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the "lower-
+ *       half" driver state structure.
+ *   handler - The new capture handler, or NULL to restore reset mode.
+ *
+ * Returned Value:
+ *   The previously registered handler, or NULL if none.
+ *
+ ****************************************************************************/
 
 static xcpt_t bl616cl_wdt_capture(struct watchdog_lowerhalf_s *lower,
                                   xcpt_t handler)

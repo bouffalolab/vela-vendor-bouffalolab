@@ -50,6 +50,21 @@
 #if defined(CONFIG_BL616CL_UART0) || defined(CONFIG_BL616CL_UART1)
 static bool g_uart_clock_configured;
 
+/****************************************************************************
+ * Name: bl616cl_data_bits
+ *
+ * Description:
+ *   Map a data bit count to the lhal UART_DATA_BITS_* value. Counts of 5, 6
+ *   and 7 map to their own values; any other count maps to 8 bits.
+ *
+ * Input Parameters:
+ *   bits - Number of data bits.
+ *
+ * Returned Value:
+ *   The lhal UART_DATA_BITS_* value.
+ *
+ ****************************************************************************/
+
 static uint8_t bl616cl_data_bits(uint8_t bits)
 {
   switch (bits)
@@ -67,6 +82,24 @@ static uint8_t bl616cl_data_bits(uint8_t bits)
         return UART_DATA_BITS_8;
     }
 }
+
+/****************************************************************************
+ * Name: bl616cl_uart_clock_enable
+ *
+ * Description:
+ *   Enable the peripheral clock of a UART and, on the first call, set the
+ *   shared UART clock source to XCLK with GLB_Set_UART_CLK().
+ *
+ * Input Parameters:
+ *   id - UART index, 0 or 1.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -EINVAL - id is not 0 or 1.
+ *     -EIO    - GLB_Set_UART_CLK() failed.
+ *
+ ****************************************************************************/
 
 static int bl616cl_uart_clock_enable(uint8_t id)
 {
@@ -109,6 +142,20 @@ static int bl616cl_uart_clock_enable(uint8_t id)
 
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_uart_name
+ *
+ * Description:
+ *   Look up the lhal device name of a UART.
+ *
+ * Input Parameters:
+ *   id - UART index, 0 or 1.
+ *
+ * Returned Value:
+ *   BFLB_NAME_UART0 or BFLB_NAME_UART1; NULL if id is not valid.
+ *
+ ****************************************************************************/
 
 static const char *bl616cl_uart_name(uint8_t id)
 {
@@ -169,6 +216,21 @@ struct bl616cl_uart_s g_uart1_config =
  *
  * Description:
  *   Configure a UART for non-DMA operation.
+ *
+ *   Enable the UART clock, route the TX and RX pins (after disabling their
+ *   GPIO keep setting), look up the lhal device and initialize it from the
+ *   settings in config with no flow control and LSB first bit order.
+ *
+ * Input Parameters:
+ *   config - UART configuration. On success config->device is set to the lhal
+ *            UART device.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -EIO    - The UART clock could not be enabled.
+ *     -ENODEV - The GPIO or UART lhal device was not found.
+ *     -ENOSYS - Neither CONFIG_BL616CL_UART0 nor CONFIG_BL616CL_UART1 is set.
  *
  ****************************************************************************/
 
@@ -232,6 +294,16 @@ int bl616cl_lowputc_config(struct bl616cl_uart_s *config)
  * Description:
  *   Output one byte on the serial console.
  *
+ *   Implements the RISC-V architecture hook used for early console output.
+ *   It is active only when UART0 is the serial console; UART0 is set up with
+ *   bl616cl_lowsetup() on first use.  Otherwise it does nothing.
+ *
+ * Input Parameters:
+ *   ch - Character to output.
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
 void riscv_lowputc(char ch)
@@ -251,6 +323,18 @@ void riscv_lowputc(char ch)
 
 /****************************************************************************
  * Name: bl616cl_pinmux_early_uart
+ *
+ * Description:
+ *   Write 0xffffffff to GLB_UART_CFG1 and 0x0000ffff to GLB_UART_CFG2, then
+ *   disable the HBN hardware pull-up/pull-down configuration. Called from
+ *   __bl616cl_start() before riscv_earlyserialinit().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
+ *
  ****************************************************************************/
 
 void bl616cl_pinmux_early_uart(void)
@@ -267,6 +351,16 @@ void bl616cl_pinmux_early_uart(void)
  * Description:
  *   Initialize the serial console before the full serial driver is
  *   registered.
+ *
+ *   UART0 is configured with bl616cl_lowputc_config() only when it is the
+ *   serial console and CONFIG_SUPPRESS_UART_CONFIG is not set.  Otherwise
+ *   it does nothing.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None.
  *
  ****************************************************************************/
 

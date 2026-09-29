@@ -144,7 +144,13 @@ static sem_t g_wifi_wait_connect_sem = SEM_INITIALIZER(0);
  * Name: nibble2hex
  *
  * Description:
- *  Convert a binary nibble to a hexadecimal character.
+ *   Convert a binary nibble to a hexadecimal character.
+ *
+ * Input Parameters:
+ *   nibble - Value 0-15 to convert.
+ *
+ * Returned Value:
+ *   The upper-case hex character ('0'-'9', 'A'-'F').
  *
  ****************************************************************************/
 
@@ -162,6 +168,20 @@ static char nibble2hex(unsigned char nibble)
 
 /****************************************************************************
  * Name: bin2hex
+ *
+ * Description:
+ *   Convert a byte buffer to an upper-case hexadecimal string. At most
+ *   hexlen / 2 bytes are converted; no NUL terminator is written.
+ *
+ * Input Parameters:
+ *   buf    - Binary input buffer.
+ *   buflen - Number of input bytes.
+ *   hex    - Output buffer for the hex characters.
+ *   hexlen - Size of the output buffer in characters.
+ *
+ * Returned Value:
+ *   The number of input bytes converted.
+ *
  ****************************************************************************/
 
 static size_t bin2hex(const uint8_t *buf,
@@ -421,16 +441,19 @@ static inline uint16_t bl616cl_channel_to_freq(int channel)
 }
 
 /****************************************************************************
- * Function: format_scan_result_to_wapi
+ * Name: rssi_compare
  *
  * Description:
- *   scan result from wifiMgmr to wapi
+ *   qsort() comparator for the scan result pointer list. Orders items by
+ *   ascending RSSI.
  *
  * Input Parameters:
- *   req - Reference to iwreq
+ *   arg1 - Pointer to a list element (uintptr_t holding an item pointer).
+ *   arg2 - Pointer to a list element (uintptr_t holding an item pointer).
  *
  * Returned Value:
- *   OK or negative value.
+ *   Negative, zero or positive as the RSSI of arg1 is less than, equal to
+ *   or greater than that of arg2.
  *
  ****************************************************************************/
 
@@ -446,6 +469,25 @@ static int rssi_compare(const void *arg1, const void *arg2)
 
   return item1->rssi - item2->rssi;
 }
+
+/****************************************************************************
+ * Name: format_scan_result_to_wapi
+ *
+ * Description:
+ *   Scan result from wifiMgmr to wapi.  Removes the wl80211 scan result
+ *   items from the tree, sorts them by RSSI and formats them as iw events
+ *   into the caller buffer.  The removed items are freed before return.
+ *
+ * Input Parameters:
+ *   req - Reference to iwreq; u.data holds the output event buffer and
+ *         its length (updated to the bytes used on success).
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -ENOENT if there is no scan result; -E2BIG if the buffer is too small;
+ *   -ENOMEM if the sort list cannot be allocated.
+ *
+ ****************************************************************************/
 
 static int format_scan_result_to_wapi(struct iwreq *req)
 {
@@ -623,7 +665,10 @@ static void bl616cl_wifi_sta_clear_info(void)
  * Name: bl616cl_wifi_sta_set_quick_connect
  *
  * Description:
- *   Set quick connect flag
+ *   Set quick connect flag.  Currently a no-op.
+ *
+ * Input Parameters:
+ *   quick_connect - Quick connect flag (unused).
  *
  * Returned Value:
  *   None
@@ -638,7 +683,10 @@ static inline void bl616cl_wifi_sta_set_quick_connect(bool quick_connect)
  * Name: bl616cl_wifi_sta_set_lowrate_connect
  *
  * Description:
- *   Set low rate connect flag
+ *   Set low rate connect flag.  Currently a no-op.
+ *
+ * Input Parameters:
+ *   lowrate_connect - Low rate connect flag (unused).
  *
  * Returned Value:
  *   None
@@ -657,16 +705,17 @@ static inline void bl616cl_wifi_sta_set_lowrate_connect(bool lowrate_connect)
  * Name: __assert_func
  *
  * Description:
- *   Delete timer and free resource
+ *   Assert failure hook.  Logs the failed expression with its file, line
+ *   and function, then panics.
  *
  * Input Parameters:
- *   file  - assert file
- *   line  - assert line
- *   func  - assert function
- *   expr  - assert condition
+ *   file - Source file of the failed assertion.
+ *   line - Source line of the failed assertion.
+ *   func - Function containing the failed assertion.
+ *   expr - Text of the failed condition.
  *
  * Returned Value:
- *   None
+ *   None (does not return; PANIC() is called).
  *
  ****************************************************************************/
 
@@ -694,6 +743,22 @@ void __assert_func(const char *file, int line,
  * ***********************************************************************
  */
 
+/****************************************************************************
+ * Name: wifi_task_suspend
+ *
+ * Description:
+ *   macsw platform hook.  Suspend the Wi-Fi task until it is notified by
+ *   wifi_task_resume().  Waits on g_wifi_notify_sem, bracketed by the
+ *   coex_coord_on_wifi_suspend_enter()/coex_coord_on_wifi_wake() calls.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void wifi_task_suspend(void)
 {
   bool slept_committed = coex_coord_on_wifi_suspend_enter();
@@ -720,6 +785,22 @@ void wifi_task_suspend(void)
  * ***********************************************************************
  */
 
+/****************************************************************************
+ * Name: wifi_task_resume
+ *
+ * Description:
+ *   macsw platform hook.  Resume the Wi-Fi task by posting
+ *   g_wifi_notify_sem.  NuttX semaphores are the same in ISR and task
+ *   context, so isr is not used.  A post failure is only logged.
+ *
+ * Input Parameters:
+ *   isr - Whether called from interrupt context (unused).
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void wifi_task_resume(bool isr)
 {
   int ret;
@@ -738,13 +819,14 @@ void wifi_task_resume(bool isr)
  * Name: wifi_sys_now_ms
  *
  * Description:
- *   Get system time in milliseconds
+ *   macsw platform hook.  Get system time in milliseconds, from
+ *   CLOCK_MONOTONIC.
  *
  * Input Parameters:
- *   isr - Whether called from interrupt context
+ *   isr - Whether called from interrupt context (unused).
  *
  * Returned Value:
- *   System time in milliseconds
+ *   System time in milliseconds.
  *
  ****************************************************************************/
 
@@ -766,7 +848,7 @@ uint32_t wifi_sys_now_ms(bool isr)
  *   None
  *
  * Returned Value:
- *   0 if success or -1 if fail
+ *   Zero (OK); initialization failures are not reported.
  *
  ****************************************************************************/
 
@@ -909,6 +991,22 @@ void bl616cl_wifi_sta_register_txdone_cb(wifi_txdone_cb_t cb)
   internal_register_txdone_cb(bl616cl_wifi_sta_txdone);
 }
 
+/****************************************************************************
+ * Name: bl616cl_wifi_sta_txdone
+ *
+ * Description:
+ *   TX done notification passed to the macsw core by
+ *   bl616cl_wifi_sta_register_txdone_cb().  Invokes the registered
+ *   callback with a NULL argument, if any.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void bl616cl_wifi_sta_txdone(void)
 {
   if (g_sta_txdone_cb != NULL)
@@ -995,18 +1093,22 @@ int bl616cl_wifi_sta_read_mac(uint8_t *mac)
 }
 
 /****************************************************************************
- * Name: bl616cl_wifi_set_password
+ * Name: bl616cl_wifi_sta_password
  *
  * Description:
- *   Set/Get Wi-Fi station password
+ *   Set/Get Wi-Fi station password.  Serialized with
+ *   bl616cl_wifi_sta_connect() by the adapter lock.  Setting with
+ *   IW_ENCODE_ALG_NONE clears the password.  Getting reports
+ *   IW_ENCODE_ALG_CCMP, or NONE if no password is set.
  *
  * Input Parameters:
  *   iwr - The argument of the ioctl cmd
- *   set   - true: set data; false: get data
+ *   set - true: set data; false: get data
  *
  * Returned Value:
- *   OK on success (positive non-zero values are cmd-specific)
- *   Negated errno returned on failure.
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -EINVAL if the key is longer than PWD_MAX_LEN; other errors come from
+ *   the adapter lock.
  *
  ****************************************************************************/
 
@@ -1914,16 +2016,18 @@ int bl616cl_wifi_sta_scan(struct iwreq *iwr)
 }
 
 /****************************************************************************
- * Name: bl616cl_wifi_dtim
+ * Name: bl616cl_wifi_sta_dtim
  *
  * Description:
- *   Set/Get DTIM interval.
+ *   Set/Get DTIM interval.  The value is only stored in the adapter
+ *   configuration.
  *
  * Input Parameters:
  *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
  *
  * Returned Value:
- *   0 on success, negative errno on failure.
+ *   OK (zero) always.
  *
  ****************************************************************************/
 
@@ -1947,16 +2051,18 @@ int bl616cl_wifi_sta_dtim(struct iwreq *iwr, bool set)
 }
 
 /****************************************************************************
- * Name: bl616cl_wifi_powersave
+ * Name: bl616cl_wifi_sta_powersave
  *
  * Description:
- *   Set/Get power save mode.
+ *   Set/Get power save mode.  Setting enters or exits station power save
+ *   and then saves the mode in the adapter configuration.
  *
  * Input Parameters:
  *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
  *
  * Returned Value:
- *   0 on success, negative errno on failure.
+ *   OK (zero) always.
  *
  ****************************************************************************/
 
@@ -1993,15 +2099,20 @@ int bl616cl_wifi_sta_powersave(struct iwreq *iwr, bool set)
 /****************************************************************************
  * Name: bl616cl_wifi_sta_pmksa
  *
- * Description
- *   Set/Get PMKSA cache.
+ * Description:
+ *   Set/Get PMKSA cache.  Setting stores the given PMK.  Getting derives
+ *   the PMK from the saved password and SSID with PBKDF2-SHA1 and returns
+ *   it as a hex string; only WPA-PSK and WPA2-PSK connections support it.
  *
  * Input Parameters:
  *   iwr - The argument of the ioctl cmd
  *   set - true: set data; false: get data
  *
  * Returned Value:
- *   0 on success, negative errno on failure.
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -EINVAL if the PMK length is not PWD_MAX_LEN; -EIO if no password is
+ *   set or the key derivation fails; -ENOSYS if the security mode is not
+ *   supported.
  *
  ****************************************************************************/
 

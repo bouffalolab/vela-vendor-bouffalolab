@@ -48,6 +48,22 @@ static size_t g_psram_size;
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_psram_error
+ *
+ * Description:
+ *   Print a message on the early low-level console and pass an error code
+ *   through. Used because no console is available this early in startup.
+ *
+ * Input Parameters:
+ *   message - Null-terminated message to print
+ *   error - Negated errno value to return
+ *
+ * Returned Value:
+ *   The value of error.
+ *
+ ****************************************************************************/
+
 static int bl616cl_psram_error(const char *message, int error)
 {
   while (*message != '\0')
@@ -58,6 +74,21 @@ static int bl616cl_psram_error(const char *message, int error)
   return error;
 }
 
+/****************************************************************************
+ * Name: bl616cl_psram_release
+ *
+ * Description:
+ *   Clear the request bit in the PSRAM controller configuration register. The
+ *   SDK register operations do not release their request on timeout.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 static void bl616cl_psram_release(void)
 {
   /* The SDK register operations do not release their request on timeout. */
@@ -65,6 +96,23 @@ static void bl616cl_psram_release(void)
   modifyreg32(PSRAM_CTRL_BASE + PSRAM_CONFIGURE_OFFSET,
               PSRAM_REG_CONFIG_REQ_MSK, 0);
 }
+
+/****************************************************************************
+ * Name: bl616cl_psram_read_id
+ *
+ * Description:
+ *   Read the Winbond PSRAM ID register, retrying up to 100 times (1 us apart)
+ *   until the ID matches a supported 4, 8, 16 or 32 MB device.
+ *
+ * Input Parameters:
+ *   id - Location to receive the ID register value
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *   -ETIMEDOUT - the register read timed out.
+ *   -ENODEV - no supported ID was read.
+ *
+ ****************************************************************************/
 
 static int bl616cl_psram_read_id(uint16_t *id)
 {
@@ -90,6 +138,29 @@ static int bl616cl_psram_read_id(uint16_t *id)
 
   return -ENODEV;
 }
+
+/****************************************************************************
+ * Name: bl616cl_psram_configure
+ *
+ * Description:
+ *   Initialize the PSRAM controller for a 4 MB device, write the Winbond CR0
+ *   register and read the device ID. From the ID, choose the controller size
+ *   and drive strength and reinitialize for 4, 8 or 16 MB devices, then read
+ *   the ID again to verify it.
+ *
+ * Input Parameters:
+ *   ctrl - PSRAM controller configuration to update and apply
+ *   config - Winbond device configuration to update and write
+ *   size - Location to receive the detected size in bytes
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *   -ETIMEDOUT - a register access timed out.
+ *   -ENODEV - no supported ID was read.
+ *   -EFBIG - the device is larger than 16 MiB.
+ *   -EIO - the verification ID differs from the first ID.
+ *
+ ****************************************************************************/
 
 static int bl616cl_psram_configure(PSRAM_Ctrl_Cfg_Type *ctrl,
                                   PSRAM_Winbond_Cfg_Type *config,
@@ -148,6 +219,22 @@ static int bl616cl_psram_configure(PSRAM_Ctrl_Cfg_Type *ctrl,
   return ret < 0 ? ret : (verify_id == id ? 0 : -EIO);
 }
 
+/****************************************************************************
+ * Name: bl616cl_psram_calibration_pattern
+ *
+ * Description:
+ *   Destructive memory test of the first 4 MiB through the uncached alias.
+ *   Write an index-derived pattern and its complement in two passes and
+ *   verify each. It runs before the heap is registered.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   true if both passes verify; false on the first mismatch.
+ *
+ ****************************************************************************/
+
 static bool bl616cl_psram_calibration_pattern(void)
 {
   volatile uint32_t *memory = (uint32_t *)BL616CL_PSRAM_NOCACHE_BASE;
@@ -185,6 +272,24 @@ static bool bl616cl_psram_calibration_pattern(void)
 
   return true;
 }
+
+/****************************************************************************
+ * Name: bl616cl_psram_calibrate
+ *
+ * Description:
+ *   Calibrate the DQS delay. Try each of the 16 taps, configure the device
+ *   and run the calibration pattern, find the longest run of passing taps and
+ *   select its middle tap.
+ *
+ * Input Parameters:
+ *   ctrl - PSRAM controller configuration; dqs_delay is updated
+ *   config - Winbond device configuration
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -EIO if the longest passing run is shorter than 3
+ *   taps.
+ *
+ ****************************************************************************/
 
 static int bl616cl_psram_calibrate(PSRAM_Ctrl_Cfg_Type *ctrl,
                                   PSRAM_Winbond_Cfg_Type *config)
@@ -228,6 +333,29 @@ static int bl616cl_psram_calibrate(PSRAM_Ctrl_Cfg_Type *ctrl,
 
 /****************************************************************************
  * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: bl616cl_psram_initialize
+ *
+ * Description:
+ *   Initialize the on-package Winbond PSRAM during early startup. Check that
+ *   the chip has PSRAM, read the factory DQS trim from efuse (or calibrate
+ *   when there is none), power and clock the PSRAM, configure its GPIOs,
+ *   release TZC access, configure the device and record its size. Failures
+ *   are reported on the early console.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -ENODEV - the chip has no PSRAM or GPIO is unavailable.
+ *   -EINVAL - the factory trim is invalid.
+ *   -EIO - power or clock setup, calibration or verification failed.
+ *   Other errors are returned by the device configuration, for example -EFBIG
+ *   for a device larger than 16 MiB.
+ *
  ****************************************************************************/
 
 int bl616cl_psram_initialize(void)
@@ -335,6 +463,20 @@ int bl616cl_psram_initialize(void)
   g_psram_size = size;
   return 0;
 }
+
+/****************************************************************************
+ * Name: bl616cl_psram_size_get
+ *
+ * Description:
+ *   Return the PSRAM size detected by bl616cl_psram_initialize().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   The PSRAM size in bytes; zero if PSRAM is absent or not initialized.
+ *
+ ****************************************************************************/
 
 size_t bl616cl_psram_size_get(void)
 {

@@ -51,6 +51,20 @@
 
 /****************************************************************************
  * Name: __bl616cl_start
+ *
+ * Description:
+ *   C entry point of the BL616CL chip. Initialize the core, memory, flash,
+ *   PMP and caches, load sections and re-synchronize the caches, then
+ *   initialize flash, clocks, early UART pinmux and the early serial console,
+ *   and PSRAM if enabled, before calling nx_start(). Failures of PSRAM
+ *   initialization do not stop the boot.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None. This function does not return.
+ *
  ****************************************************************************/
 
 void __bl616cl_start(void)

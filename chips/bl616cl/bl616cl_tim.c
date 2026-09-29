@@ -130,10 +130,41 @@ static struct bl616cl_timer_lowerhalf_s g_bl616cl_timer1 =
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_timer_raw_compare
+ *
+ * Description:
+ *   Convert a timeout to the raw value written to the comparator: the timeout
+ *   minus 2.
+ *
+ * Input Parameters:
+ *   timeout - Timeout in timer counts (microseconds).
+ *
+ * Returned Value:
+ *   The raw comparator value.
+ *
+ ****************************************************************************/
+
 static uint32_t bl616cl_timer_raw_compare(uint32_t timeout)
 {
   return timeout - 2;
 }
+
+/****************************************************************************
+ * Name: bl616cl_timer_configure
+ *
+ * Description:
+ *   Initialize the hardware timer with bflb_timer_init(): preload counter
+ *   mode, XTAL clock with the configured divider, comparator 0 set to the
+ *   current timeout and the other comparators at their maximum.
+ *
+ * Input Parameters:
+ *   priv - Timer lower half to configure.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
 
 static void bl616cl_timer_configure(
   struct bl616cl_timer_lowerhalf_s *priv)
@@ -151,12 +182,42 @@ static void bl616cl_timer_configure(
   bflb_timer_init(priv->dev, &config);
 }
 
+/****************************************************************************
+ * Name: bl616cl_timer_disable_irq
+ *
+ * Description:
+ *   Mask the comparator 0 interrupt and disable the timer interrupt line.
+ *
+ * Input Parameters:
+ *   priv - Timer lower half.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 static void bl616cl_timer_disable_irq(
   struct bl616cl_timer_lowerhalf_s *priv)
 {
   bflb_timer_compint_mask(priv->dev, TIMER_COMP_ID_0, true);
   bflb_irq_disable(priv->dev->irq_num);
 }
+
+/****************************************************************************
+ * Name: bl616cl_timer_stop_locked
+ *
+ * Description:
+ *   Stop the timer: disable and detach the interrupt, stop the hardware and
+ *   increment the generation count so that a running callback notices the
+ *   change. The caller must be in a critical section.
+ *
+ * Input Parameters:
+ *   priv - Timer lower half.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
 
 static void bl616cl_timer_stop_locked(
   struct bl616cl_timer_lowerhalf_s *priv)
@@ -167,6 +228,26 @@ static void bl616cl_timer_stop_locked(
   priv->started = false;
   priv->generation++;
 }
+
+/****************************************************************************
+ * Name: bl616cl_timer_handler
+ *
+ * Description:
+ *   Timer comparator interrupt handler. Acknowledge the interrupt and call
+ *   the registered callback outside the critical section. If the callback
+ *   returns false the timer is stopped; otherwise the timeout is updated to
+ *   the interval it returned when that is at least BL616CL_TIMER_MIN_TIMEOUT.
+ *   Nothing is changed if the timer was stopped or reconfigured during the
+ *   callback.
+ *
+ * Input Parameters:
+ *   irq - IRQ number (unused).
+ *   arg - The bl616cl_timer_lowerhalf_s instance.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
 
 static void bl616cl_timer_handler(int irq, void *arg)
 {
@@ -216,6 +297,27 @@ static void bl616cl_timer_handler(int irq, void *arg)
 
   leave_critical_section(flags);
 }
+
+/****************************************************************************
+ * Name: bl616cl_timer_start
+ *
+ * Description:
+ *   Implement the timer_ops_s start method. Configure the hardware, attach
+ *   and enable the interrupt if a callback is registered, and start the
+ *   timer.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the timer
+ *           lower half.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -EBUSY  - The timer is already started.
+ *     -EINVAL - The timeout is below BL616CL_TIMER_MIN_TIMEOUT.
+ *     Other errors are returned from bflb_irq_attach().
+ *
+ ****************************************************************************/
 
 static int bl616cl_timer_start(struct timer_lowerhalf_s *lower)
 {
@@ -269,6 +371,21 @@ static int bl616cl_timer_start(struct timer_lowerhalf_s *lower)
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_timer_stop
+ *
+ * Description:
+ *   Implement the timer_ops_s stop method.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the timer
+ *           lower half.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ENODEV if the timer is not started.
+ *
+ ****************************************************************************/
+
 static int bl616cl_timer_stop(struct timer_lowerhalf_s *lower)
 {
   struct bl616cl_timer_lowerhalf_s *priv =
@@ -288,6 +405,23 @@ static int bl616cl_timer_stop(struct timer_lowerhalf_s *lower)
   leave_critical_section(flags);
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_timer_getstatus
+ *
+ * Description:
+ *   Implement the timer_ops_s getstatus method. Report the TCFLAGS_ACTIVE and
+ *   TCFLAGS_HANDLER flags, the timeout and the time left, in microseconds.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the timer
+ *           lower half.
+ *   status - Location to return the timer status.
+ *
+ * Returned Value:
+ *   Always OK.
+ *
+ ****************************************************************************/
 
 static int bl616cl_timer_getstatus(struct timer_lowerhalf_s *lower,
                                    struct timer_status_s *status)
@@ -329,6 +463,24 @@ static int bl616cl_timer_getstatus(struct timer_lowerhalf_s *lower,
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_timer_settimeout
+ *
+ * Description:
+ *   Implement the timer_ops_s settimeout method. If the timer is running it
+ *   is stopped, reconfigured with the new timeout and started again.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the timer
+ *           lower half.
+ *   timeout - The new timeout in microseconds.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -EINVAL if the timeout is below
+ *   BL616CL_TIMER_MIN_TIMEOUT.
+ *
+ ****************************************************************************/
+
 static int bl616cl_timer_settimeout(struct timer_lowerhalf_s *lower,
                                     uint32_t timeout)
 {
@@ -361,6 +513,26 @@ static int bl616cl_timer_settimeout(struct timer_lowerhalf_s *lower,
   leave_critical_section(flags);
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_timer_setcallback
+ *
+ * Description:
+ *   Implement the timer_ops_s setcallback method. If the timer is running,
+ *   the interrupt is attached and enabled for a non-NULL callback, or
+ *   disabled and detached for a NULL one. An interrupt attach failure is
+ *   logged and the callback is not changed.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the timer
+ *           lower half.
+ *   callback - The new timer expiration function, or NULL to remove it.
+ *   arg - Argument passed to the callback.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
 
 static void bl616cl_timer_setcallback(struct timer_lowerhalf_s *lower,
                                       tccb_t callback, void *arg)
@@ -410,6 +582,30 @@ static void bl616cl_timer_setcallback(struct timer_lowerhalf_s *lower,
     }
 }
 
+/****************************************************************************
+ * Name: bl616cl_timer_ioctl
+ *
+ * Description:
+ *   Implement the timer_ops_s ioctl method. The only supported command is
+ *   BL616CL_TCIOC_SETCLOCKDIV, which sets the timer clock divider and can be
+ *   used only while the timer is stopped.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the timer
+ *           lower half.
+ *   cmd - The ioctl command.
+ *   arg - The command argument; for BL616CL_TCIOC_SETCLOCKDIV the divider
+ *         value (0 to 255).
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -EBUSY  - The timer is running.
+ *     -EINVAL - The divider is larger than 255.
+ *     -ENOTTY - The command is not supported.
+ *
+ ****************************************************************************/
+
 static int bl616cl_timer_ioctl(struct timer_lowerhalf_s *lower, int cmd,
                                unsigned long arg)
 {
@@ -442,6 +638,22 @@ out:
   return ret;
 }
 
+/****************************************************************************
+ * Name: bl616cl_timer_maxtimeout
+ *
+ * Description:
+ *   Implement the timer_ops_s maxtimeout method.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the timer
+ *           lower half.
+ *   maxtimeout - Location to return the maximum timeout in microseconds.
+ *
+ * Returned Value:
+ *   Always OK.
+ *
+ ****************************************************************************/
+
 static int bl616cl_timer_maxtimeout(struct timer_lowerhalf_s *lower,
                                     uint32_t *maxtimeout)
 {
@@ -451,12 +663,43 @@ static int bl616cl_timer_maxtimeout(struct timer_lowerhalf_s *lower,
   return OK;
 }
 
+/****************************************************************************
+ * Name: bl616cl_timer_usec_to_ticks
+ *
+ * Description:
+ *   Convert microseconds to system clock ticks, rounding up.
+ *
+ * Input Parameters:
+ *   usec - Time in microseconds.
+ *
+ * Returned Value:
+ *   The time in system ticks (USEC_PER_TICK microseconds each).
+ *
+ ****************************************************************************/
+
 static uint32_t bl616cl_timer_usec_to_ticks(uint32_t usec)
 {
   uint32_t tick_usec = (uint32_t)USEC_PER_TICK;
 
   return usec / tick_usec + (usec % tick_usec != 0);
 }
+
+/****************************************************************************
+ * Name: bl616cl_timer_tick_getstatus
+ *
+ * Description:
+ *   Implement the timer_ops_s tick_getstatus method. Get the status in
+ *   microseconds and convert the timeout and time left to system ticks.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the timer
+ *           lower half.
+ *   status - Location to return the timer status.
+ *
+ * Returned Value:
+ *   The result of bl616cl_timer_getstatus().
+ *
+ ****************************************************************************/
 
 static int bl616cl_timer_tick_getstatus(struct timer_lowerhalf_s *lower,
                                         struct timer_status_s *status)
@@ -472,6 +715,26 @@ static int bl616cl_timer_tick_getstatus(struct timer_lowerhalf_s *lower,
 
   return ret;
 }
+
+/****************************************************************************
+ * Name: bl616cl_timer_tick_settimeout
+ *
+ * Description:
+ *   Implement the timer_ops_s tick_settimeout method. Convert the timeout
+ *   from system ticks to microseconds and set it.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the timer
+ *           lower half.
+ *   timeout - The new timeout in system ticks.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -EINVAL - The timeout is zero.
+ *     -ERANGE - The timeout does not fit in 32 bits of microseconds.
+ *
+ ****************************************************************************/
 
 static int bl616cl_timer_tick_settimeout(struct timer_lowerhalf_s *lower,
                                          uint32_t timeout)
@@ -491,6 +754,22 @@ static int bl616cl_timer_tick_settimeout(struct timer_lowerhalf_s *lower,
   return bl616cl_timer_settimeout(lower, timeout * tick_usec);
 }
 
+/****************************************************************************
+ * Name: bl616cl_timer_tick_maxtimeout
+ *
+ * Description:
+ *   Implement the timer_ops_s tick_maxtimeout method.
+ *
+ * Input Parameters:
+ *   lower - A pointer to the publicly visible representation of the timer
+ *           lower half.
+ *   maxtimeout - Location to return the maximum timeout in system ticks.
+ *
+ * Returned Value:
+ *   Always OK.
+ *
+ ****************************************************************************/
+
 static int bl616cl_timer_tick_maxtimeout(struct timer_lowerhalf_s *lower,
                                          uint32_t *maxtimeout)
 {
@@ -502,6 +781,28 @@ static int bl616cl_timer_tick_maxtimeout(struct timer_lowerhalf_s *lower,
 
 /****************************************************************************
  * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: bl616cl_timer_initialize
+ *
+ * Description:
+ *   Register a hardware timer as a timer driver device. Enable the timer
+ *   0/1/watchdog peripheral clock, stop the timer with its interrupt masked
+ *   and register it with timer_register().
+ *
+ * Input Parameters:
+ *   devpath - The device path to register, for example /dev/timer0.
+ *   timer - Timer index: 0 for TIMER0 or 1 for TIMER1; it must be enabled by
+ *           CONFIG_BL616CL_TIMER0 or CONFIG_BL616CL_TIMER1.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure:
+ *
+ *     -ENODEV - The timer is not enabled in the configuration or its lhal
+ *               device was not found.
+ *     -EEXIST - timer_register() failed.
+ *
  ****************************************************************************/
 
 int bl616cl_timer_initialize(const char *devpath, uint8_t timer)
@@ -545,6 +846,21 @@ int bl616cl_timer_initialize(const char *devpath, uint8_t timer)
 }
 
 #ifdef CONFIG_BL616CL_TIMER_TEST
+/****************************************************************************
+ * Name: bl616cl_timer_test_lower
+ *
+ * Description:
+ *   Return the lower half of a timer so that test code can call its
+ *   operations directly. Available only with CONFIG_BL616CL_TIMER_TEST.
+ *
+ * Input Parameters:
+ *   timer - Timer index, 0 or 1.
+ *
+ * Returned Value:
+ *   The timer lower half; NULL if that timer is not enabled.
+ *
+ ****************************************************************************/
+
 struct timer_lowerhalf_s *bl616cl_timer_test_lower(uint8_t timer)
 {
   switch (timer)

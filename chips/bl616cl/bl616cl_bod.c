@@ -41,6 +41,19 @@
 
 /****************************************************************************
  * Name: bl616cl_bod_interrupt
+ *
+ * Description:
+ *   Brown-out detector interrupt handler. A brown-out is treated as fatal and
+ *   causes a PANIC().
+ *
+ * Input Parameters:
+ *   irq - IRQ number (unused)
+ *   context - Interrupt register context (unused)
+ *   arg - Handler argument (unused)
+ *
+ * Returned Value:
+ *   OK; PANIC() does not normally return.
+ *
  ****************************************************************************/
 
 static int bl616cl_bod_interrupt(int irq, void *context, void *arg)
@@ -61,7 +74,17 @@ static int bl616cl_bod_interrupt(int irq, void *context, void *arg)
  * Name: bl616cl_bod_initialize
  *
  * Description:
- *   Enable the BL616CL brown-out detector using the SDK HBN hook.
+ *   Enable the BL616CL brown-out detector using the SDK HBN hook. The
+ *   threshold is 2.4 V, the interrupt is enabled and POR is independent of
+ *   BOD. The interrupt handler panics the system.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -EIO - HBN_Set_BOD_Cfg() failed.
+ *   Other errors are returned by irq_attach().
  *
  ****************************************************************************/
 

@@ -38,6 +38,24 @@
  * Public Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: riscv_dispatch_irq
+ *
+ * Description:
+ *   NuttX RISC-V architecture interface: decode mcause into a NuttX IRQ
+ *   number (adding RISCV_IRQ_ASYNC for interrupts), acknowledge it and
+ *   dispatch it. With CONFIG_BL616CL_PERFMON the dispatch goes through
+ *   bl616cl_perfmon_dispatch(), otherwise directly to riscv_doirq().
+ *
+ * Input Parameters:
+ *   mcause - Value of the mcause CSR
+ *   regs - Saved register context of the interrupted code
+ *
+ * Returned Value:
+ *   The register context to restore on return from the interrupt.
+ *
+ ****************************************************************************/
+
 void *riscv_dispatch_irq(uintreg_t mcause, uintreg_t *regs)
 {
   int irq = mcause & 0xfff;

@@ -167,11 +167,42 @@ BL616CL_CHECK_IRQ(BL616CL_IRQ_NUM_WDT1, BL616CL_IRQ_WDT1);
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_clic_int_addr
+ *
+ * Description:
+ *   Return the address of a per-interrupt CLIC register: CLIC_BASE plus the
+ *   clicint array offset, the irq stride and the register offset.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *   offset - Register offset within the per-interrupt clicint block
+ *
+ * Returned Value:
+ *   Address of the requested clicint register.
+ *
+ ****************************************************************************/
+
 static uintptr_t bl616cl_clic_int_addr(int irq, uintptr_t offset)
 {
   return CLIC_BASE + BL616CL_CLICINT_OFFSET +
          (irq * BL616CL_CLICINT_STRIDE) + offset;
 }
+
+/****************************************************************************
+ * Name: bl616cl_irq_raw_valid
+ *
+ * Description:
+ *   Check that a raw interrupt number lies in the CLIC range [0,
+ *   BL616CL_IRQ_CLIC_COUNT).
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   true if irq is a valid raw interrupt number; false otherwise.
+ *
+ ****************************************************************************/
 
 static bool bl616cl_irq_raw_valid(int irq)
 {
@@ -184,6 +215,17 @@ static bool bl616cl_irq_raw_valid(int irq)
 
 /****************************************************************************
  * Name: bl616cl_irq_raw_to_nuttx
+ *
+ * Description:
+ *   Convert a raw SDK/CLIC interrupt number to the NuttX IRQ number by adding
+ *   RISCV_IRQ_ASYNC.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   The NuttX IRQ number. The input is not range checked.
+ *
  ****************************************************************************/
 
 int bl616cl_irq_raw_to_nuttx(int irq)
@@ -193,6 +235,17 @@ int bl616cl_irq_raw_to_nuttx(int irq)
 
 /****************************************************************************
  * Name: bl616cl_irq_nuttx_to_raw
+ *
+ * Description:
+ *   Convert a NuttX IRQ number to the raw SDK/CLIC interrupt number by
+ *   subtracting RISCV_IRQ_ASYNC.
+ *
+ * Input Parameters:
+ *   irq - NuttX IRQ number
+ *
+ * Returned Value:
+ *   The raw interrupt number. The input is not range checked.
+ *
  ****************************************************************************/
 
 int bl616cl_irq_nuttx_to_raw(int irq)
@@ -202,6 +255,17 @@ int bl616cl_irq_nuttx_to_raw(int irq)
 
 /****************************************************************************
  * Name: bl616cl_clic_enable_raw
+ *
+ * Description:
+ *   Set the CLIC interrupt-enable bit of a raw interrupt. Out-of-range
+ *   numbers are ignored.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bl616cl_clic_enable_raw(int irq)
@@ -214,6 +278,17 @@ void bl616cl_clic_enable_raw(int irq)
 
 /****************************************************************************
  * Name: bl616cl_clic_disable_raw
+ *
+ * Description:
+ *   Clear the CLIC interrupt-enable bit of a raw interrupt. Out-of-range
+ *   numbers are ignored.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bl616cl_clic_disable_raw(int irq)
@@ -226,6 +301,17 @@ void bl616cl_clic_disable_raw(int irq)
 
 /****************************************************************************
  * Name: bl616cl_clic_set_pending_raw
+ *
+ * Description:
+ *   Set the CLIC pending bit of a raw interrupt, which triggers it in
+ *   software. Out-of-range numbers are ignored.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bl616cl_clic_set_pending_raw(int irq)
@@ -238,6 +324,17 @@ void bl616cl_clic_set_pending_raw(int irq)
 
 /****************************************************************************
  * Name: bl616cl_clic_clear_pending_raw
+ *
+ * Description:
+ *   Clear the CLIC pending bit of a raw interrupt. Out-of-range numbers are
+ *   ignored.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bl616cl_clic_clear_pending_raw(int irq)
@@ -250,6 +347,17 @@ void bl616cl_clic_clear_pending_raw(int irq)
 
 /****************************************************************************
  * Name: bl616cl_clic_set_nlbits
+ *
+ * Description:
+ *   Program the nlbits field of cliccfg, which splits the clicintctl bits
+ *   between preemption level and sub-priority.
+ *
+ * Input Parameters:
+ *   nlbits - Number of level bits; only the low 4 bits are used
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bl616cl_clic_set_nlbits(uint8_t nlbits)
@@ -262,6 +370,21 @@ void bl616cl_clic_set_nlbits(uint8_t nlbits)
 
 /****************************************************************************
  * Name: bl616cl_clic_set_priority_raw
+ *
+ * Description:
+ *   Update the clicintctl priority of a raw interrupt. The preemption level
+ *   is placed in the upper nlbits bits (nlbits read back from cliccfg, capped
+ *   at 8) and the sub-priority in the bits above the low nibble, which is
+ *   preserved. Out-of-range numbers are ignored.
+ *
+ * Input Parameters:
+ *   irq - Raw CLIC interrupt number (SDK numbering)
+ *   preemptprio - Preemption level
+ *   subprio - Sub-priority, masked to the bits left by nlbits
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bl616cl_clic_set_priority_raw(int irq, uint8_t preemptprio,
@@ -291,6 +414,21 @@ void bl616cl_clic_set_priority_raw(int irq, uint8_t preemptprio,
 
 /****************************************************************************
  * Name: up_irqinitialize
+ *
+ * Description:
+ *   NuttX architecture interface: initialize the interrupt controller. Masks
+ *   HBN GPIO wakeup sources and clears their status, reads the CLIC
+ *   clicintctlbits into nlbits, disables and clears every CLIC interrupt with
+ *   the default priority and level trigger attribute, sets edge trigger on
+ *   MSOFT and SDU_SOFT_RST, attaches the exception handlers and, unless
+ *   CONFIG_SUPPRESS_INTERRUPTS is set, enables interrupts.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void up_irqinitialize(void)
@@ -345,7 +483,16 @@ void up_irqinitialize(void)
  * Name: up_enable_irq
  *
  * Description:
- *   Enable the interrupt specified by 'irq'
+ *   NuttX architecture interface: enable the interrupt specified by irq. Also
+ *   sets the matching mie bit for MSOFT, MTIME and MEXT, then enables the
+ *   interrupt in the CLIC. IRQs below RISCV_IRQ_ASYNC are ignored; an
+ *   out-of-range IRQ triggers ASSERT.
+ *
+ * Input Parameters:
+ *   irq - NuttX IRQ number
+ *
+ * Returned Value:
+ *   None
  *
  ****************************************************************************/
 
@@ -385,7 +532,16 @@ void up_enable_irq(int irq)
  * Name: up_disable_irq
  *
  * Description:
- *   Disable the interrupt specified by 'irq'
+ *   NuttX architecture interface: disable the interrupt specified by irq.
+ *   Also clears the matching mie bit for MSOFT, MTIME and MEXT, then disables
+ *   the interrupt in the CLIC. IRQs below RISCV_IRQ_ASYNC are ignored; an
+ *   out-of-range IRQ triggers ASSERT.
+ *
+ * Input Parameters:
+ *   irq - NuttX IRQ number
+ *
+ * Returned Value:
+ *   None
  *
  ****************************************************************************/
 
@@ -425,7 +581,14 @@ void up_disable_irq(int irq)
  * Name: riscv_ack_irq
  *
  * Description:
- *   Acknowledge the IRQ
+ *   NuttX architecture interface: acknowledge the IRQ by clearing its CLIC
+ *   pending bit. IRQs below RISCV_IRQ_ASYNC are ignored.
+ *
+ * Input Parameters:
+ *   irq - NuttX IRQ number
+ *
+ * Returned Value:
+ *   None
  *
  ****************************************************************************/
 
@@ -444,6 +607,17 @@ void riscv_ack_irq(int irq)
 
 /****************************************************************************
  * Name: up_irq_enable
+ *
+ * Description:
+ *   NuttX architecture interface: enable MEXT in mie and set the global
+ *   interrupt enable bit in mstatus.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   The previous mstatus value, suitable for up_irq_restore().
+ *
  ****************************************************************************/
 
 irqstate_t up_irq_enable(void)

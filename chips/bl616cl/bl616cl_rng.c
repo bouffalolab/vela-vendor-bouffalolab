@@ -72,6 +72,22 @@ static const struct file_operations g_bl616cl_rng_fops =
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_rng_cleanup
+ *
+ * Description:
+ *   Stop the TRNG and leave it idle: clear the trigger bit, clear the
+ *   output register, disable the engine and clear its interrupt. Does
+ *   nothing if the device has not been obtained.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 static void bl616cl_rng_cleanup(void)
 {
   uintptr_t ctrladdr;
@@ -104,6 +120,21 @@ static void bl616cl_rng_cleanup(void)
   putreg32(regval, ctrladdr);
 }
 
+/****************************************************************************
+ * Name: bl616cl_rng_wait_idle
+ *
+ * Description:
+ *   Poll the TRNG busy bit until it clears, or until
+ *   BL616CL_TRNG_TIMEOUT_MS milliseconds have elapsed.
+ *
+ * Input Parameters:
+ *   ctrladdr - Address of the TRNG control register.
+ *
+ * Returned Value:
+ *   OK when the TRNG is idle; -ETIMEDOUT on timeout.
+ *
+ ****************************************************************************/
+
 static int bl616cl_rng_wait_idle(uintptr_t ctrladdr)
 {
   uint64_t start = bflb_mtimer_get_time_ms();
@@ -118,6 +149,21 @@ static int bl616cl_rng_wait_idle(uintptr_t ctrladdr)
 
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_rng_store_le32
+ *
+ * Description:
+ *   Store a 32-bit value into a byte buffer in little-endian order.
+ *
+ * Input Parameters:
+ *   dest - Destination buffer of at least four bytes.
+ *   value - Value to store.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
 
 static void bl616cl_rng_store_le32(FAR uint8_t *dest, uint32_t value)
 {
@@ -221,6 +267,27 @@ fail:
   return ret;
 }
 
+/****************************************************************************
+ * Name: bl616cl_rng_read
+ *
+ * Description:
+ *   Implement the file_operations read method of /dev/random and
+ *   /dev/urandom. Serialized by a mutex, it fills the buffer with 32-byte
+ *   TRNG blocks and wipes its stack copy afterward. A short read is
+ *   returned if a later block fails.
+ *
+ * Input Parameters:
+ *   filep - File structure instance (unused).
+ *   buffer - Buffer that receives the random bytes.
+ *   buflen - Number of bytes requested.
+ *
+ * Returned Value:
+ *   The number of bytes read; 0 if buflen is zero; -ENODEV if the TRNG is
+ *   not initialized; a negated errno value if no data could be generated
+ *   (mutex error, -ETIMEDOUT or -EIO).
+ *
+ ****************************************************************************/
+
 static ssize_t bl616cl_rng_read(FAR struct file *filep, FAR char *buffer,
                                 size_t buflen)
 {
@@ -272,6 +339,23 @@ static ssize_t bl616cl_rng_read(FAR struct file *filep, FAR char *buffer,
   return generated > 0 ? (ssize_t)generated : ret;
 }
 
+/****************************************************************************
+ * Name: bl616cl_rng_poll
+ *
+ * Description:
+ *   Implement the file_operations poll method. The device is always
+ *   readable, so POLLIN is notified immediately on setup.
+ *
+ * Input Parameters:
+ *   filep - File structure instance (unused).
+ *   fds - The poll structure to notify.
+ *   setup - True to set up the poll; false to tear it down.
+ *
+ * Returned Value:
+ *   OK, always.
+ *
+ ****************************************************************************/
+
 static int bl616cl_rng_poll(FAR struct file *filep, FAR struct pollfd *fds,
                             bool setup)
 {
@@ -284,6 +368,21 @@ static int bl616cl_rng_poll(FAR struct file *filep, FAR struct pollfd *fds,
 
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_rng_initialize
+ *
+ * Description:
+ *   Obtain the SEC TRNG device once, enable the SEC peripheral clock and
+ *   put the TRNG in its idle state. Later calls return OK immediately.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ENODEV if the TRNG device is unavailable.
+ *
+ ****************************************************************************/
 
 static int bl616cl_rng_initialize(void)
 {
@@ -303,6 +402,21 @@ static int bl616cl_rng_initialize(void)
   bl616cl_rng_cleanup();
   return OK;
 }
+
+/****************************************************************************
+ * Name: bl616cl_rng_register
+ *
+ * Description:
+ *   Initialize the TRNG and register it as a read-only character driver
+ *   using g_bl616cl_rng_fops. Failure is logged and not returned.
+ *
+ * Input Parameters:
+ *   path - Device node path to register.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
 
 static void bl616cl_rng_register(FAR const char *path)
 {
@@ -325,6 +439,21 @@ static void bl616cl_rng_register(FAR const char *path)
  ****************************************************************************/
 
 #ifdef CONFIG_DEV_RANDOM
+/****************************************************************************
+ * Name: devrandom_register
+ *
+ * Description:
+ *   Register /dev/random. Called by the NuttX core during initialization;
+ *   backed by the BL616CL TRNG.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void devrandom_register(void)
 {
   bl616cl_rng_register("/dev/random");
@@ -332,6 +461,21 @@ void devrandom_register(void)
 #endif
 
 #ifdef CONFIG_DEV_URANDOM_ARCH
+/****************************************************************************
+ * Name: devurandom_register
+ *
+ * Description:
+ *   Register /dev/urandom. Called by the NuttX core during
+ *   initialization; backed by the BL616CL TRNG.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
 void devurandom_register(void)
 {
   bl616cl_rng_register("/dev/urandom");

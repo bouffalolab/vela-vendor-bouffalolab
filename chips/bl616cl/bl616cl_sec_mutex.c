@@ -45,6 +45,17 @@ static mutex_t g_pka_mutex = NXMUTEX_INITIALIZER;
 
 /****************************************************************************
  * Name: bflb_sec_mutex_init
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_sec_mutex_init(). Nothing to do because
+ *   the mutexes are statically initialized.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
  ****************************************************************************/
 
 void bflb_sec_mutex_init(void)
@@ -54,6 +65,18 @@ void bflb_sec_mutex_init(void)
 
 /****************************************************************************
  * Name: bflb_sec_aes_mutex_take
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_sec_aes_mutex_take(). Lock the mutex that
+ *   serializes use of the AES engine.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure, as returned by
+ *   nxmutex_lock().
+ *
  ****************************************************************************/
 
 int bflb_sec_aes_mutex_take(void)
@@ -63,6 +86,18 @@ int bflb_sec_aes_mutex_take(void)
 
 /****************************************************************************
  * Name: bflb_sec_aes_mutex_give
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_sec_aes_mutex_give(). Unlock the AES
+ *   engine mutex.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure, as returned by
+ *   nxmutex_unlock().
+ *
  ****************************************************************************/
 
 int bflb_sec_aes_mutex_give(void)
@@ -72,6 +107,18 @@ int bflb_sec_aes_mutex_give(void)
 
 /****************************************************************************
  * Name: bflb_sec_sha_mutex_take
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_sec_sha_mutex_take(). Lock the mutex that
+ *   serializes use of the SHA engine.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure, as returned by
+ *   nxmutex_lock().
+ *
  ****************************************************************************/
 
 int bflb_sec_sha_mutex_take(void)
@@ -81,6 +128,18 @@ int bflb_sec_sha_mutex_take(void)
 
 /****************************************************************************
  * Name: bflb_sec_sha_mutex_give
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_sec_sha_mutex_give(). Unlock the SHA
+ *   engine mutex.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure, as returned by
+ *   nxmutex_unlock().
+ *
  ****************************************************************************/
 
 int bflb_sec_sha_mutex_give(void)
@@ -90,6 +149,18 @@ int bflb_sec_sha_mutex_give(void)
 
 /****************************************************************************
  * Name: bflb_sec_pka_mutex_take
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_sec_pka_mutex_take(). Lock the mutex that
+ *   serializes use of the PKA engine.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure, as returned by
+ *   nxmutex_lock().
+ *
  ****************************************************************************/
 
 int bflb_sec_pka_mutex_take(void)
@@ -99,6 +170,18 @@ int bflb_sec_pka_mutex_take(void)
 
 /****************************************************************************
  * Name: bflb_sec_pka_mutex_give
+ *
+ * Description:
+ *   Replaces the excluded lhal bflb_sec_pka_mutex_give(). Unlock the PKA
+ *   engine mutex.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure, as returned by
+ *   nxmutex_unlock().
+ *
  ****************************************************************************/
 
 int bflb_sec_pka_mutex_give(void)
@@ -110,7 +193,14 @@ int bflb_sec_pka_mutex_give(void)
  * Name: bl616cl_sec_mutex_init
  *
  * Description:
- *   Initialize the BouffaloLab security-engine mutex adapter.
+ *   Initialize the BouffaloLab security-engine mutex adapter by calling
+ *   bflb_sec_mutex_init().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
  *
  ****************************************************************************/
 
