@@ -86,6 +86,7 @@ static struct
 {
   int mode;
   uint8_t bssid[MAC_LEN];
+
   /* sta */
 
   char ssid[SSID_MAX_LEN];
@@ -101,26 +102,23 @@ static struct
   char pmk[PWD_MAX_LEN + 1];
 
   /* lower power */
+
   uint8_t dtim;
   bool powersave;
 
   /* ap not supported */
 } g_wifi_cfg;
 
-/* wifi mgmr handle */
-
-
 /* Wi-Fi event private data */
 
 static mutex_t g_wifiexcl_lock = NXMUTEX_INITIALIZER;
 
-/* Wi-Fi adapter reference */
-
-
 /* Semaphore for task notification synchronization */
+
 static sem_t g_wifi_notify_sem = SEM_INITIALIZER(0);
 
 /* Main wifi stack entry point */
+
 extern void wifi_main(void *param);
 
 /* If Wi-Fi sta connected */
@@ -137,7 +135,6 @@ static wifi_txdone_cb_t g_sta_txdone_cb;
 
 static sem_t g_wifi_scan_sem = SEM_INITIALIZER(1);
 static sem_t g_wifi_wait_connect_sem = SEM_INITIALIZER(0);
-
 
 /****************************************************************************
  * Private Functions
@@ -411,9 +408,13 @@ static inline uint16_t bl616cl_channel_to_freq(int channel)
   if ((channel >= 1) && (channel <= 14))
     {
       if (channel == 14)
-        return 2484;
+        {
+          return 2484;
+        }
       else
-        return 2407 + channel * 5;
+        {
+          return 2407 + channel * 5;
+        }
     }
 
   return 0;
@@ -456,7 +457,8 @@ static int format_scan_result_to_wapi(struct iwreq *req)
 
   uintptr_t *rssi_list = NULL; /* for sort */
 
-  struct wl80211_scan_result_item *n, *tmp;
+  struct wl80211_scan_result_item *n;
+  struct wl80211_scan_result_item *tmp;
 
   /* Count wl80211 scan results.  The caller holds g_wifi_scan_sem, so no
    * scan runs: only this adapter starts scans, and the WiFi task writes
@@ -464,9 +466,9 @@ static int format_scan_result_to_wapi(struct iwreq *req)
    */
 
   RB_FOREACH_SAFE(n, _scan_result_tree, &wl80211_scan_result, tmp)
-  {
-    result_cnt++;
-  }
+    {
+      result_cnt++;
+    }
 
   if (result_cnt == 0)
     {
@@ -498,10 +500,10 @@ static int format_scan_result_to_wapi(struct iwreq *req)
   j = 0;
 
   RB_FOREACH_SAFE(n, _scan_result_tree, &wl80211_scan_result, tmp)
-  {
-    RB_REMOVE(_scan_result_tree, &wl80211_scan_result, n);
-    rssi_list[j++] = (uintptr_t)n;
-  }
+    {
+      RB_REMOVE(_scan_result_tree, &wl80211_scan_result, n);
+      rssi_list[j++] = (uintptr_t)n;
+    }
 
   /* Sort the valid list according the rssi using custom comparator */
 
@@ -549,11 +551,14 @@ static int format_scan_result_to_wapi(struct iwreq *req)
       iwe->u.essid.length =
         scan->ssid ? strnlen(scan->ssid, IW_ESSID_MAX_SIZE) : 0;
       iwe->u.essid.flags = 1;
+
       /* refer:wapi wireless.c:272 */
+
       iwe->u.essid.pointer = (void *)(uintptr_t)sizeof(struct iw_point);
       essid = (uint8_t *)iwe + offsetof(struct iw_event, u) +
               sizeof(struct iw_point);
       memset(essid, 0x0, IW_ESSID_MAX_SIZE);
+
       if (scan->ssid != NULL)
         {
           memcpy(essid, scan->ssid, iwe->u.essid.length);
@@ -566,7 +571,8 @@ static int format_scan_result_to_wapi(struct iwreq *req)
 
   /* Free memory for all nodes removed from tree earlier
    * Nodes were already removed from the tree during the first traversal,
-   * now we just need to free the associated memory */
+   * now we just need to free the associated memory
+   */
 
   for (i = 0; i < result_cnt; i++)
     {
@@ -576,13 +582,13 @@ static int format_scan_result_to_wapi(struct iwreq *req)
         {
           kmm_free((void *)scan_item->ssid);
         }
+
       kmm_free(scan_item);
     }
 
   kmm_free(rssi_list);
 
   return OK;
-
 }
 
 /****************************************************************************
@@ -673,7 +679,6 @@ void __assert_func(const char *file, int line,
   PANIC();
 }
 
-
 /**
  ************************************************************************
  * Name: wifi_task_suspend
@@ -720,6 +725,7 @@ void wifi_task_resume(bool isr)
   int ret;
 
   /* NuttX doesn't distinguish between ISR and task context for semaphores */
+
   ret = nxsem_post(&g_wifi_notify_sem);
 
   if (ret != 0)
@@ -819,7 +825,8 @@ int bl616cl_wifi_adapter_init(void)
 
   /* The scan path requires a country channel plan; nothing in the NuttX
    * boot flow sets one, so default to CN (channels 1-13).  Users can
-   * override via SIOCSIWCOUNTRY. */
+   * override via SIOCSIWCOUNTRY.
+   */
 
   if (wifi_mgmr_set_country_code("CN") != 0)
     {
@@ -909,7 +916,6 @@ void bl616cl_wifi_sta_txdone(void)
       g_sta_txdone_cb(NULL);
     }
 }
-
 
 /****************************************************************************
  * Name: bl616cl_wifi_sta_send_data
@@ -1165,13 +1171,22 @@ int bl616cl_wifi_sta_bssid(struct iwreq *iwr, bool set)
 
 static int is_ascii_hex_char(char c)
 {
-	if (c >= '0' && c <= '9')
-		return 0;
-	if (c >= 'a' && c <= 'f')
-		return 0;
-	if (c >= 'A' && c <= 'F')
-		return 0;
-	return -1;
+  if (c >= '0' && c <= '9')
+    {
+      return 0;
+    }
+
+  if (c >= 'a' && c <= 'f')
+    {
+      return 0;
+    }
+
+  if (c >= 'A' && c <= 'F')
+    {
+      return 0;
+    }
+
+  return -1;
 }
 
 /****************************************************************************
@@ -1222,7 +1237,6 @@ int bl616cl_wifi_sta_connect(void)
   bssid[17] = '\0';
 
   wlinfo("connect ssid:%s\n", g_wifi_cfg.ssid);
-  // wlinfo("connect pwd:%s\n", g_wifi_cfg.pwd);
   wlinfo("connect bssid:%s\n", bssid);
   wlinfo("connect channel:%d(%d)\n", g_wifi_cfg.channel, g_wifi_cfg.freq);
 
@@ -1338,7 +1352,6 @@ int bl616cl_wifi_sta_connect(void)
       /* Clear sta info */
 
       bl616cl_wifi_sta_clear_info();
-
     }
 
   adapter_wifi_lock(false);
@@ -1513,7 +1526,9 @@ int bl616cl_wifi_sta_freq(struct iwreq *iwr, bool set)
       g_wifi_cfg.freq = bl616cl_channel_to_freq(g_wifi_cfg.channel);
 
       if (g_wifi_cfg.channel == 0)
-        return -EINVAL;
+        {
+          return -EINVAL;
+        }
       else
         {
           wlinfo("set channel: %d, freq: %d\n",
@@ -1681,7 +1696,9 @@ int bl616cl_wifi_sta_channel(struct iwreq *iwr, bool set)
   struct iw_range *range;
 
   if (set)
-    return -ENOSYS;
+    {
+      return -ENOSYS;
+    }
   else
     {
       ret = wifi_mgmr_get_country_code(country_code);
@@ -1871,9 +1888,8 @@ int bl616cl_wifi_sta_scan(struct iwreq *iwr)
   config.duration = BL616CL_SCAN_DURATION;
 
   /* TODO: passive scan */
+
   /* TODO: probt cnt */
-
-
 
   wlinfo("Start scan ssid:%s, bssid:%X:%X:%X:%X:%X:%X, channel:%d\n",
          ssid,
@@ -2113,14 +2129,16 @@ void bl616_wifi_event_handler(void *arg1, uint32_t arg2)
       case WL80211_EVT_STA_CONNECTED:
         {
           /* Notify the connecting thread */
+
           if (g_sta_block)
             {
               if (OK != sem_post(&g_wifi_wait_connect_sem))
-                wlerr("ERROR: Failed to post semaphore\n");
+                {
+                  wlerr("ERROR: Failed to post semaphore\n");
+                }
             }
 
           /* TODO: support lowpower */
-          // PLATFORM_HOOK(prevent_sleep, PSM_EVENT_CONNECT, 0);
 
           /* FIXME: not support now */
 #if 0
@@ -2136,7 +2154,9 @@ void bl616_wifi_event_handler(void *arg1, uint32_t arg2)
 #endif
 
           if (!g_sta_connected)
-            bl616cl_wlan_sta_set_linkstatus(true);
+            {
+              bl616cl_wlan_sta_set_linkstatus(true);
+            }
 
           flags = up_irq_save();
           g_sta_connected = true;
@@ -2145,6 +2165,7 @@ void bl616_wifi_event_handler(void *arg1, uint32_t arg2)
           wlinfo("[APP] [EVT] CODE_WIFI_ON_CONNECTED\n");
           break;
         }
+
       case WL80211_EVT_SCAN_DONE:
         {
           /* Scan done, wake up the waiting thread */
@@ -2152,10 +2173,11 @@ void bl616_wifi_event_handler(void *arg1, uint32_t arg2)
           sem_post(&g_wifi_scan_sem);
           break;
         }
+
       case WL80211_EVT_STA_DISCONNECTED:
         {
-          uint16_t status_code = (arg2 >> 16) & 0xFF;
-          uint16_t reason_code = arg2 & 0xFF;
+          uint16_t status_code = (arg2 >> 16) & 0xff;
+          uint16_t reason_code = arg2 & 0xff;
 
           /* Notify the connecting thread */
 
@@ -2198,7 +2220,9 @@ void bl616_wifi_event_handler(void *arg1, uint32_t arg2)
       case WL80211_EVT_AP_STOPPED:
       case WL80211_EVT_AP_STA_ADDED:
       case WL80211_EVT_AP_STA_DEL:
+
         /* Not supported now */
+
         break;
     }
 }
