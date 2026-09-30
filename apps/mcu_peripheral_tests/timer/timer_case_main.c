@@ -712,8 +712,13 @@ static int run_case_003(const struct app_config_s *cfg)
 
   for (i = 0; i < npts; i++)
     {
+      /* The BL616CL PWM driver rejects PWM_CPOL_NDEF/PWM_DCPOL_NDEF. */
+
+      memset(&info, 0, sizeof(info));
       info.frequency = pts[i].freq;
       info.duty      = PCT_TO_DUTY_B16(pts[i].duty_pct);
+      info.cpol      = PWM_CPOL_HIGH;
+      info.dcpol     = PWM_DCPOL_LOW;
 
       ret = ioctl(fd, PWMIOC_SETCHARACTERISTICS,
                   (unsigned long)((uintptr_t)&info));
@@ -732,7 +737,7 @@ static int run_case_003(const struct app_config_s *cfg)
           return -errno;
         }
 
-      printf("  step %d: freq=%luHz duty=%u%% on %s (GPIO28), hold %ds\n",
+      printf("  step %d: freq=%luHz duty=%u%% on %s (GPIO22), hold %ds\n",
              i + 1, (unsigned long)pts[i].freq, pts[i].duty_pct,
              cfg->pwm_devpath, hold_s);
       printf("         -> verify with scope / logic analyzer\n");
@@ -774,8 +779,11 @@ static int run_case_004(const struct app_config_s *cfg)
       return -errno;
     }
 
+  memset(&info, 0, sizeof(info));
   info.frequency = cfg->pwm_freq;   /* fixed; only duty ramps */
   info.duty      = 0;
+  info.cpol      = PWM_CPOL_HIGH;
+  info.dcpol     = PWM_DCPOL_LOW;
 
   ret = ioctl(fd, PWMIOC_SETCHARACTERISTICS,
               (unsigned long)((uintptr_t)&info));
