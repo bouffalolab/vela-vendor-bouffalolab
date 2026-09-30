@@ -117,6 +117,17 @@ if(CONFIG_BL_COMPONENT_WL80211)
     arch PRIVATE CONFIG_MACSW_SELECT_INCLUDE="macsw_${CONFIG_MACSW_SELECT}_config.h")
 endif()
 
+if(CONFIG_BL_COMPONENT_BLE)
+  list(APPEND SRCS bl616cl_ble.c bl616cl_ble_port.c)
+
+  set(BL616CL_VENDOR_DIR ${CMAKE_CURRENT_LIST_DIR}/../..)
+  target_include_directories(
+    arch
+    PRIVATE ${BL616CL_VENDOR_DIR}/components/wireless/ble/include
+            ${BL616CL_VENDOR_DIR}/drivers/soc/bl616cl/phyrf/include
+            ${BL616CL_VENDOR_DIR}/drivers/rfparam/Inc)
+endif()
+
 target_sources(arch PRIVATE ${SRCS})
 
 # Flash clock calibration runs while XIP is off; keep sanitizer and stack
