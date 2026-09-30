@@ -156,11 +156,12 @@ BL616CL 专用实现编入 `arch`（`chips/bl616cl/CMakeLists.txt`，`CONFIG_BL_
 chips/bl616cl/
 ├── bl616cl_wlan.[ch]            # netdev/WEXT/收发回调
 ├── bl616cl_wifi_adapter.[ch]    # adapter 和控制流程
+├── bl616cl_wl80211_port.h       # host port nuttx.c 中未声明的 TX 接口原型
 ├── bl616cl_efuse_mac.[ch]       # bl616_efuse_read_mac_address()：出厂 MAC（mfg media）与本地管理回退
 └── bl616cl_macsw_plat.[ch]      # macsw 平台 hook：wifi 任务挂起/唤醒、时间源、低功耗桩
 ```
 
-public 与 chip 之间的接口：chip 实现 `bl616_wifi_event_handler()`、`bl616_efuse_read_mac_address()`，并通过 `internal_register_recv_cb()`、`internal_register_txdone_cb()` 注册 RX 与 TX 完成回调。
+public 与 chip 之间的接口：chip 实现 `bl616_wifi_event_handler()`、`bl616_efuse_read_mac_address()`。RX 用 `wl80211.h` 声明的 `wl80211_register_input_cb()` 注册回调，由驱动按 IPv4/IPv6/ARP 过滤，其余帧用 `wl80211_mac_rx_free()` 还给 MAC；TX 的 `wl80211_output()`、`wl80211_output_ready()` 和完成回调注册 `internal_register_txdone_cb()` 只在 host port `nuttx.c` 中定义、没有等价的已声明接口，原型集中在 `chips/bl616cl/bl616cl_wl80211_port.h`，须与 `nuttx.c` 保持一致。
 
 这种划分对应 BL4 的实际结构：private core 作为库，平台适配在芯片层编译。它避免将 NuttX 特定实现反向塞入 wl80211 private core。
 

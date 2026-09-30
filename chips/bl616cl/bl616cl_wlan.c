@@ -51,6 +51,7 @@
 #endif
 
 #include "bl616cl_wifi_adapter.h"
+#include "bl616cl_wl80211_port.h"
 #include "bl616cl_wlan.h"
 #include "wl80211_mac.h"
 #include "wifi_mgmr_ext.h"
@@ -267,10 +268,6 @@ static int wlan_ifdown(struct net_driver_s *dev);
 static void wlan_txavail_work(void *arg);
 static int wlan_txavail(struct net_driver_s *dev);
 static void wlan_sta_tx_done(void *arg);
-
-/* wl80211 NuttX host port: STA TX backpressure */
-
-extern bool wl80211_output_ready(void);
 
 #if defined(CONFIG_NET_MCASTGROUP) || defined(CONFIG_NET_ICMPv6)
 static int wlan_addmac(struct net_driver_s *dev, const uint8_t *mac);
@@ -619,7 +616,7 @@ static int wlan_rx_done(struct wlan_priv_s *priv,
                         void *buffer,
                         uint16_t len,
                         void *net,
-                        void *free)
+                        void (*free)(void *data))
 {
   struct net_driver_s *dev = &priv->dev;
   struct iob_s *iob = NULL;
@@ -1604,25 +1601,48 @@ static int bl616cl_wlan_pm_init(void)
  * Name: wlan_sta_rx_done
  *
  * Description:
- *   Wi-Fi station RX done callback function. If this is called, it means
- *   station receiveing packet.
+ *   Wi-Fi station receive callback (wl80211_input_cb_t). Pass IPv4, IPv6
+ *   and ARP frames to the network stack, as the wl80211 NuttX input path
+ *   did, and give any other frame back to the MAC.
  *
  * Input Parameters:
- *   net    - Wi-Fi receive callback input pointer
- *   buffer - Wi-Fi received packet buffer
- *   len    - Length of received packet
- *   eb     - Wi-Fi receive callback input eb pointer
+ *   prv      - Registration argument (unused)
+ *   vif_type - wl80211 interface type (unused, STA only)
+ *   rxhdr    - wl80211 RX descriptor, passed to wl80211_mac_rx_free()
+ *   buf      - Ethernet frame in the wl80211 RX buffer
+ *   frm_len  - Frame length
+ *   status   - wl80211 RX status (unused)
  *
  * Returned Value:
- *   Zero (OK) on success; a negated errno value on failure.
+ *   Zero (OK) on success; a negated errno value on failure. wl80211
+ *   ignores it.
  *
  ****************************************************************************/
 
-static int wlan_sta_rx_done(void *net, void *buffer, uint16_t len, void *eb)
+static int wlan_sta_rx_done(void *prv, uint8_t vif_type, void *rxhdr,
+                            void *buf, uint32_t frm_len, uint32_t status)
 {
   struct wlan_priv_s *priv = &g_wlan_priv[BL616CL_WLAN_STA_DEVNO];
+  struct eth_hdr_s *eth = buf;
 
-  return wlan_rx_done(priv, buffer, len, net, eb);
+  UNUSED(prv);
+  UNUSED(vif_type);
+  UNUSED(status);
+
+  DEBUGASSERT(buf != NULL && frm_len > 0);
+
+  switch (eth->type)
+    {
+      case HTONS(ETHTYPE_IP):
+      case HTONS(ETHTYPE_IP6):
+      case HTONS(ETHTYPE_ARP):
+        return wlan_rx_done(priv, buf, frm_len, rxhdr,
+                            wl80211_mac_rx_free);
+
+      default:
+        wl80211_mac_rx_free(rxhdr);
+        return OK;
+    }
 }
 
 /****************************************************************************

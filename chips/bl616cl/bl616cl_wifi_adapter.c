@@ -45,6 +45,7 @@
 
 #include "bl616cl_macsw_plat.h"
 #include "bl616cl_wifi_adapter.h"
+#include "bl616cl_wl80211_port.h"
 #include "bl616cl_wlan.h"
 
 #include "wl80211.h"
@@ -863,8 +864,6 @@ int bl616cl_wifi_sta_stop(void)
 
 void bl616cl_wifi_sta_register_txdone_cb(wifi_txdone_cb_t cb)
 {
-  extern void internal_register_txdone_cb(void (*cb)(void));
-
   g_sta_txdone_cb = cb;
   internal_register_txdone_cb(bl616cl_wifi_sta_txdone);
 }
@@ -916,7 +915,6 @@ int bl616cl_wifi_sta_send_data(struct iob_s *iob,
 {
   int ret = OK;
 
-  extern int wl80211_output(struct iob_s *buf);
   ret = wl80211_output(iob);
 
   return ret;
@@ -926,28 +924,27 @@ int bl616cl_wifi_sta_send_data(struct iob_s *iob,
  * Name: bl616cl_wifi_sta_register_recv_cb
  *
  * Description:
- *   Register Wi-Fi station receive packet callback function
+ *   Register the Wi-Fi station receive callback with
+ *   wl80211_register_input_cb(). wl80211 then passes every received data
+ *   frame (except EAPOL) to it instead of its own NuttX input path; the
+ *   callback owns the frame and returns it with wl80211_mac_rx_free().
  *
  * Input Parameters:
- *   recv_cb - Receive callback function
+ *   recv_cb - Receive callback, of type wl80211_input_cb_t
  *
  * Returned Value:
- *   OK on success (positive non-zero values are cmd-specific)
- *   Negated errno returned on failure.
+ *   The wl80211_register_input_cb() result: zero on success.
  *
  ****************************************************************************/
 
-int bl616cl_wifi_sta_register_recv_cb(int (*recv_cb)(void *net,
-                                                   void *buffer,
-                                                   uint16_t len,
-                                                   void *eb))
+int bl616cl_wifi_sta_register_recv_cb(int (*recv_cb)(void *prv,
+                                                   uint8_t vif_type,
+                                                   void *rxhdr,
+                                                   void *buf,
+                                                   uint32_t frm_len,
+                                                   uint32_t status))
 {
-  typedef void (*rx_cb_type)(void *buf, void *addr, uint16_t len, void *free_fn);
-  extern void internal_register_recv_cb(rx_cb_type cb);
-
-  internal_register_recv_cb((rx_cb_type)recv_cb);
-
-  return OK;
+  return wl80211_register_input_cb(recv_cb, NULL);
 }
 
 /****************************************************************************

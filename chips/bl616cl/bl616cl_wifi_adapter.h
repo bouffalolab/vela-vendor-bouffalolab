@@ -143,21 +143,25 @@ int bl616cl_wifi_sta_send_data(struct iob_s *iob,
  * Name: bl616cl_wifi_sta_register_recv_cb
  *
  * Description:
- *   Register Wi-Fi station receive packet callback function
+ *   Register the Wi-Fi station receive callback with
+ *   wl80211_register_input_cb(). wl80211 then passes every received data
+ *   frame (except EAPOL) to it instead of its own NuttX input path; the
+ *   callback owns the frame and returns it with wl80211_mac_rx_free().
  *
  * Input Parameters:
- *   recv_cb - Receive callback function
+ *   recv_cb - Receive callback, of type wl80211_input_cb_t
  *
  * Returned Value:
- *   OK on success (positive non-zero values are cmd-specific)
- *   Negated errno returned on failure.
+ *   The wl80211_register_input_cb() result: zero on success.
  *
  ****************************************************************************/
 
-int bl616cl_wifi_sta_register_recv_cb(int (*recv_cb)(void *net,
-                                                   void *buffer,
-                                                   uint16_t len,
-                                                   void *eb));
+int bl616cl_wifi_sta_register_recv_cb(int (*recv_cb)(void *prv,
+                                                   uint8_t vif_type,
+                                                   void *rxhdr,
+                                                   void *buf,
+                                                   uint32_t frm_len,
+                                                   uint32_t status));
 
 /****************************************************************************
  * Name: bl616cl_wifi_sta_register_txdone_cb
