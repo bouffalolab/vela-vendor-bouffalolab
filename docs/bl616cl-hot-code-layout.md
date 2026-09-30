@@ -35,7 +35,7 @@
 - 起点来源是 macsw 的 `macsw_cache_affinity.ld.in`，只保留本构建 LTO 后仍是
   独立函数的名字，再加上 tick 采样在同一路径上看到的任务循环、host port 和
   glue 函数；最后一组是同一路径上的 NuttX 信号量、work queue 和定时器函数。
-  当前 106 行，约 36 KiB。
+  当前 105 行，约 36 KiB。
 - 两个标记符号供工具使用：`layout_check.py` 用它们确认列表位置，
   `layout_ab.sh` 用它们删掉列表或在其后插入填充。
 
@@ -45,7 +45,7 @@
 `wifi`；其他配置没有 Wi-Fi 代码，列表匹配不到任何函数，不做检查。输出一行：
 
 ```text
-bl616cl layout: 106/106 Wi-Fi hot entries placed at 0x80008000, 35.9 KiB (I-cache 32 KiB)
+bl616cl layout: 105/105 Wi-Fi hot entries placed at 0x80008000, 35.8 KiB (I-cache 32 KiB)
 ```
 
 列表中有名字在镜像里找不到时，再输出一行 WARNING 并列出这些名字。构建不会
