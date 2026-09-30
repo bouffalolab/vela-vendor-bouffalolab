@@ -50,6 +50,8 @@
 
 #include "bl616cl_lhal.h"
 #include "bflb_clock.h"
+#include "bflb_dma.h"
+#include "bflb_name.h"
 #include "bflb_peri.h"
 #include <arch/chip/bl616cl_dma.h>
 #include "hardware/dma_reg.h"
@@ -61,7 +63,6 @@
 
 /* DMA base address comes from hardware/bl616cl_memorymap.h. */
 
-#define BL616CL_DMA_CHANNEL_OFFSET    0x100
 #define BL616CL_DMA_CHANNEL_COUNT     8
 #define BL616CL_DMA_TRANSFER_MAX \
   (DMA_TRANSFERSIZE_MASK >> DMA_TRANSFERSIZE_SHIFT)
@@ -85,6 +86,7 @@ enum bl616cl_dma_state_e
 struct bl616cl_dma_chan_s
 {
   struct dma_chan_s chan;
+  struct bflb_device_s *dev;
   sem_t available;
   sem_t callback_done;
   struct dma_config_s config;
@@ -151,6 +153,13 @@ static struct bl616cl_dma_dev_s g_bl616cl_dma_dev =
   },
 };
 
+static const char * const g_bl616cl_dma_names[BL616CL_DMA_CHANNEL_COUNT] =
+{
+  BFLB_NAME_DMA0_CH0, BFLB_NAME_DMA0_CH1, BFLB_NAME_DMA0_CH2,
+  BFLB_NAME_DMA0_CH3, BFLB_NAME_DMA0_CH4, BFLB_NAME_DMA0_CH5,
+  BFLB_NAME_DMA0_CH6, BFLB_NAME_DMA0_CH7
+};
+
 static struct bl616cl_dma_chan_s
   g_bl616cl_dma_channels[BL616CL_DMA_CHANNEL_COUNT];
 static spinlock_t g_bl616cl_dma_lock = SP_UNLOCKED;
@@ -166,28 +175,6 @@ static struct bl616cl_dma_test_status_s g_bl616cl_dma_test_status;
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
-
-/****************************************************************************
- * Name: bl616cl_dma_channel_base
- *
- * Description:
- *   Compute the register base address of a DMA channel from DMA_BASE and
- *   the channel index.
- *
- * Input Parameters:
- *   channel - Channel state.
- *
- * Returned Value:
- *   The channel register base address.
- *
- ****************************************************************************/
-
-static uintptr_t bl616cl_dma_channel_base(
-  const struct bl616cl_dma_chan_s *channel)
-{
-  return DMA_BASE +
-         ((uintptr_t)channel->index + 1) * BL616CL_DMA_CHANNEL_OFFSET;
-}
 
 /****************************************************************************
  * Name: bl616cl_dma_mask_stop_clear
@@ -207,13 +194,12 @@ static uintptr_t bl616cl_dma_channel_base(
 static void bl616cl_dma_mask_stop_clear(
   const struct bl616cl_dma_chan_s *channel)
 {
-  uintptr_t base = bl616cl_dma_channel_base(channel);
+  uintptr_t base = channel->dev->reg_base;
   uint32_t config = getreg32(base + DMA_CxCONFIG_OFFSET);
   uint32_t bit = 1u << channel->index;
 
-  config |= DMA_ITC | DMA_IE;
-  config &= ~DMA_E;
-  putreg32(config, base + DMA_CxCONFIG_OFFSET);
+  putreg32(config | DMA_ITC | DMA_IE, base + DMA_CxCONFIG_OFFSET);
+  bflb_dma_channel_stop(channel->dev);
   putreg32(bit, DMA_BASE + DMA_INTTCCLEAR_OFFSET);
   putreg32(bit, DMA_BASE + DMA_INTERRCLR_OFFSET);
 }
@@ -222,8 +208,9 @@ static void bl616cl_dma_mask_stop_clear(
  * Name: bl616cl_dma_pending_bytes
  *
  * Description:
- *   Read the remaining transfer size from the channel control register
- *   and convert it to bytes, capped at the requested length.
+ *   Read the remaining transfer size (in units) with
+ *   DMA_CMD_GET_TRANSFER_PENDING and convert it to bytes, capped at the
+ *   requested length.
  *
  * Input Parameters:
  *   channel - Channel state.
@@ -236,10 +223,10 @@ static void bl616cl_dma_mask_stop_clear(
 static size_t bl616cl_dma_pending_bytes(
   const struct bl616cl_dma_chan_s *channel)
 {
-  uintptr_t base = bl616cl_dma_channel_base(channel);
   size_t pending;
 
-  pending = getreg32(base + DMA_CxCONTROL_OFFSET) & DMA_TRANSFERSIZE_MASK;
+  pending = bflb_dma_feature_control(channel->dev,
+                                     DMA_CMD_GET_TRANSFER_PENDING, 0);
   pending *= channel->width;
 
   return pending > channel->request_bytes ? channel->request_bytes : pending;
@@ -287,15 +274,15 @@ static int bl616cl_dma_width_encode(unsigned int width, uint8_t *encoded)
   switch (width)
     {
       case 1:
-        *encoded = 0;
+        *encoded = DMA_DATA_WIDTH_8BIT;
         return OK;
 
       case 2:
-        *encoded = 1;
+        *encoded = DMA_DATA_WIDTH_16BIT;
         return OK;
 
       case 4:
-        *encoded = 2;
+        *encoded = DMA_DATA_WIDTH_32BIT;
         return OK;
 
       default:
@@ -824,11 +811,11 @@ static int bl616cl_dma_start(struct dma_chan_s *chan,
       return -E2BIG;
     }
 
-  base = bl616cl_dma_channel_base(channel);
+  base = channel->dev->reg_base;
   bl616cl_dma_mask_stop_clear(channel);
   control = units |
-            (1u << DMA_SBSIZE_SHIFT) |
-            (1u << DMA_DBSIZE_SHIFT) |
+            ((uint32_t)DMA_BURST_INCR4 << DMA_SBSIZE_SHIFT) |
+            ((uint32_t)DMA_BURST_INCR4 << DMA_DBSIZE_SHIFT) |
             ((uint32_t)encoded_width << DMA_SWIDTH_SHIFT) |
             ((uint32_t)encoded_width << DMA_DWIDTH_SHIFT) |
             DMA_I;
@@ -866,7 +853,7 @@ static int bl616cl_dma_start(struct dma_chan_s *chan,
 
   if (!channel->held)
     {
-      putreg32(config | DMA_E, base + DMA_CxCONFIG_OFFSET);
+      bflb_dma_channel_start(channel->dev);
     }
 
   spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
@@ -1099,6 +1086,7 @@ void riscv_dma_initialize(void)
         &g_bl616cl_dma_channels[index];
 
       channel->chan.ops = &g_bl616cl_dma_ops;
+      channel->dev = bflb_device_get_by_name(g_bl616cl_dma_names[index]);
       channel->index = index;
       channel->state = BL616CL_DMA_FREE;
       ret = nxsem_init(&channel->available, 0, 1);
@@ -1115,6 +1103,11 @@ void riscv_dma_initialize(void)
         }
 
       initialized++;
+      if (channel->dev == NULL)
+        {
+          goto errout;
+        }
+
       bl616cl_dma_mask_stop_clear(channel);
     }
 
@@ -1246,11 +1239,8 @@ void bl616cl_dma_test_release_hold(void)
 
       if (channel->state == BL616CL_DMA_RUNNING && channel->held)
         {
-          uintptr_t base = bl616cl_dma_channel_base(channel);
-          uint32_t config = getreg32(base + DMA_CxCONFIG_OFFSET);
-
           channel->held = false;
-          putreg32(config | DMA_E, base + DMA_CxCONFIG_OFFSET);
+          bflb_dma_channel_start(channel->dev);
         }
     }
 
