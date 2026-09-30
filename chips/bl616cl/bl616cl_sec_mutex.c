@@ -26,8 +26,6 @@
 
 #include <nuttx/mutex.h>
 
-#include "bl616cl_sec_mutex.h"
-
 #include "bl616cl_lhal.h"
 #include "bflb_sec_mutex.h"
 
@@ -187,24 +185,4 @@ int bflb_sec_pka_mutex_take(void)
 int bflb_sec_pka_mutex_give(void)
 {
   return nxmutex_unlock(&g_pka_mutex);
-}
-
-/****************************************************************************
- * Name: bl616cl_sec_mutex_init
- *
- * Description:
- *   Initialize the BouffaloLab security-engine mutex adapter by calling
- *   bflb_sec_mutex_init().
- *
- * Input Parameters:
- *   None
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-void bl616cl_sec_mutex_init(void)
-{
-  bflb_sec_mutex_init();
 }
