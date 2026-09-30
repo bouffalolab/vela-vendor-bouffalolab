@@ -24,6 +24,8 @@
 
 #include <nuttx/config.h>
 
+#include <sys/param.h>
+
 #include <nuttx/arch.h>
 
 #include "bl616cl_systemreset.h"
@@ -32,13 +34,28 @@
 #include "bl616cl_glb.h"
 #include "hardware/timer_reg.h"
 
+#ifdef CONFIG_BOARDCTL_RESET_CAUSE
+#include "bl616cl_lp.h"
+#include "bl616cl_sys.h"
+#endif
+
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define BL616CL_RESET_MAGIC          0xb616c100u
-#define BL616CL_RESET_MAGIC_MASK     0xffffff00u
-#define BL616CL_RESET_REASON_MASK    0xffu
+#ifdef CONFIG_BOARDCTL_RESET_CAUSE
+/* The reset reason is kept where upstream bl_sys_rstinfo_set() keeps it
+ * (drivers/sys/bl616cl/bl616cl_sys.c): iot2lp_para->reset_keep in HBN RAM,
+ * which survives software and watchdog resets and which the upstream
+ * low-power code leaves alone.  HBN_RSV0 is not used because upstream PM
+ * and boot2 own it.  The check value is RST_REASON_CHK_VAL there, which is
+ * private to that file.
+ */
+
+#define BL616CL_RESET_KEEP \
+  (&((iot2lp_para_t *)IOT2LP_PARA_ADDR)->reset_keep)
+#define BL616CL_RESET_KEEP_CHK       0xbf1ba55au
+#endif
 
 /****************************************************************************
  * Private Data
@@ -47,6 +64,16 @@
 #ifdef CONFIG_BOARDCTL_RESET_CAUSE
 static enum bl616cl_reset_reason_e g_bl616cl_reset_reason =
   BL616CL_RESET_POWER_ON;
+
+/* Upstream BL_RST_REASON_E code of each reason, as stored in reset_keep */
+
+static const uint8_t g_bl616cl_reset_keep_code[] =
+{
+  [BL616CL_RESET_POWER_ON] = BL_RST_POWER_OFF,
+  [BL616CL_RESET_WATCHDOG] = BL_RST_HARDWARE_WATCHDOG,
+  [BL616CL_RESET_FATAL]    = BL_RST_FATAL_EXCEPTION,
+  [BL616CL_RESET_SOFTWARE] = BL_RST_SOFTWARE,
+};
 #endif
 
 /****************************************************************************
@@ -58,12 +85,13 @@ static enum bl616cl_reset_reason_e g_bl616cl_reset_reason =
  * Name: bl616cl_reset_reason_initialize
  *
  * Description:
- *   Determine the reset reason at boot. If the HBN status flag holds a valid
- *   reset-reason word (magic 0xb616c1xx, reason not above
- *   BL616CL_RESET_SOFTWARE) left by bl616cl_reset_reason_set(), use it and
- *   clear the flag. Otherwise report a watchdog reset if the HBN or timer
- *   watchdog status is set, and clear the sticky timer watchdog status. The
- *   default is BL616CL_RESET_POWER_ON. Only built with
+ *   Determine the reset reason at boot. If reset_keep in HBN RAM holds a
+ *   reason with a valid check word, left by bl616cl_reset_reason_set() or
+ *   upstream bl_sys_rstinfo_set(), use it. Otherwise report a watchdog
+ *   reset if the HBN or timer watchdog status is set, and clear the sticky
+ *   timer watchdog status. reset_keep is invalidated either way. The
+ *   default is BL616CL_RESET_POWER_ON; HBN RAM is random after power-on,
+ *   which the check word rejects. Only built with
  *   CONFIG_BOARDCTL_RESET_CAUSE.
  *
  * Input Parameters:
@@ -76,15 +104,27 @@ static enum bl616cl_reset_reason_e g_bl616cl_reset_reason =
 
 void bl616cl_reset_reason_initialize(void)
 {
-  uint32_t saved = HBN_Get_Status_Flag();
-  uint32_t reason = saved & BL616CL_RESET_REASON_MASK;
+  uint32_t saved = BL616CL_RESET_KEEP->reset_reason;
+  bool valid = (saved ^ BL616CL_RESET_KEEP_CHK) ==
+               BL616CL_RESET_KEEP->reset_reason_chk;
   uint32_t timer_status;
+  unsigned int reason;
 
-  if ((saved & BL616CL_RESET_MAGIC_MASK) == BL616CL_RESET_MAGIC &&
-      reason <= BL616CL_RESET_SOFTWARE)
+  for (reason = 0; valid && reason < nitems(g_bl616cl_reset_keep_code);
+       reason++)
+    {
+      if (g_bl616cl_reset_keep_code[reason] == saved)
+        {
+          break;
+        }
+    }
+
+  BL616CL_RESET_KEEP->reset_reason = BL_RST_POWER_OFF;
+  BL616CL_RESET_KEEP->reset_reason_chk = BL_RST_POWER_OFF;
+
+  if (valid && reason < nitems(g_bl616cl_reset_keep_code))
     {
       g_bl616cl_reset_reason = (enum bl616cl_reset_reason_e)reason;
-      HBN_Set_Status_Flag(0);
     }
   else
     {
@@ -107,13 +147,13 @@ void bl616cl_reset_reason_initialize(void)
  * Name: bl616cl_reset_reason_set
  *
  * Description:
- *   Record a reset reason in the HBN status flag, tagged with a magic value,
- *   so that it survives the next reset and is picked up by
- *   bl616cl_reset_reason_initialize(). Only built with
- *   CONFIG_BOARDCTL_RESET_CAUSE.
+ *   Record a reset reason in reset_keep in HBN RAM, as the upstream
+ *   BL_RST_REASON_E code with its check word, so that it survives the next
+ *   reset and is picked up by bl616cl_reset_reason_initialize(). Only built
+ *   with CONFIG_BOARDCTL_RESET_CAUSE.
  *
  * Input Parameters:
- *   reason - Reset reason to record; only the low 8 bits are stored
+ *   reason - Reset reason to record
  *
  * Returned Value:
  *   None
@@ -122,8 +162,12 @@ void bl616cl_reset_reason_initialize(void)
 
 void bl616cl_reset_reason_set(enum bl616cl_reset_reason_e reason)
 {
-  HBN_Set_Status_Flag(BL616CL_RESET_MAGIC |
-                      ((uint32_t)reason & BL616CL_RESET_REASON_MASK));
+  uint32_t code;
+
+  DEBUGASSERT(reason < nitems(g_bl616cl_reset_keep_code));
+  code = g_bl616cl_reset_keep_code[reason];
+  BL616CL_RESET_KEEP->reset_reason = code;
+  BL616CL_RESET_KEEP->reset_reason_chk = code ^ BL616CL_RESET_KEEP_CHK;
 }
 
 /****************************************************************************
