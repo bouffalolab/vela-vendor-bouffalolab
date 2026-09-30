@@ -1,0 +1,27 @@
+config BL_OS_FEATURE_TESTS_PRIO_INHERIT
+	bool "Mutex priority inheritance test"
+	default n
+	depends on BUILD_FLAT && BUILTIN
+	depends on PRIORITY_INHERITANCE && !DISABLE_PTHREAD
+	---help---
+		Enable the mutex priority inheritance test: a low priority owner,
+		a busy middle priority thread and a high priority waiter, for the
+		default pthread mutex, a PTHREAD_PRIO_NONE mutex (control case)
+		and a kernel nxmutex, plus two held mutexes and a timed out
+		waiter.
+
+if BL_OS_FEATURE_TESTS_PRIO_INHERIT
+
+config BL_OS_FEATURE_TESTS_PRIO_INHERIT_PROGNAME
+	string "Program name"
+	default "prio_inherit_test"
+
+config BL_OS_FEATURE_TESTS_PRIO_INHERIT_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_OS_FEATURE_TESTS_PRIO_INHERIT_STACKSIZE
+	int "Task stack size"
+	default 4096
+
+endif
