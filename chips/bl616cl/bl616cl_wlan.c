@@ -599,10 +599,8 @@ static void wlan_tx_done(struct wlan_priv_s *priv)
  *   priv   - Reference to the driver state structure
  *   buffer - Wi-Fi received packet buffer
  *   len    - Length of received packet
- *   net    - Wi-Fi receive callback input pointer (rx_info of the slot, or a
- *            ready IOB when free is NULL)
- *   free   - Callback that releases the Wi-Fi buffer, or NULL if net is
- *            already an IOB
+ *   net    - Wi-Fi receive callback input pointer (rx_info of the slot)
+ *   free   - Callback that releases the Wi-Fi buffer
  *
  * Returned Value:
  *   Zero (OK) on success; a negated errno value on failure.
@@ -628,17 +626,6 @@ static int wlan_rx_done(struct wlan_priv_s *priv,
   if (!priv->ifup)
     {
       goto out;
-    }
-
-  /* If the free callback is empty, it indicates that the input
-   * buffer is already a pre-constructed IOB, requiring no
-   * additional memory allocation
-   */
-
-  if (free_cb == NULL)
-    {
-      iob = (struct iob_s *)net;
-      goto recv_frame;
     }
 
   if (len > WLAN_BUF_SIZE)
