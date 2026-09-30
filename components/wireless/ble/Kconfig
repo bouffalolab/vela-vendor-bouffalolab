@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+
+config BL_COMPONENT_BLE
+	bool "Bouffalo BLE controller"
+	depends on ARCH_CHIP_BL616CL
+	depends on !BL616CL_EM_NONE
+	depends on UART_BTH4
+	select BL_COMPONENT_RFPARAM
+	help
+	  Link the prebuilt BL616CL BLE controller (m2s1: BLE only, two
+	  connections, all roles, 16 KiB EM) and register it as the H4
+	  pseudo device /dev/ttyHCI<BLUETOOTH_DEVICE_ID> for a host stack
+	  such as zblue. The HCI transport and the NuttX port of the
+	  library are built from chips/bl616cl.
+
+if BL_COMPONENT_BLE
+
+config BL_COMPONENT_BLE_PRIORITY
+	int "Controller thread priority"
+	default 200
+	help
+	  The controller thread runs the link-layer scheduler after every
+	  BLE interrupt. Keep it above LPWORK (Wi-Fi) and the Wi-Fi firmware
+	  task, and below HPWORK.
+
+config BL_COMPONENT_BLE_STACKSIZE
+	int "Controller thread stack size"
+	default 3072
+
+endif # BL_COMPONENT_BLE

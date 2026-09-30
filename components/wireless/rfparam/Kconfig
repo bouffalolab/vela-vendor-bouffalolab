@@ -6,4 +6,5 @@ config BL_COMPONENT_RFPARAM
 	help
 	  Build the BL616CL RF parameter sources from the drivers tree
 	  (rfparam adapter, Flash OTP and RFTLV parsing) with the NuttX
-	  shims they need. Selected by the Wi-Fi stack.
+	  shims they need. Selected by the Wi-Fi stack and the BLE
+	  controller.

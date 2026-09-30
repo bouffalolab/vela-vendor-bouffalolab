@@ -32,6 +32,10 @@
 #include "bl616cl_wlan.h"
 #endif
 
+#ifdef CONFIG_BL_COMPONENT_BLE
+#include "bl616cl_ble.h"
+#endif
+
 #include "bl616cl_bod.h"
 #include "bl616cl_bus.h"
 
@@ -126,6 +130,15 @@ int bl616cl_bringup(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize Wi-Fi WLAN: %d\n", ret);
+      return ret;
+    }
+#endif
+
+#ifdef CONFIG_BL_COMPONENT_BLE
+  ret = bl616cl_ble_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize BLE: %d\n", ret);
       return ret;
     }
 #endif
