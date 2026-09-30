@@ -40,6 +40,13 @@
  *   Initialize peripherals whose registration depends on this board's
  *   wiring.
  *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; the negated errno value of the first peripheral
+ *   that fails to initialize.
+ *
  ****************************************************************************/
 
 int bl616cl_board_initialize(void)

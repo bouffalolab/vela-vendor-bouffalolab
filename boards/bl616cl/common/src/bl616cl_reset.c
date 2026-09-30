@@ -36,6 +36,24 @@
  * Public Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: board_reset
+ *
+ * Description:
+ *   Reset the board, for BOARDIOC_RESET and for the reset on assertion.
+ *   With CONFIG_BOARDCTL_RESET_CAUSE, first record the reason for the next
+ *   boot: FATAL when status is CONFIG_BOARD_ASSERT_RESET_VALUE and
+ *   CONFIG_BOARD_RESET_ON_ASSERT is enabled, SOFTWARE otherwise.
+ *
+ * Input Parameters:
+ *   status - Board-specific reset status. CONFIG_BOARD_ASSERT_RESET_VALUE
+ *            marks a reset after an assertion.
+ *
+ * Returned Value:
+ *   Does not return; up_systemreset() resets the chip.
+ *
+ ****************************************************************************/
+
 #ifdef CONFIG_BOARDCTL_RESET
 int board_reset(int status)
 {
@@ -56,6 +74,23 @@ int board_reset(int status)
   return 0;
 }
 #endif
+
+/****************************************************************************
+ * Name: board_reset_cause
+ *
+ * Description:
+ *   Report the cause of the last reset for BOARDIOC_RESET_CAUSE, as
+ *   determined at boot by bl616cl_reset_reason_initialize(): a watchdog
+ *   reset, a reset after an assertion, a user reboot, or otherwise a
+ *   power-on reset.
+ *
+ * Input Parameters:
+ *   cause - Location to return the reset cause and flag.
+ *
+ * Returned Value:
+ *   Zero (OK) always.
+ *
+ ****************************************************************************/
 
 #ifdef CONFIG_BOARDCTL_RESET_CAUSE
 int board_reset_cause(struct boardioc_reset_cause_s *cause)

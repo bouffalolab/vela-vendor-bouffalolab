@@ -72,6 +72,13 @@
  *   Perform common BL616CL board initialization after nx_start() has entered
  *   the NuttX initialization path.
  *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; the negated errno value of the first step that
+ *   fails. The remaining steps are skipped.
+ *
  ****************************************************************************/
 
 int bl616cl_bringup(void)

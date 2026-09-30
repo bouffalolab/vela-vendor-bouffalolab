@@ -25,7 +25,40 @@
  * Public Function Prototypes
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: bl616cl_bringup
+ *
+ * Description:
+ *   Perform common BL616CL board initialization after nx_start() has entered
+ *   the NuttX initialization path.
+ *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; the negated errno value of the first step that
+ *   fails. The remaining steps are skipped.
+ *
+ ****************************************************************************/
+
 int bl616cl_bringup(void);
+
+/****************************************************************************
+ * Name: bl616cl_board_initialize
+ *
+ * Description:
+ *   Initialize peripherals whose registration depends on this board's
+ *   wiring.
+ *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; the negated errno value of the first peripheral
+ *   that fails to initialize.
+ *
+ ****************************************************************************/
+
 int bl616cl_board_initialize(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_COMMON_BL616CL_BOARD_COMMON_H */

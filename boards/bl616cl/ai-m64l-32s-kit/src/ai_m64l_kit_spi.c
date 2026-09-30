@@ -192,6 +192,24 @@ static struct ai_m64l_kit_spi_bus_s g_ai_m64l_kit_spi0 =
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: ai_m64l_kit_spi_set_cs
+ *
+ * Description:
+ *   Drive the chip select GPIO of one SPI target to its active level when
+ *   selected and to its inactive level otherwise, following the polarity
+ *   of the target.
+ *
+ * Input Parameters:
+ *   bus      - SPI bus state holding the GPIO device.
+ *   target   - Target whose chip select is driven.
+ *   selected - True to select the target, false to deselect it.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
 static void ai_m64l_kit_spi_set_cs(
   struct ai_m64l_kit_spi_bus_s *bus,
   const struct ai_m64l_kit_spi_target_s *target, bool selected)
@@ -208,6 +226,24 @@ static void ai_m64l_kit_spi_set_cs(
       bflb_gpio_reset(bus->gpio, target->cs_pin);
     }
 }
+
+/****************************************************************************
+ * Name: ai_m64l_kit_spi_select
+ *
+ * Description:
+ *   Board chip select callback of the BL616CL SPI driver: select or
+ *   deselect the SPI0 target whose device ID is devid.
+ *
+ * Input Parameters:
+ *   arg      - SPI bus state (g_ai_m64l_kit_spi0).
+ *   devid    - SPI device ID of the target.
+ *   selected - True to select the target, false to deselect it.
+ *
+ * Returned Value:
+ *   True if devid is a target of this bus; false otherwise, in which case
+ *   no chip select is changed.
+ *
+ ****************************************************************************/
 
 static bool ai_m64l_kit_spi_select(void *arg, uint32_t devid, bool selected)
 {
@@ -233,6 +269,25 @@ static const struct bl616cl_spi_board_ops_s g_ai_m64l_kit_spi_ops =
 
 /****************************************************************************
  * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: ai_m64l_kit_spi_initialize
+ *
+ * Description:
+ *   Configure the SPI0 pins selected in Kconfig, drive each target chip
+ *   select to its inactive level before enabling it as an output, and
+ *   register SPI0 as /dev/spi0 with the board chip select callback. The
+ *   bus is uninitialized again if registration fails.
+ *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ENODEV if the GPIO device or the SPI bus is not
+ *   available, or the negated errno value from
+ *   bl616cl_spi_configure_pins() or spi_register().
+ *
  ****************************************************************************/
 
 int ai_m64l_kit_spi_initialize(void)

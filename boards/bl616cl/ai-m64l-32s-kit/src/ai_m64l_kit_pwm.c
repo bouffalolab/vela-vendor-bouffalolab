@@ -28,6 +28,21 @@
  * Public Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: ai_m64l_kit_pwm_initialize
+ *
+ * Description:
+ *   Initialize PWM0 channel 3 on GPIO22 and register it as /dev/pwm0.
+ *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ENODEV if the PWM cannot be initialized, or the
+ *   negated errno value from pwm_register().
+ *
+ ****************************************************************************/
+
 int ai_m64l_kit_pwm_initialize(void)
 {
   struct pwm_lowerhalf_s *pwm;
