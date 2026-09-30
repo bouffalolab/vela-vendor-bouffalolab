@@ -527,7 +527,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | O01 | tickless：`SCHED_TICKLESS` | 可直接尝试，P2 优化 | BL616CL 已提供 alarm oneshot；不能使用 SYSCLK CPU load | 定时精度、sleep/wakeup、timer/WDT/GPIO 回归和功耗对照 |
 | O02 | NuttX PM framework：`PM`、governor、`PM_PROCFS/STAT` | 需要适配，P2 | RISC-V 启用 PM 后要求 `riscv_pminitialize()`；BL616CL 尚未实现 | framework-only 启动、状态统计、设备回调，不先进入 HBN/PDS |
 | O03 | PDS/HBN idle、唤醒和低功耗 tickless | 延后 | std 有 PDS/HBN/PM 基础，但缺 board policy、唤醒源和设备 suspend/resume | 功耗仪、RTC/GPIO 唤醒、UART/clock/cache 恢复、多轮稳定性 |
-| O04 | priority inheritance、RR 等调度策略 | 可直接开启但不纳入首批 | 与硬件无关，需明确产品调度需求后选择 | 优先级反转、同优先级公平性和实时延迟专项 |
+| O04 | priority inheritance、RR 等调度策略 | PI 已覆盖；RR 可直接开启但不纳入首批 | PI：`nsh-peripherals`、`ostest` 打开 `PRIORITY_INHERITANCE`、`SEM_PREALLOCHOLDERS=0`，`nsh` 不开，见 [bl616cl-priority-inheritance.md](bl616cl-priority-inheritance.md)；RR 需明确产品调度需求后选择 | PI：`prio_inherit_test` 反转对照和 ostest `priority_inheritance` 已通过；RR：同优先级公平性和实时延迟专项 |
 
 源码入口：`nuttx/sched/init/`、`nuttx/drivers/power/pm/`、
 `nuttx/arch/risc-v/src/common/riscv_initialize.c`、
