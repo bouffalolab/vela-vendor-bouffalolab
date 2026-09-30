@@ -13,7 +13,8 @@ inheritance，PI），哪些同步对象参与继承，`SEM_PREALLOCHOLDERS` 的
 
 ## 配置
 
-`nsh-peripherals`、`ostest` 默认打开；`nsh` 保持最小配置，不打开。
+`nsh-peripherals`、`ostest`、`wifi` 默认打开；`nsh` 保持最小配置，不打开。
+`wifi` 打开后 TX 方向吞吐下降，见“开销”。
 
 ```text
 CONFIG_PRIORITY_INHERITANCE=y
@@ -101,6 +102,7 @@ PRIO_INHERIT_TEST PASS failures=0
 | 配置 | `.text` | `.data` | `.bss` | 开机后堆 |
 |---|---|---|---|---|
 | `nsh-peripherals` | +4072 B | +336 B | +352 B | 已用 +416 B |
+| `wifi` | +3564 B | +576 B | +928 B | 可用 -1520 B |
 
 mutex 没有竞争时仍走原子快速路径：`nxmutex_wait()`、`nxmutex_post()` 只在
 `PRIORITY_PROTECT` 下关闭快速路径。PI 的额外工作只发生在有竞争时：登记持有
@@ -109,3 +111,20 @@ mutex 没有竞争时仍走原子快速路径：`nxmutex_wait()`、`nxmutex_post
 `nsh-peripherals` 打开前后 `mcu_dma_test` 均为 8/8 通过（DMA-007 覆盖通道
 等待、耗尽和并发释放）；`mcu_timer_test` 均为 8/10，TIMER-003/004 的
 `PWMIOC_START` 返回 `EINVAL` 与 PI 无关。
+
+### Wi-Fi 吞吐
+
+`wifi` 打开 PI 后 TX 方向下降。按
+[bl616cl-hot-code-layout.md](bl616cl-hot-code-layout.md) 的填充法，在热函数
+列表之后插入 0、0x1e0、0x9a0 字节，每个镜像 3×20 秒，中位数（Mbps，关 → 开）：
+
+| 填充 | TCP TX | UDP TX | TCP RX | UDP RX 60M |
+|---|---|---|---|---|
+| 0 | 20.3 → 19.0 | 45.9 → 41.7 | 22.9 → 22.1 | 53.3 → 58.6 |
+| 0x1e0 | 20.6 → 18.1 | 46.5 → 36.7 | 23.2 → 21.8 | 52.1 → 55.3 |
+| 0x9a0 | 20.4 → 19.9 | 44.7 → 43.8 | 22.6 → 22.4 | 40.4 → 54.1 |
+
+UDP RX 20M 均为 20.0。三种填充下 TCP TX 都下降（2.5%～12%），UDP TX 下降
+2%～21%，TCP RX 下降 1%～6%，UDP RX 上升 6%～34%。原因没有用 perfmon 确认；
+一个可能的机制是：LPWORK（150）等待应用线程持有的网络锁时，应用线程被提升到
+150，高于 `wifi_fw`（130），TX 路径上的调度顺序随之改变。
