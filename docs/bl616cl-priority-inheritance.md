@@ -109,8 +109,8 @@ mutex 没有竞争时仍走原子快速路径：`nxmutex_wait()`、`nxmutex_post
 者、提升持有者、释放时恢复优先级。
 
 `nsh-peripherals` 打开前后 `mcu_dma_test` 均为 8/8 通过（DMA-007 覆盖通道
-等待、耗尽和并发释放）；`mcu_timer_test` 均为 8/10，TIMER-003/004 的
-`PWMIOC_START` 返回 `EINVAL` 与 PI 无关。
+等待、耗尽和并发释放），`mcu_timer_test` 结果相同；TIMER-003/004 当时因测试
+未设置 PWM 极性失败，修复后为 10/10。
 
 ### Wi-Fi 吞吐
 
@@ -125,6 +125,22 @@ mutex 没有竞争时仍走原子快速路径：`nxmutex_wait()`、`nxmutex_post
 | 0x9a0 | 20.4 → 19.9 | 44.7 → 43.8 | 22.6 → 22.4 | 40.4 → 54.1 |
 
 UDP RX 20M 均为 20.0。三种填充下 TCP TX 都下降（2.5%～12%），UDP TX 下降
-2%～21%，TCP RX 下降 1%～6%，UDP RX 上升 6%～34%。原因没有用 perfmon 确认；
-一个可能的机制是：LPWORK（150）等待应用线程持有的网络锁时，应用线程被提升到
-150，高于 `wifi_fw`（130），TX 路径上的调度顺序随之改变。
+2%～21%，TCP RX 下降 1%～6%，UDP RX 上升 6%～34%。
+
+用两个带 perfmon 的 `wifi` 镜像（PI 关/开）对比，UDP TX 45.6 → 38.7 Mbps，
+TCP TX 20.5 → 19.6 Mbps：
+
+- PI 自身的记账函数（`nxsem_add_holder_tcb`、`nxsem_boost_priority`、
+  `nxsem_release_holder`、`nxsem_restore_baseprio`）在 tick 采样中几乎没有
+  样本，直接 CPU 开销可以忽略。
+- UDP TX：idle 44% → 15%，指令数少 12%。发送路径上的同一批函数样本变多：
+  `memcpy` 11.1% → 16.8%，`psock_udp_sendto` 2.8% → 6.2%；IOB 带超时等待和
+  定时器设置（`iob_timedalloc`、`iob_tryalloc_internal`、`riscv_mtime_start`）
+  合计多了约 7%。I-cache 缺失率 1.26% → 1.69%，D-cache 读缺失率 3.78% →
+  5.37%，每次上下文切换（ecall）1652 → 2546 周期。
+- TCP TX：idle 40% → 43%，CPU 不是瓶颈，吞吐下降来自时序变化。
+
+结论：下降不是 PI 记账的开销，而是 PI 改变了 TX 路径上的调度。推测是持有
+网络锁的发送线程在 LPWORK（150）等锁时被提升，越过 `wifi_fw`（130），发送
+线程、LPWORK 和 `wifi_fw` 的交替方式随之改变，IOB 更常耗尽，切换和缓存缺失
+变多；具体是哪把锁、多久提升一次没有逐次追踪。
