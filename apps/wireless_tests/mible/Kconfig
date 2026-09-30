@@ -1,0 +1,36 @@
+config BL_WIRELESS_TESTS_MIBLE
+	bool "zblue mible test command"
+	default n
+	depends on BT && BUILTIN
+	select BT_MIBLE_TEST
+	---help---
+		Build mible_test.c of zblue, which the default zblue build leaves
+		out, and the interactive command "mible" that runs its subcommands
+		(init, broadcast, observer, peripheral, central, log_show ...).
+		The zblue shell cannot reach them: its root command table does
+		not list mible. Leave BT_SHELL off: the default zblue CMake fails
+		to configure with it, and "mible" supplies the shell output
+		functions mible_test.c needs.
+
+# zblue's port/sections/defines.c adds the mible GATT service to its
+# static service table only under this name, which zblue itself does
+# not define.
+
+config BT_MIBLE_TEST
+	bool
+
+if BL_WIRELESS_TESTS_MIBLE
+
+config BL_WIRELESS_TESTS_MIBLE_PROGNAME
+	string "Program name"
+	default "mible"
+
+config BL_WIRELESS_TESTS_MIBLE_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_WIRELESS_TESTS_MIBLE_STACKSIZE
+	int "Task stack size"
+	default 4096
+
+endif
