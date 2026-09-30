@@ -114,6 +114,22 @@
  * Public Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: ai_m64l_kit_uart_initialize
+ *
+ * Description:
+ *   Register UART1 as /dev/ttyS1 on AI_M64L_KIT_UART1_TX_PIN (GPIO14) and
+ *   AI_M64L_KIT_UART1_RX_PIN (GPIO15).
+ *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   The result of bl616cl_uart1_register(): zero (OK) on success; a negated
+ *   errno value on failure.
+ *
+ ****************************************************************************/
+
 int ai_m64l_kit_uart_initialize(void)
 {
   return bl616cl_uart1_register(AI_M64L_KIT_UART1_TX_PIN,

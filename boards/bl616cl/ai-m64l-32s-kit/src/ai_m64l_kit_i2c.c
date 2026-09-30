@@ -80,6 +80,24 @@
  * Private Functions
  ****************************************************************************/
 
+/****************************************************************************
+ * Name: ai_m64l_kit_i2c_register
+ *
+ * Description:
+ *   Initialize one I2C bus on the given pins and register it as /dev/i2cN.
+ *   The bus is uninitialized again if registration fails.
+ *
+ * Input Parameters:
+ *   port    - I2C port number, also N in /dev/i2cN.
+ *   scl_pin - GPIO pin used for SCL.
+ *   sda_pin - GPIO pin used for SDA.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ENODEV if the bus cannot be initialized, or the
+ *   negated errno value from i2c_register().
+ *
+ ****************************************************************************/
+
 static int ai_m64l_kit_i2c_register(int port, uint8_t scl_pin,
                                     uint8_t sda_pin)
 {
@@ -103,6 +121,22 @@ static int ai_m64l_kit_i2c_register(int port, uint8_t scl_pin,
 
 /****************************************************************************
  * Public Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: ai_m64l_kit_i2c_initialize
+ *
+ * Description:
+ *   Register the I2C buses enabled for this board, I2C0 and/or I2C1, on the
+ *   pins selected by CONFIG_AI_M64L_KIT_I2Cn_SCL_PIN and
+ *   CONFIG_AI_M64L_KIT_I2Cn_SDA_PIN.
+ *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value if a bus fails to register.
+ *
  ****************************************************************************/
 
 int ai_m64l_kit_i2c_initialize(void)

@@ -39,6 +39,12 @@
  *   This hook runs in the AppBringUp thread and starts board initialization
  *   that may depend on scheduler context.
  *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   None. A bl616cl_bringup() failure is only logged.
+ *
  ****************************************************************************/
 
 #ifdef CONFIG_BOARD_LATE_INITIALIZE
