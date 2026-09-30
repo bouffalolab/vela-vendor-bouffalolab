@@ -35,6 +35,9 @@
 - [BL616CL Wi-Fi STA 移植调研](bl616cl-wifi-sta-porting-research.md)：冻结 wl80211、
   macsw、OpenVela netdev/IOB、shared RAM/cache、ABI 边界和分阶段验收路线。
 - [BL616CL Wi-Fi STA 移植方案](bl616cl-wifi-sta-porting-solution.md)：整理本次 STA 移植的仓库修改、组件构建边界、平台 glue、shared RAM/TX ownership、NuttX 修复、配置和验收结果。
+- [BL616CL BLE（controller 库 + zblue）](bl616cl-ble.md)：controller 库来源与 OS
+  适配、HCI 传输、线程优先级、`ble` 配置中的 zblue 限制、`mible` 测试命令与
+  miot_test 对测结果。
 - [BL616CL 性能监视（perfmon）](bl616cl-perfmon.md)：E907 cache/分支计数、按 IRQ
   计时和 tick PC 采样，`perfmon` 命令与宿主汇总工具。
 - [BL616CL Wi-Fi 热函数布局与回归](bl616cl-hot-code-layout.md)：`ld.script` 热函数
