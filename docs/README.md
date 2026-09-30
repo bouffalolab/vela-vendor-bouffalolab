@@ -8,6 +8,9 @@
 - [BL616CL 堆分配归属与序号观测](bl616cl-mm-record.md)：配置和验证
   `MM_RECORD_PID`、`MM_RECORD_SEQNO`、`MM_RECORD_STACK`，并覆盖 realloc 失败
   保留调用栈记录、PID/sequence 和释放清除。
+- [BL616CL Mutex 优先级继承](bl616cl-priority-inheritance.md)：配置和验证
+  `PRIORITY_INHERITANCE`、参与继承的对象、`SEM_PREALLOCHOLDERS=0` 的原因、
+  优先级反转对照测试和开销。
 - [BL616CL 编译器栈保护与受控负测](bl616cl-stack-canary.md)：配置和验证
   `STACK_CANARIES`、编译器插桩、受控 canary 失败、恢复和外设回归。
 - [BL616CL TRNG 随机设备适配与验证](bl616cl-trng.md)：配置和验证
