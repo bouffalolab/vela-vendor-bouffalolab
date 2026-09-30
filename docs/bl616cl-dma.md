@@ -36,11 +36,16 @@ OpenVela DMA client
   -> bl616cl_dma0_device()
   -> DMA_GET_CHAN / DMA_CONFIG / DMA_START / DMA_STOP / DMA_RESIDUAL
   -> chips/bl616cl/bl616cl_dma.c
-  -> BL616CL DMA0 registers and LHAL clock wrapper
+  -> LHAL DMA channel devices, start/stop/pending, clock wrapper
+  -> BL616CL DMA0 registers (transfer programming, IRQ status)
 ```
 
-adapter 自行映射 OpenVela 与 LHAL 不同的 direction/width 编码，并自行处理 TC/error
-聚合 IRQ，不复用只处理 TC 且存在 detach 并发窗口的 LHAL callback ISR。
+通道设备（`dma0_ch0..7`）、通道启停、剩余长度查询和 width/burst 编码用 LHAL
+`bflb_dma`。adapter 自行映射 OpenVela 与 LHAL 不同的 direction 编码，自己写单次传输的
+地址和 control 寄存器（`bflb_dma_channel_init()` 会清掉 `DMA_I`，也不设 TransferSize
+和地址；LLI 路径改变 4095 单元上限），并自行处理 TC/error 聚合 IRQ，不复用只处理 TC
+且存在 detach 并发窗口的 LHAL callback ISR，也不调用 `bflb_dma_channel_irq_attach()`
+（会覆盖同一 IRQ 上的 adapter ISR）。
 
 ## 配置与裁剪
 
