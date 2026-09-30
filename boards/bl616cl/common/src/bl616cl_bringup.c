@@ -34,7 +34,6 @@
 
 #include "bl616cl_bod.h"
 #include "bl616cl_bus.h"
-#include "bl616cl_sec_mutex.h"
 
 #ifdef CONFIG_BOARDCTL_RESET_CAUSE
 #  include "bl616cl_systemreset.h"
@@ -92,8 +91,6 @@ int bl616cl_bringup(void)
     {
       return ret;
     }
-
-  bl616cl_sec_mutex_init();
 
   ret = bl616cl_bus_error_initialize();
   if (ret < 0)
