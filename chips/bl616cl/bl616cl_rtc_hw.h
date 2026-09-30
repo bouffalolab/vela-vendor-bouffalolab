@@ -28,6 +28,16 @@
 #include <stdint.h>
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+/* XCLK divider for CONFIG_BL616CL_RTC_CLOCK_DIG32K: 40 MHz / 1221 is about
+ * 32.76 kHz.  bl616cl_rtc.c converts ticks with the same ratio.
+ */
+
+#define BL616CL_RTC_DIG32K_DIV      1221
+
+/****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
