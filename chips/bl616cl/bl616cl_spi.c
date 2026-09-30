@@ -561,6 +561,14 @@ static void bl616cl_spi_recover(struct bl616cl_spi_priv_s *priv)
  *   requested frequency, using the peripheral clock divided by an even
  *   divider (2 * 1..256), rounded so the result does not exceed the request.
  *
+ *   The LHAL SPI_CMD_SET_FREQ rounds to the nearest divider instead, which
+ *   can exceed the request (1.1 MHz gives 1.111 MHz from a 40 MHz clock)
+ *   and overclock a device. Passing it the frequency computed here makes it
+ *   program exactly this divider, so the value returned to the SPI upper
+ *   half matches the hardware. SPI_CMD_GET_FREQ is not used to read the
+ *   divider back: it drops the +1 of both phase fields and divides by zero
+ *   at the fastest setting.
+ *
  * Input Parameters:
  *   priv - Pointer to the SPI driver state.
  *   frequency - Requested SPI clock frequency in Hz.
