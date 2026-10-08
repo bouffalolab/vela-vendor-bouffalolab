@@ -57,10 +57,19 @@ int main(int argc, char *argv[])
       return ret;
     }
 
-  /* KASAN shadow and heap metadata reduce the largest usable block. */
+  /* KASAN shadow and heap metadata reduce the largest usable block, and
+   * the allocator may round a request up to a size class (TLSF: 64 KiB
+   * steps between 2 and 4 MiB) that no free block reaches. Step down
+   * until it fits, keeping at least half of the capacity.
+   */
 
   bytes = (bytes - PSRAM_RESERVE) & ~(size_t)31;
-  cached = memalign(32, bytes);
+  while ((cached = memalign(32, bytes)) == NULL &&
+         bytes >= capacity / 2 + PSRAM_RESERVE)
+    {
+      bytes -= PSRAM_RESERVE;
+    }
+
   start = (uintptr_t)cached;
   end = start + bytes;
   if (cached == NULL || start < BL616CL_PSRAM_BASE ||

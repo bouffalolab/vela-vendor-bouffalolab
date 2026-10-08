@@ -23,7 +23,9 @@ NSH 可能先返回提示符，再输出异步 app 的结果，验收应等待�
 ## 测试含义
 
 - 从 heap 分配“实际容量与最大空闲块的较小值减 64 KiB”，确认返回地址落在 PSRAM。
-  该方式兼容统一配置的 KASAN shadow 和 heap 元数据开销。
+  该方式兼容统一配置的 KASAN shadow 和 heap 元数据开销。分配失败时每次再减
+  64 KiB 重试（TLSF 会把请求向上取整到所在档位，2～4 MiB 每档 64 KiB，最大
+  空闲块离档位边界很近时差 64 KiB 仍分配不到），不少于容量的一半。
 - 四轮地址相关模式写入后 clean，通过 uncached alias 核对整个分配区。
 - 预热 1 KiB cache 后从 uncached alias 改写；确认 invalidate 前仍读到旧值，
   invalidate 后读到新值，避免仅因 cache 命中而误判。
