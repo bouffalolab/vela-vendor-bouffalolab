@@ -125,7 +125,7 @@ XIP 关闭期间运行的源文件也不插桩。flash 初始化和 80 MHz 时�
 
 ### BL616CL warm reset 约束
 
-BL616CL 的 `__bl616cl_start()` 在 `start_load()` 清零/装载 section 之前
+BL616CL 的 `__bl616cl_start()` 在 `bl616cl_section_load()` 清零/装载 section 之前
 调用多个普通 C 函数。warm reset 时，RAM 中旧的 `g_region_init`、region count 和
 region 指针可能仍保留；如果插桩的早期 C 代码先执行，旧标志可能让检查逻辑访问
 过期 region。
@@ -140,7 +140,7 @@ __start
   -> riscv_fpuconfig()
   -> __bl616cl_start()
      -> 普通 early C
-     -> start_load()（上游 startup/start_load.c，不插桩）
+     -> bl616cl_section_load()（bl616cl_memory.c，不插桩）
      -> nx_start()
         -> 初始化 allocator
         -> kasan_register() 重新启动检查

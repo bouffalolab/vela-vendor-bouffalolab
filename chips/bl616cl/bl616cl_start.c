@@ -74,7 +74,7 @@ void __bl616cl_start(void)
   bl616cl_flash_early_init();
   bl616cl_pmp_init();
   bl616cl_cache_early_init();
-  start_load();
+  bl616cl_section_load();
   bl616cl_cache_after_load();
 
   bl616cl_flash_initialize();

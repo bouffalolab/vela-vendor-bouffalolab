@@ -43,8 +43,7 @@ target_sources(
           ${BL616CL_STD_DIR}/src/bl616cl_tzc_sec.c
           ${BL616CL_STD_DIR}/src/bl616cl_mfg_efuse.c
           ${BL616CL_STD_DIR}/src/bl616cl_mfg_flash.c
-          ${BL616CL_STD_DIR}/src/bl616cl_mfg_media.c
-          ${BL616CL_STD_DIR}/startup/start_load.c)
+          ${BL616CL_STD_DIR}/src/bl616cl_mfg_media.c)
 
 target_include_directories(
   bl_std
@@ -68,12 +67,5 @@ set_property(
          ${BL616CL_STD_DIR}/src/bl616cl_common.c
          ${BL616CL_STD_DIR}/src/bl616cl_glb.c
          ${BL616CL_STD_DIR}/src/bl616cl_hbn.c
-  APPEND
-  PROPERTY COMPILE_OPTIONS -fno-sanitize=all -fno-stack-protector)
-
-# start_load() fills .data and clears .bss from __bl616cl_start(), before
-# the runtime those checks rely on is set up. Keep it uninstrumented.
-set_property(
-  SOURCE ${BL616CL_STD_DIR}/startup/start_load.c
   APPEND
   PROPERTY COMPILE_OPTIONS -fno-sanitize=all -fno-stack-protector)
