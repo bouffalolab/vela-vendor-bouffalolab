@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # BL616CL BLE controller. lib/ and include/ are copied unchanged from the
-# Bouffalo SDK release v2.3.32 (components/wireless/bluetooth/
-# btblecontroller, library version 1.6.199). The HCI transport and the
+# Bouffalo SDK release v2.3.36 (components/wireless/bluetooth/
+# btblecontroller, library version 1.6.210). The HCI transport and the
 # NuttX port of the library are built from chips/bl616cl.
 
 if(NOT CONFIG_BL_COMPONENT_BLE)

@@ -34,9 +34,9 @@ mible 命令 / 应用
 
 | 项 | 值 |
 |---|---|
-| 来源 | GitHub bouffalo_sdk v2.3.32 `components/wireless/bluetooth/btblecontroller` |
-| 文件 | `libbtblecontroller_bl616cl_m2s1.a`，sha256 `a629cab45a14ce68119e8ca8a3270348a246a5245cb3344f8f526d090ed62936` |
-| 版本 | 1.6.199（启动 controller 时打印；v2.3.34 为 1.6.207） |
+| 来源 | GitHub bouffalo_sdk v2.3.36 `components/wireless/bluetooth/btblecontroller` |
+| 文件 | `libbtblecontroller_bl616cl_m2s1.a`，sha256 `bdd4a6a5c391a308a80049dd1c29f3fbfced905ce4efe4cf4ae0536b601f90b5` |
+| 版本 | 1.6.210（`btble_controller_get_lib_ver()`；此前用的 v2.3.32 为 1.6.199） |
 | 能力 | 仅 BLE，2 条连接，全部角色，EM 16 KiB（`CONFIG_BL616CL_EM_16K`） |
 | ABI | rv32imafc_xtheade / ilp32f，与 phyrf 库一致 |
 
@@ -122,8 +122,8 @@ zblue 4.0.99 的默认构建只验证过少数配置组合，下面几项是为�
 `CONFIG_BT_PRIVACY` 使本端作为 central 时用 RPA 发起连接；广播和 peripheral
 由 `mible` 指定 `BT_LE_ADV_OPT_USE_IDENTITY`，仍用 public 地址。
 
-tinycrypt 在 configure 时从 GitHub 下载（`apps/crypto/tinycrypt`），首次构建需
-联网。
+tinycrypt 源码是 repo project `apps/crypto/tinycrypt/tinycrypt`；只有该目录缺失时，
+configure 才会从 GitHub 下载。
 
 ## `mible` 测试命令
 
@@ -202,6 +202,12 @@ zblue 4.x 的回调更早，连接事件里能排多个包。ATT MTU 为 23，�
 跑完全部用例后 `btblecontroller` 栈最深 804/3004 B（26.7%）；`q` 退出后堆总量
 297,972 B，峰值占用 27,220 B。
 
+2026-10-08 controller 库换为 v2.3.36（1.6.210）后，同一台架重跑全部用例，均通过：
+广播 found 240、扫描 236；本端 central 1239/316 B/s，本端 peripheral
+1116/328 B/s，均 0 断线、CRC 一致；peripheral-cycle 101 次全部 0x16。
+central-cycle 跑了两轮共 204 次连接，202 次 0x16，2 次 0x3e（连接没建立起来，
+随后重连成功）。旧库此前 225 次连接没有出现 0x3e，样本太少，还不能说与换库有关。
+
 ### 断开原因 0x08
 
 主动断开的一方偶尔在 4 s（supervision timeout）后才收到断开事件，原因是 0x08
@@ -220,6 +226,8 @@ LL_TERMINATE_IND 已被对方收到，对方随即退出连接，但它回的确
 | 原生 btble_cli（同一 controller 库，FreeRTOS） | 1M | 0 / 102 |
 | 原生 btble_cli，每次连接后 `ble_set_2M_Phy` | 2M | 8 / 101 |
 | 同上，再 `ble_set_tx_pwr 00`（本端发射 0 dBm） | 2M | 0 / 102 |
+| Vela `ble`，v2.3.36 库 | 2M | 6 / 100 |
+| 同上，对端射频口串 30 dB 衰减 | 2M | 0 / 101 |
 
 两端 BLE 发射功率都是 13 dBm（rfparam `pwr_ble`），屏蔽箱里相距很近：本端收
 对端 -11～-18 dBm，对端收本端 -14～-20 dBm。只把本端降到 0 dBm，0x08 就消失，
@@ -227,8 +235,10 @@ LL_TERMINATE_IND 已被对方收到，对方随即退出连接，但它回的确
 CRC 看不出来；断开前的最后一个确认没有重传机会，所以表现为 0x08。反方向（本端
 central 断开、对端回确认）几轮合计只有 2 / 210。
 
-问题与 zblue 和 Vela 移植无关，原生固件同样出现。两台设备分不清是对端在强信号
-下的 2M 接收，还是本端 13 dBm 时的 2M 发射，需要第三台设备或衰减器。
+本端保持 13 dBm，在对端射频口串 30 dB 衰减（对端收本端 -45～-54 dBm）后，0x08
+同样消失。本端发射没有变，所以问题不在本端 13 dBm 时的 2M 发射质量，而在对端
+接收过强的 2M 信号，是台架上两端距离过近造成的。问题与 zblue 和 Vela 移植无关，
+原生固件同样出现。
 
 ## 开销
 
@@ -254,4 +264,4 @@ mbedtls 最大，来自为绕开 `id.c` 编译问题而打开的 `BT_SMP`。`ALL
 - ATT MTU 为 23，`mible` 每包 19 B，吞吐低；结果只记录，不作为验收门限。
 - 上表 zblue 编译问题属于上游，修复后可去掉对应配置限制。
 - 近距离、13 dBm 发射时，2M PHY 下主动断开偶发 0x08（见“断开原因 0x08”），
-  原生 SDK 同样存在；本端降到 0 dBm 后不再出现。
+  原生 SDK 同样存在；本端降到 0 dBm 或对端加 30 dB 衰减后不再出现。
