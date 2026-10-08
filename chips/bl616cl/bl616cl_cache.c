@@ -268,7 +268,7 @@ static void bl616cl_cache_range_operation(
  * Description:
  *   Enable the D-cache and I-cache with csi_dcache_enable() and
  *   csi_icache_enable(). Called from __bl616cl_start() after
- *   bl616cl_pmp_init() and before start_load().
+ *   bl616cl_pmp_init() and before bl616cl_section_load().
  *
  * Input Parameters:
  *   None
@@ -291,7 +291,7 @@ void bl616cl_cache_early_init(void)
  *   Make the caches coherent with memory written while loading sections:
  *   clean the whole D-cache (__DCACHE_CALL) and invalidate the whole I-cache
  *   (__ICACHE_IALL), with barriers around each step. Called from
- *   __bl616cl_start() after start_load().
+ *   __bl616cl_start() after bl616cl_section_load().
  *
  * Input Parameters:
  *   None

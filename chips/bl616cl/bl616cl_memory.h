@@ -50,16 +50,13 @@
 void bl616cl_memory_early_init(void);
 
 /****************************************************************************
- * Name: start_load
+ * Name: bl616cl_section_load
  *
  * Description:
  *   Initialize RAM sections at startup: copy every entry of the
  *   __mem_copy_sections table from its load address to its run address and
  *   zero every entry of the __mem_setz_sections table. Both tables end with
  *   a sentinel and entries with NULL pointers are skipped.
- *
- *   Defined in drivers/soc/bl616cl/std/startup/start_load.c, which has no
- *   header of its own.
  *
  * Input Parameters:
  *   None
@@ -69,6 +66,6 @@ void bl616cl_memory_early_init(void);
  *
  ****************************************************************************/
 
-void start_load(void);
+void bl616cl_section_load(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_MEMORY_H */

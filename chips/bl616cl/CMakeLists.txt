@@ -138,4 +138,13 @@ set_property(
   APPEND
   PROPERTY COMPILE_OPTIONS -fno-sanitize=all -fno-stack-protector)
 
+# bl616cl_section_load() fills .data and clears .bss from __bl616cl_start(),
+# before the runtime those checks rely on is set up, and the rest of the file
+# runs even earlier. Keep it uninstrumented.
+set_property(
+  SOURCE ${CMAKE_CURRENT_LIST_DIR}/bl616cl_memory.c
+  TARGET_DIRECTORY arch
+  APPEND
+  PROPERTY COMPILE_OPTIONS -fno-sanitize=all -fno-stack-protector)
+
 target_compile_definitions(arch PRIVATE BL616CL)

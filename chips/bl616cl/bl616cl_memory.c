@@ -38,14 +38,31 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
+#define BL616CL_SECTION_SENTINEL           0xffffffff
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
+
+struct bl616cl_mem_load_section_s
+{
+  uint32_t *start;
+  uint32_t *end;
+  uint32_t *load;
+};
+
+struct bl616cl_mem_section_s
+{
+  uint32_t *start;
+  uint32_t *end;
+};
 
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
+extern struct bl616cl_mem_load_section_s __mem_copy_sections[];
+extern struct bl616cl_mem_section_s __mem_setz_sections[];
 extern uint8_t __LD_CONFIG_EM_SEL;
 
 /****************************************************************************
@@ -174,4 +191,60 @@ void bl616cl_memory_early_init(void)
     }
 
   bl616cl_em_select();
+}
+
+/****************************************************************************
+ * Name: bl616cl_section_load
+ *
+ * Description:
+ *   Initialize RAM sections at startup: copy every entry of the
+ *   __mem_copy_sections table from its load address to its run address and
+ *   zero every entry of the __mem_setz_sections table. Both tables end with a
+ *   sentinel and entries with NULL pointers are skipped.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void bl616cl_section_load(void)
+{
+  struct bl616cl_mem_load_section_s *copy = __mem_copy_sections;
+  struct bl616cl_mem_section_s *setz = __mem_setz_sections;
+  uint32_t *src;
+  uint32_t *dest;
+  int i;
+
+  for (i = 0; (uintptr_t)copy[i].start != BL616CL_SECTION_SENTINEL; i++)
+    {
+      if (copy[i].start == NULL || copy[i].end == NULL ||
+          copy[i].load == NULL)
+        {
+          continue;
+        }
+
+      src = copy[i].load;
+      dest = copy[i].start;
+      while (dest < copy[i].end)
+        {
+          *dest++ = *src++;
+        }
+    }
+
+  for (i = 0; (uintptr_t)setz[i].start != BL616CL_SECTION_SENTINEL; i++)
+    {
+      if (setz[i].start == NULL || setz[i].end == NULL)
+        {
+          continue;
+        }
+
+      dest = setz[i].start;
+      while (dest < setz[i].end)
+        {
+          *dest++ = 0;
+        }
+    }
 }
