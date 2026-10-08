@@ -85,7 +85,6 @@ Wi-Fi 时由 Wi-Fi adapter 完成。
 | `btblecontroller` | 200 | 3072 | 内核线程，`CONFIG_BL_COMPONENT_BLE_PRIORITY`/`_STACKSIZE` |
 | `sysworkq` | 110 | 4064 | zblue 系统工作队列 |
 | `BT Driver /dev/ttyHCI0` | 108 | 3032 | `h4.c` 接收线程 |
-| `BT LW WQ` | 10 | 1360 | zblue 长任务工作队列 |
 | `mible` | 100 | 4096 | 测试命令，`CONFIG_BL_WIRELESS_TESTS_MIBLE_*` |
 
 controller 线程在每次 BLE 中断后运行链路层调度，阻塞在自己的队列上，所以用独立
@@ -101,26 +100,26 @@ controller 线程在每次 BLE 中断后运行链路层调度，阻塞在自己�
 
 在 `nsh` 的基础上打开 `BL_COMPONENT_BLE`、`BL616CL_EM_16K`、zblue
 （`BT_H4`、`BT_CENTRAL`、`BT_PERIPHERAL`、`BT_GATT_CLIENT`、`BT_MAX_CONN=2`）、
-`UART_BTH4`（RX 4096、TX 1024）和 `BL_WIRELESS_TESTS_MIBLE`。另有调试项：
-`ARCH_STACKDUMP`、`SCHED_BACKTRACE`、`FRAME_POINTER`、`BOARD_RESET_ON_ASSERT=2`，
-zblue 日志只开 error（`BT_DEBUG_LOG_LEVEL=3`）。
+`UART_BTH4`（RX 4096、TX 1024）和 `BL_WIRELESS_TESTS_MIBLE`。调试项只留
+`ARCH_STACKDUMP` 和 `BOARD_RESET_ON_ASSERT=2`，zblue 日志只开 error
+（`BT_DEBUG_LOG_LEVEL=3`）。
 
-zblue 4.0.99 的默认构建只验证过少数配置组合，下面几项是为了能编译、能运行而
-设置的，都没有修改 `apps/external/zblue`：
+配置按“不影响 mible 测试，尽量省 code 和 RAM；稳定性相关且代码不多的功能打开”
+取舍（2026-10-08）：
 
-| 配置 | 原因 |
+| 配置 | 说明 |
 |---|---|
-| `BT_HCI_ACL_FLOW_CONTROL` 关 | 打开时 `hci_core.c:337` `bt_hci_host_num_completed_packets` 类型冲突 |
-| `BT_SMP`、`BT_PRIVACY` 开 | `id.c:1631` 无条件访问只在 `BT_PRIVACY` 下存在的 `hdev->irk`；`BT_PRIVACY` 位于 `if BT_SMP` 内 |
-| `BT_GATT_CACHING` 关 | `gatt.c` 缓存分支（616、793、950、1110 行等）没有随多实例改造更新 |
-| `BT_MC_DEVICE_INST` 保持 y | `h4.c` 无条件定义 ttyHCI0、ttyHCI1 两个实例；实例 1 只在 `dev_id` 为 1 时打开 |
-| `PTHREAD_MUTEX_TYPES` 开 | `h4.c` 用 `PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP` |
+| `BT_SMP` 关 | mible 不配对、不加密。`BT_PRIVACY`、`BT_SIGNING`、`BT_ECC` 随之关闭，不再链接 mbedtls，也不需要 `BL616CL_TRNG`、`MBEDTLS_ENTROPY_HARDWARE_ALT` |
+| `BT_HCI_ACL_FLOW_CONTROL` 开，`BT_BUF_ACL_RX_SIZE=251` | controller 只在 host 有空闲 ACL 缓冲时上送 ACL（`BT_MAX_CONN + 1` 个，与事件缓冲分开），ACL 不会因 uart_bth4 接收缓冲满而被丢弃。controller 的 Host Buffer Size 要求包长 ≥ 251，否则回 0x11，`bt_enable()` 失败 |
+| `BT_GAP_PERIPHERAL_PREF_PARAMS` 开，`BT_GAP_AUTO_UPDATE_CONN_PARAMS` 关 | 见下节“GATT 句柄对齐” |
+| `BT_MC_DEVICE_INST` 关 | 只建 ttyHCI0 一个 h4 实例 |
+| `BT_GATT_READ_MULTIPLE` 关 | mible 不用 |
+| `BT_GATT_CACHING` 关 | `gatt.c` 缓存分支没有随多实例改造更新；打开还会多出 4 个句柄，破坏句柄对齐 |
 | `BT_SHELL` 关 | 打开时 `CMakeLists.default.txt:808` 在 zblue 目标创建前 `target_link_libraries`，configure 失败 |
-| `BL616CL_TRNG`、`MBEDTLS_ENTROPY_HARDWARE_ALT` 开 | SMP 的 ECC 走 mbedtls PSA；没有熵源时 `psa_crypto_init()` 失败，`bt_ecc_init()` 提前返回，ECC work 未初始化，`bt_init()` 中调度到空 handler |
-| `BT_GAP_PERIPHERAL_PREF_PARAMS` 关 | 见下节“GATT 句柄对齐” |
 
-`CONFIG_BT_PRIVACY` 使本端作为 central 时用 RPA 发起连接；广播和 peripheral
-由 `mible` 指定 `BT_LE_ADV_OPT_USE_IDENTITY`，仍用 public 地址。
+zblue 已切到 BL fork（`bouffalolab/vela-external-zblue`），`BT_HCI_ACL_FLOW_CONTROL`
+开、`BT_PRIVACY` 关、`BT_MC_DEVICE_INST` 关、`PTHREAD_MUTEX_TYPES` 关，以及开连接
+关 SMP 的编译问题都已在 fork 修复。
 
 tinycrypt 源码是 repo project `apps/crypto/tinycrypt/tinycrypt`；只有该目录缺失时，
 configure 才会从 GitHub 下载。
@@ -157,12 +156,12 @@ mible> q
 为 GATT 服务 0x01–0x04、GAP 服务 0x05–0x0b、mible 服务 0x0c–0x11（notify 值
 0x0e、CCC 0x0f、写特征值 0x11）。
 
-本端因 `BT_CENTRAL` 与 `BT_PRIVACY` 同开，GAP 服务多出 Central Address
-Resolution 特征（2 个属性）。`ble` 配置关闭 `BT_GAP_PERIPHERAL_PREF_PARAMS`
-（PPCP 特征，也是 2 个属性），GAP 服务属性数与 zblue 2.x 相同，mible 服务落在
-0x0c–0x11。代价是本端作为 peripheral 时不提供首选连接参数，也不自动请求连接
-参数更新（zblue 4.x 自动更新只用 PPCP 的值）。对端若是别的 GATT 布局，central
-可用 `central_target <addr> <handle>` 指定写句柄，notify 方向仍须布局一致。
+本端 GAP 服务为设备名、外观和 PPCP 三个特征，与 zblue 2.x 相同，mible 服务落在
+0x0c–0x11。打开 `BT_PRIVACY` 时（`BT_CENTRAL` 同开）GAP 服务会多出 Central
+Address Resolution 特征（2 个属性），布局就对不上了。`BT_GAP_AUTO_UPDATE_CONN_PARAMS`
+关闭：否则本端作为 peripheral 在连接 5 s 后按 PPCP（30–50 ms）请求更新连接参数，
+改变吞吐用例的连接间隔。对端若是别的 GATT 布局，central 可用
+`central_target <addr> <handle>` 指定写句柄，notify 方向仍须布局一致。
 
 ### 与 miot_test 的命令对应
 
@@ -208,6 +207,12 @@ zblue 4.x 的回调更早，连接事件里能排多个包。ATT MTU 为 23，�
 central-cycle 跑了两轮共 204 次连接，202 次 0x16，2 次 0x3e（连接没建立起来，
 随后重连成功）。旧库此前 225 次连接没有出现 0x3e，样本太少，还不能说与换库有关。
 
+同日精简 `ble` 配置（关 SMP 等、开 ACL 流控，见“`ble` 配置”）后全量重跑，均通过：
+广播 found 240、扫描 235；本端 central 1280/319 B/s，本端 peripheral 1532/358 B/s，
+均 0 断线、CRC 一致；central-cycle、peripheral-cycle 各 101 次全部 0x16。本端
+peripheral 发送比此前（1116～1204 B/s）高约三成，原因没有查。`btblecontroller`
+栈最深 756/3004 B，堆峰值 23,652 B。
+
 ### 断开原因 0x08
 
 主动断开的一方偶尔在 4 s（supervision timeout）后才收到断开事件，原因是 0x08
@@ -242,26 +247,29 @@ central 断开、对端回确认）几轮合计只有 2 / 210。
 
 ## 开销
 
-`ble` 配置的 `final_nuttx` 为 text 665,954 B、data 12,892 B、bss 39,852 B
-（`nsh` 为 178,622/1,780/8,380）。按库统计（text 含只读数据）：
+`ble` 配置的 `final_nuttx` 为 text 442,234 B、data 8,526 B、bss 25,994 B
+（2026-10-08 精简前为 665,954/12,892/39,852；`nsh` 为 178,622/1,780/8,380）。
+按库统计（text 含只读数据）：
 
 | 部分 | text | bss/data |
 |---|---|---|
 | controller 库 | 117,079 B | bss 4,931 B，TCM 668 B |
-| phyrf、rfparam | 13,179 + 6,004 B | 约 700 B |
-| zblue | 83,135 B | bss 13,658 B，data 644 B |
-| `h4.c`（两个实例） | 1,711 B | data 8,440 B |
-| `mible` | 9,072 B | 约 1,255 B |
-| mbedtls（SMP 的 ECC，PSA） | 146,374 B | bss 11,060 B |
-| tinycrypt | 4,564 B | — |
+| phyrf、rfparam | 13,189 + 5,600 B | 约 700 B |
+| zblue | 51,469 B | bss 10,872 B，data 664 B |
+| `h4.c`（一个实例）等补编文件 | 1,557 B | data 4,212 B |
+| `mible` | 8,574 B | 约 1,200 B |
+| tinycrypt | 2,436 B | — |
 
-mbedtls 最大，来自为绕开 `id.c` 编译问题而打开的 `BT_SMP`。`ALLSYMS`（沿用
-`nsh`）另占 117,303 B。EM 16K 从堆中划走。
+精简前最大的是 mbedtls（146,374 B text、11,060 B bss），来自当时为绕开 zblue
+编译问题打开的 `BT_SMP`；关掉 SMP 后 zblue 自身也少了约 32 KB。`ALLSYMS`（沿用
+`nsh`）另占 85,891 B。EM 16K 从堆中划走，启动后堆总量 317,892 B（精简前
+297,972 B）。
 
 ## 限制
 
 - Wi-Fi 与 BLE 共存、controller 低功耗（`btble_controller_sleep`）未适配。
 - ATT MTU 为 23，`mible` 每包 19 B，吞吐低；结果只记录，不作为验收门限。
-- 上表 zblue 编译问题属于上游，修复后可去掉对应配置限制。
+- `ble` 配置不含 SMP，不能测配对和加密链路；需要时打开 `BT_SMP`（连带 mbedtls 和熵源）。
+- `BT_GATT_CACHING`、`BT_SHELL` 在 zblue 中仍未修复，保持关闭。
 - 近距离、13 dBm 发射时，2M PHY 下主动断开偶发 0x08（见“断开原因 0x08”），
   原生 SDK 同样存在；本端降到 0 dBm 或对端加 30 dB 衰减后不再出现。
