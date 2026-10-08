@@ -46,6 +46,7 @@
 
 #include <errno.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,6 +79,24 @@ extern const union shell_cmd_entry shell_cmd_mible;
 
 const struct shell *ctx_shell;
 #endif
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+/* mible_test.c keeps the shell pointer in ctx_shell for its callbacks, so
+ * the shell must outlive main().
+ */
+
+static struct shell_ctx g_mible_ctx;
+static struct shell g_mible_shell =
+{
+  .ctx = &g_mible_ctx
+};
+
+/* z_sys_init() starts the zblue work queues; it must run only once. */
+
+static bool g_mible_started;
 
 /****************************************************************************
  * Private Functions
@@ -177,19 +196,16 @@ void shell_help(const struct shell *sh)
 
 int main(int argc, FAR char *argv[])
 {
-  struct shell_ctx ctx =
-  {
-    0
-  };
-
-  struct shell sh =
-  {
-    .ctx = &ctx
-  };
-
   FAR char *line = NULL;
   size_t size = 0;
 
+  if (g_mible_started)
+    {
+      printf("mible already ran since boot; reboot to use it again\n");
+      return EXIT_FAILURE;
+    }
+
+  g_mible_started = true;
   z_sys_init();
 
   for (; ; )
@@ -232,7 +248,7 @@ int main(int argc, FAR char *argv[])
           continue;
         }
 
-      mible_execute(&sh, nargs, args);
+      mible_execute(&g_mible_shell, nargs, args);
     }
 
   free(line);
