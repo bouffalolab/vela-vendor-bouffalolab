@@ -44,7 +44,7 @@ WPA3-SAE 已完成 100 轮连接循环和四方向 100 秒压力，尚未做 500
 | --- | --- | --- |
 | `vela-manifest` | 通过 repo 固定 wireless 子仓路径和远端 | `884c975`，增加 `blgerrit` remote 及 macsw、wl80211 public/private、supplicant 项目 |
 | `vela-nuttx` | NuttX 网络栈和 OS 基座 | `97496437931`，修复 buffered send 唤醒竞态 |
-| `vela-vendor-bouffalolab` | OpenVela wrapper、BL616CL glue、板级、linker、配置 | `6365c1f`、`4f56261`、`7069305`、`71bd08b`、`f112fa0`、`62b724f`、`253c8a0` 等 |
+| `vela-vendor-bouffalolab` | OpenVela wrapper、BL616CL glue、板级、linker、配置 | `a0c769f`、`e8ff8bf`、`ad26705`、`1829e1e`、`d6fb43e`、`f9522cd`、`a23ce25` 等 |
 | `macsw` | Wi-Fi MAC/协议数据路径和 BL616CL/vela_bl616cl 配置库 | `f9b9a8b4`，恢复单天线扫描间的 coex plan；本地 `4a81f48b` 增加 `vela_bl616cl` profile，`3292f25e`（BS-1552）给中断宏加 memory clobber，`d59c4a33`（BS-1553）先清 RX trigger 再查 RX 环（见 12.11）；已推 gerrit 评审（WIP），未合入 |
 | `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | 当前本地 `6454cbe` |
 | `wl80211/private` | wl80211/net80211 core，单独生成 `libwl80211_bl616cl.a` | 当前本地 `4fb42f0` |
@@ -81,14 +81,14 @@ manifest 当前按 `master` 跟踪无线子仓，移植验收时使用的提交 
 
 ### 4.1 组件布局和 Kconfig
 
-原有组件 wrapper 首先在 `6365c1f` 中加入：
+原有组件 wrapper 首先在 `a0c769f` 中加入：
 
 - `components/macsw/{CMakeLists.txt,Kconfig}`；
 - `components/wl80211/{CMakeLists.txt,Kconfig}`；
 - `components/bl_wpa_supplicant/{CMakeLists.txt,Kconfig}`；
 - `boards/.../configs/wifi/defconfig`。
 
-随后 `4f56261` 将它们整理到：
+随后 `e8ff8bf` 将它们整理到：
 
 ```text
 components/wireless/
@@ -228,7 +228,7 @@ WEXT disconnect
   -> netdev_carrier_off()
 ```
 
-扫描结果在 adapter 中转换为 NuttX/WAPI 所需的 SSID、BSSID、信道、RSSI、认证和 cipher 信息。`71bd08b` 补齐了 BL616CL 的 WEXT scan result 路径和相关 NuttX RTOS 辅助接口。
+扫描结果在 adapter 中转换为 NuttX/WAPI 所需的 SSID、BSSID、信道、RSSI、认证和 cipher 信息。`1829e1e` 补齐了 BL616CL 的 WEXT scan result 路径和相关 NuttX RTOS 辅助接口。
 
 连接流程支持：
 
@@ -277,7 +277,7 @@ TX/RX 的关键原则是：
 - 延迟为 0 的 work 在下一个 tick 才执行（nuttx `96e9f7ccd60`），效果相当于按 tick 批处理。实验改成立即唤醒后，`hpwork` 每来一帧就抢占一次，UDP 收发降到约 20 Mbps，所以不回移 vela/dev 的立即唤醒。
 - UDP 过载时丢包发生在 socket 接收缓冲（应用线程拿不到 CPU），驱动不丢帧；`CONFIG_NETDEV_STATISTICS` 的 `/proc/net/wlan0` 与 `/proc/net/stat` 可以区分这两处。
 - `wifi_fw` 相对应用的优先级（2026-09-27 A/B，三种布局填充）：与 iperf 同为 100 时，UDP RX 60M 过载几乎收满（59.3～59.7，127 时 48～54），TCP TX +0.4～+0.8、TCP RX +0.2，UDP TX −1.0～−1.8；此时协议栈放 `hpwork` 还是优先级 150 的 LPWORK，结果相同（LPWORK 多占约 2.2 KB 堆）。低于应用（90）时 UDP TX 降 6～12。同级时两者互不抢占，应用长时间占用 CPU 会推迟 `wifi_fw`，所以默认取 130，保持高于应用。
-- `bl616cl_wifi_adapter_init()` 创建 `wifi_fw` 后，先等它第一次阻塞在 `wifi_task_suspend()`（即 `macswl_init()` 已完成）再发消息（vendor `fc4a65c`）。此前 `wifi_fw` 低于初始化线程（100）时，`macswl_init()` 中的 `ke_init()` 会清掉已经发出的 `MM_RESET_REQ`，启动卡住。
+- `bl616cl_wifi_adapter_init()` 创建 `wifi_fw` 后，先等它第一次阻塞在 `wifi_task_suspend()`（即 `macswl_init()` 已完成）再发消息（vendor `27a793c`）。此前 `wifi_fw` 低于初始化线程（100）时，`macswl_init()` 中的 `ke_init()` 会清掉已经发出的 `MM_RESET_REQ`，启动卡住。
 
 ## 6. Shared RAM、cache 和 linker
 
@@ -350,7 +350,7 @@ STA TX 采用零拷贝，与原生 SDK 和 BL4 相同：
 - raw/EAPOL/管理帧不计入在途上限，复制进同一 IOB 池后发送；`wl80211_output_raw()` 返回非 0 时不调用完成回调，`opaque` 仍归调用者（NuttX 与原生 lwIP 实现一致）；
 - `wlan_transmit()` 结束时若 `txb` 或 `tx_pending` 仍有帧，启动 `txtimeout`（`WLAN_TXTOUT`，1 秒），TX 完成时取消，超时后重新发送并 poll，丢失完成唤醒时发送最多延迟 1 秒。
 
-历史修复：vendor `f112fa0 fix(wifi): correct STA TX ownership` 修正了提交、异步完成和失败路径中的 owner 转移；vendor `62b724f fix(wifi): retry TX after pool release` 让资源释放后重新触发发送路径。零拷贝沿用这两项合同，只是资源从 TX pool 槽改为在途帧计数。
+历史修复：vendor `d6fb43e fix(wifi): correct STA TX ownership` 修正了提交、异步完成和失败路径中的 owner 转移；vendor `f9522cd fix(wifi): retry TX after pool release` 让资源释放后重新触发发送路径。零拷贝沿用这两项合同，只是资源从 TX pool 槽改为在途帧计数。
 
 macsw `f9b9a8b4` 则恢复 BL616CL 单天线跨扫描流程的 coex plan，保证反复扫描和连接过程中无线协同状态不会被错误地耗尽或遗失。
 
@@ -407,7 +407,7 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 - `rfparam_bl616cl_flash_otp.c`；
 - `rfparam_rftlv.c`。
 
-同时对 rfparam 源强制包含 `include/bl616cl_rfparam_preinc.h`，解决 BL SoC 头文件中的 `ERROR` 枚举与 NuttX `sys/types.h` 冲突；`include/log.h` 把 rfparam 的 `LOG_*` 映射到 NuttX 无线日志，并加入 LHAL flash include 路径。drivers 是上游子仓，这两个 shim 不放进 drivers。按 AGENTS §8.3，drivers 源码原则上由 `cmake/*.cmake` 选择；rfparam 是 Wi-Fi（以及后续 BLE）共用的 RF 参数层，因此作为例外放在 `components/wireless/rfparam`，随无线组件一起自动发现。最初由 vendor `253c8a0` 加在 wl80211 glue 中。
+同时对 rfparam 源强制包含 `include/bl616cl_rfparam_preinc.h`，解决 BL SoC 头文件中的 `ERROR` 枚举与 NuttX `sys/types.h` 冲突；`include/log.h` 把 rfparam 的 `LOG_*` 映射到 NuttX 无线日志，并加入 LHAL flash include 路径。drivers 是上游子仓，这两个 shim 不放进 drivers。按 AGENTS §8.3，drivers 源码原则上由 `cmake/*.cmake` 选择；rfparam 是 Wi-Fi（以及后续 BLE）共用的 RF 参数层，因此作为例外放在 `components/wireless/rfparam`，随无线组件一起自动发现。最初由 vendor `a23ce25` 加在 wl80211 glue 中。
 
 `rfparam_bl616cl_flash_otp.c` 负责 BL616CL Flash OTP 记录、CRC、trim/power offset 和 MAC slot 的读取定义，使运行时能够使用 BL616CL 对应的 RF 校准参数来源。
 
@@ -449,7 +449,7 @@ BL616CL rfparam 流程没有天线增益、发射功率和 country 相关接口�
 - `CONFIG_READLINE_CMD_HISTORY=y`；
 - `CONFIG_BL616CL_TRNG=y`、`CONFIG_DEV_URANDOM=y`：由 `BL_COMPONENT_WPA_SUPPLICANT` 在 Kconfig 中 `select`，不写在 defconfig 中；`DEV_URANDOM` 默认 `DEV_URANDOM_ARCH`，同时启用 `/dev/random`。
 
-此前 `1c95e7b feat(bl616): enable WiFi in nsh` 将 Wi-Fi 选项错误地加入 `nsh`。本次配置收尾已恢复 `nsh`，并将 Wi-Fi、iperf、Tab 补全和命令历史集中到 `wifi/defconfig`。defconfig 应继续通过 menuconfig/savedefconfig 生成，不能直接维护生成的 `.config`。
+此前 `e74909a feat(bl616): enable WiFi in nsh` 将 Wi-Fi 选项错误地加入 `nsh`。本次配置收尾已恢复 `nsh`，并将 Wi-Fi、iperf、Tab 补全和命令历史集中到 `wifi/defconfig`。defconfig 应继续通过 menuconfig/savedefconfig 生成，不能直接维护生成的 `.config`。
 
 ### 10.3 所有配置共用
 
@@ -610,7 +610,7 @@ TCP RX 在同一套复制代码上也曾测得 3.51–5.09，差异在波动范�
 
 ### 12.5 既有缺陷修复
 
-`wifi` 镜像（vendor `7864afb`；public、private 为当时的本地分支，已含本节的全部修复）在同一模组上重跑 WPA3 单轮、10 轮连接、iperf 四方向各 30 秒、30 轮扫描，全部 PASS；MAC 为模组出厂地址 `c8:e7:13:7e:0c:11`（与原生 SDK 读到的一致）。
+`wifi` 镜像（vendor `99d0cdb`；public、private 为当时的本地分支，已含本节的全部修复）在同一模组上重跑 WPA3 单轮、10 轮连接、iperf 四方向各 30 秒、30 轮扫描，全部 PASS；MAC 为模组出厂地址 `c8:e7:13:7e:0c:11`（与原生 SDK 读到的一致）。
 
 | 缺陷 | 修复 | 实板验证 |
 | --- | --- | --- |
