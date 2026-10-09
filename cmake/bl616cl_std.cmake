@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# bl_std is shipped as a prebuilt library for external users, so every
-# bl616cl-capable source file must be compiled in regardless of the current
-# Kconfig selection. Otherwise a library built with a minimal .config lacks
-# code that external users later enable (the library is never rebuilt with
-# all options turned on). Sources follow the non-ROMAPI branch of the
-# upstream drivers/soc/bl616cl/std/CMakeLists.txt.
+# Every bl616cl-capable source file is compiled regardless of the Kconfig
+# selection, so this list does not track which option needs which file and
+# enabling a BL616CL feature never fails on a missing std symbol. The final
+# link pulls only the referenced objects: unused files cost build time, not
+# flash. Sources follow the non-ROMAPI branch of the upstream
+# drivers/soc/bl616cl/std/CMakeLists.txt.
 #
 # Deliberately excluded (known to break the build or conflict):
 # - src/bl616cl_romapi_e907.c, src/bl616cl_romapi_patch.c: ROM-resident
