@@ -42,12 +42,12 @@ WPA3-SAE 已完成 100 轮连接循环和四方向 100 秒压力，尚未做 500
 
 | 仓库 | 作用 | 本次关键提交/状态 |
 | --- | --- | --- |
-| `vela-manifest` | 通过 repo 固定 wireless 子仓路径和远端 | `884c975`，增加 `blgerrit` remote 及 macsw、wl80211 public/private、supplicant 项目 |
+| `vela-manifest` | 通过 repo 固定 wireless 子仓路径和远端 | `884c975`，增加 macsw、wl80211 public/private、supplicant 项目 |
 | `vela-nuttx` | NuttX 网络栈和 OS 基座 | `97496437931`，修复 buffered send 唤醒竞态 |
 | `vela-vendor-bouffalolab` | OpenVela wrapper、BL616CL glue、板级、linker、配置 | `a0c769f`、`e8ff8bf`、`ad26705`、`1829e1e`、`d6fb43e`、`f9522cd`、`a23ce25` 等 |
-| `macsw` | Wi-Fi MAC/协议数据路径和 BL616CL/vela_bl616cl 配置库 | `f9b9a8b4`，恢复单天线扫描间的 coex plan；本地 `4a81f48b` 增加 `vela_bl616cl` profile，`3292f25e`（BS-1552）给中断宏加 memory clobber，`d59c4a33`（BS-1553）先清 RX trigger 再查 RX 环（见 12.11）；已推 gerrit 评审（WIP），未合入 |
-| `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | 当前本地 `6454cbe` |
-| `wl80211/private` | wl80211/net80211 core，单独生成 `libwl80211_bl616cl.a` | 当前本地 `4fb42f0` |
+| `macsw` | Wi-Fi MAC/协议数据路径和 BL616CL/vela_bl616cl 配置库 | `f9b9a8b4`，恢复单天线扫描间的 coex plan；`d42f413a` 增加 `vela_bl616cl` profile，`b08e0750` 给中断宏加 memory clobber，`af78b80c` 先清 RX trigger 再查 RX 环（见 12.11）；均已合入 `master` |
+| `wl80211/public` | wl80211 对外头文件、macsw 接口和公共兼容层 | `master` `d0317e7` |
+| `wl80211/private` | wl80211/net80211 core，单独生成 `libwl80211_bl616cl.a` | `master` `7056a35` |
 | `bl_wpa_supplicant` | WPA/WPA2/WPA3 认证相关源码 | `de35a74`（`ffc9839` rebase 到 2.3.35），增加 NuttX OS port 和 mbedTLS PBKDF2；`36e4c44`，`os_get_random()` 改用 `getrandom()` |
 | `bouffalo_sdk-drivers` | BL616CL PHYRF、rfparam、LHAL 等原厂驱动 | `8470912`，补充 BL616CL PHYRF 兼容头 |
 
@@ -55,18 +55,14 @@ manifest 当前按 `master` 跟踪无线子仓，移植验收时使用的提交 
 
 ## 3. Manifest 集成
 
-`vela-manifest` 的 `884c975` 增加了无线组件的 repo 管理：
+`vela-manifest` 的 `884c975` 增加了无线组件的 repo 管理，挂载路径（相对 `vendor/bouffalolab/components/wireless/wifi/`）如下：
 
-```xml
-<project path="vendor/bouffalolab/components/wireless/wifi/bl_wpa_supplicant/bl_wpa_supplicant"
-         name="bouffalo_sdk-bl_wpa_supplicant" remote="bouffalo" revision="master" />
-<project path="vendor/bouffalolab/components/wireless/wifi/macsw/macsw"
-         name="bouffalo/components/wifi6/macsw" remote="blgerrit" revision="master" />
-<project path="vendor/bouffalolab/components/wireless/wifi/wl80211/wl80211"
-         name="bouffalo/components/wl80211/public" remote="blgerrit" revision="master" />
-<project path="vendor/bouffalolab/components/wireless/wifi/wl80211/wl80211/src"
-         name="bouffalo/components/wl80211/private" remote="blgerrit" revision="master" />
-```
+| 路径 | 组件 | 来源 |
+| --- | --- | --- |
+| `bl_wpa_supplicant/bl_wpa_supplicant` | supplicant | GitHub 只读镜像 `bouffalo_sdk-bl_wpa_supplicant`，跟踪 `master` |
+| `macsw/macsw` | macsw | 内部源码仓，跟踪 `master` |
+| `wl80211/wl80211` | wl80211 public | 内部源码仓，跟踪 `master` |
+| `wl80211/wl80211/src` | wl80211 private | 内部源码仓，跟踪 `master` |
 
 这样做的目的有两个：
 
@@ -75,7 +71,7 @@ manifest 当前按 `master` 跟踪无线子仓，移植验收时使用的提交 
 
 发布版本应进一步把最终验证使用的 revision 写入冻结 manifest 或 release lock，不能只依赖 floating `master`。
 
-内部 gerrit 项目直接写入 `bl-vela-sdk.xml` 是项目初期的临时安排。它与 manifest 仓 README 中“下游消费方不接触内部仓、无线组件以预编译库分发”的规划不一致：没有内部 gerrit 权限的使用者无法完成 `repo sync`。待初版 ready、release 流程跑通后，再把内部源码项目拆到内部 overlay manifest，公开 manifest 只保留可分发内容。
+macsw 与 wl80211 public/private 是内部源码仓，没有访问权限的使用者无法 sync 开发清单 `bl-vela-sdk.xml`。
 
 ## 4. Vendor 适配层
 
@@ -268,7 +264,7 @@ TX/RX 的关键原则是：
 - ≥500 B 的帧不再从 wl80211 的 host RX 槽拷进 IOB 池。驱动用 `iob_init_with_data()` 把槽包成 IOB：IOB 头放在槽的 `rx_info` 上（wl80211 调用 RX 回调时已经读完它），`io_offset` 指向 L3，与拷贝路径相同；IOB 释放时 `io_free` 把槽还给 wl80211。短帧照旧拷贝：拷贝便宜，而且收到的 TCP ACK 要留在池 IOB 上，协议栈会在 ACK 的 IOB 上构造下一个数据段。
 - 同时借给协议栈的槽最多 `(CFG_BARX - 1) × CFG_REORD_BUF` 个（`vela_bl616cl` profile 为 8 个，槽共 18 个），其余留给 BA 重排序和交接；借满后照旧拷贝。槽用光时 MAC 连 beacon 也收不到。
 - 协议栈可能在收到的 IOB 上直接构造回复（ICMP echo 等），而槽里只有约 60 B 的 headroom。`wlan_transmit()` 发现首个 IOB 的 `io_offset` 小于 `CONFIG_NET_LL_GUARDSIZE` 时，先把整帧复制进池 IOB 再发送；池里没有 IOB 就丢掉这一帧，由上层重传。
-- 该选项 select `IOB_ALLOC`，每个 IOB 头多 12 B（池 60 时 `.wifibss` 多 720 B）。配套修改：nuttx `c016d23b0d6` 在 `iob_initialize()` 中清零池 IOB 的 `io_free`；wl80211 public `a14c5b8` 适配指针形式的 `io_data`；macsw `3292f25e` 给 `GLOBAL_INT_DISABLE/RESTORE` 加 memory clobber，因为 `wl80211_mac_rx_free()` 现在也在网络线程中调用，槽队列的更新必须留在临界区内。
+- 该选项 select `IOB_ALLOC`，每个 IOB 头多 12 B（池 60 时 `.wifibss` 多 720 B）。配套修改：nuttx `c016d23b0d6` 在 `iob_initialize()` 中清零池 IOB 的 `io_free`；wl80211 public `7e88e27` 适配指针形式的 `io_data`；macsw `b08e0750` 给 `GLOBAL_INT_DISABLE/RESTORE` 加 memory clobber，因为 `wl80211_mac_rx_free()` 现在也在网络线程中调用，槽队列的更新必须留在临界区内。
 
 线程与优先级（2026-09-26～28 在模组上 A/B，三种布局填充）：
 
@@ -317,27 +313,27 @@ XIP 代码段 `.text` 的起点对齐到 32 KiB（I-cache 大小），RAM 段的
 
 wl80211 public/private 侧的配套修改如下，BL616CL 与 openvela 需要的排在前面：
 
-- public `ddd2ed7`：保留 BSD queue/tree 兼容头；
-- public `553aa47`：NuttX 下使用 `sys/queue.h`，scan-result tree 统一使用 vendored `tree.h`；
-- public `662908c`：修正 NuttX host port（`nuttx.c`、`rtos_al_nuttx.c`）在当前 NuttX 下的编译；
-- public `727fe21`：`bl_lp.h` 仅在 `CONFIG_LPAPP` 下包含；
-- public `4928faa`：TX 描述符大小的静态检查扣除以太头占用的 guard；
-- public `8e6ada9`：NuttX STA TX 在途帧上限、完成回调与 `wl80211_output_ready()`；
-- public `a14c5b8`：`CONFIG_IOB_ALLOC` 下由数据地址找回池 IOB，TX 头放在 `io_data`（RX 零拷贝需要）；
-- public `aa7555d`：更正超时 work 所在队列的注释；
-- private `4f69084`：BL616CL 按工具链探测 ISA 参数，并增加 `CONFIG_MACSW_SELECT` profile 定义。
+- public `032cf18`：保留 BSD queue/tree 兼容头；
+- public `e29b830`：NuttX 下使用 `sys/queue.h`，scan-result tree 统一使用 vendored `tree.h`；
+- public `829fab5`：修正 NuttX host port（`nuttx.c`、`rtos_al_nuttx.c`）在当前 NuttX 下的编译；
+- public `b9e48be`：`bl_lp.h` 仅在 `CONFIG_LPAPP` 下包含；
+- public `87707e7`：TX 描述符大小的静态检查扣除以太头占用的 guard；
+- public `7988d27`：NuttX STA TX 在途帧上限、完成回调与 `wl80211_output_ready()`；
+- public `7e88e27`：`CONFIG_IOB_ALLOC` 下由数据地址找回池 IOB，TX 头放在 `io_data`（RX 零拷贝需要）；
+- public `4adc902`：更正超时 work 所在队列的注释；
+- private `7056a35`：BL616CL 按工具链探测 ISA 参数，并增加 `CONFIG_MACSW_SELECT` profile 定义。
 
-与原生 SDK 共用的独立修复排在后面，各有 BS 单：
+与原生 SDK 共用的独立修复排在后面：
 
-- public `0f53c64`（BS-1551）：lwIP 版 `wl80211_output_raw()` 失败时不再调用完成回调；
+- public `2e44288`：lwIP 版 `wl80211_output_raw()` 失败时不再调用完成回调；
 
-曾提交的 BS-1550（空 SSID 上报时保留已知 SSID，gerrit 11412）已撤回：按 BS-1151，扫描时总是用最新上报更新 AP 的全部信息，空 SSID 覆盖已知 SSID 是预期行为。
+曾提交的“空 SSID 上报时保留已知 SSID”修改已撤回：扫描时总是用最新上报更新 AP 的全部信息，路由器改为隐藏后不应再扫描到原 SSID，空 SSID 覆盖已知 SSID 是预期行为。
 
 private 的 TX 路径与 master 相同。此前为复制方案加入的 TX pool（private `b86b33e`、`2fee8fe`、`089097b`，public `93e1af5`、`7369603`）已撤回。
 
 `wl80211.h` 强制使用统一的 tree layout，避免不同 translation unit 对 RB tree entry 的大小和布局理解不一致。这是扫描结果树跨 public header、private core 和 chip adapter 时的 ABI 约束。
 
-scan-result tree 没有锁，Vela 靠 adapter 的 `g_wifi_scan_sem` 保证读写不并发：只有显式扫描写这棵树（连接阶段的扫描写 `connect.c` 自己的候选列表），显式扫描只由 `bl616cl_wifi_sta_scan()` 发起，`SIOCGIWSCAN` 读取也要先拿同一个信号量，而 `SCAN_DONE` 在扫描 op 出队释放之后才释放它。这个前提在 Vela 打开 `CONFIG_WL80211_P2P` 或出现别的扫描发起方时不再成立，需要重新评估。曾提交的扫描结果锁（BS-1549，gerrit 11413/11423）经评审撤回。
+scan-result tree 没有锁，Vela 靠 adapter 的 `g_wifi_scan_sem` 保证读写不并发：只有显式扫描写这棵树（连接阶段的扫描写 `connect.c` 自己的候选列表），显式扫描只由 `bl616cl_wifi_sta_scan()` 发起，`SIOCGIWSCAN` 读取也要先拿同一个信号量，而 `SCAN_DONE` 在扫描 op 出队释放之后才释放它。这个前提在 Vela 打开 `CONFIG_WL80211_P2P` 或出现别的扫描发起方时不再成立，需要重新评估。曾提交的扫描结果锁经评审撤回。
 
 ## 7. TX 资源所有权与稳定性修复
 
@@ -783,20 +779,20 @@ R2 之后按模块继续排列。perfmon 采样选出四组候选，每组单独
 
 原因：`rxl_cntrl_evt()` 每轮循环先用 `rxl_rxdesc_get()` 看环是否为空，再清 rxBuffer1Trigger 的中断状态和 `KE_EVT_RXREADY_BIT`。`wifi_fw`（127）在这两步之间被 `hpwork`（224）等抢占时，AP 的聚合帧可以把环写满；硬件置起的 trigger 随后被清掉，环满后硬件不再写入，也不再触发。慢 flash 和 RX 拷贝让网络线程每次占用 CPU 更久，所以更容易命中；现役配置也有这个窗口，只是概率低。原生 SDK 的 macsw 和 `wlan_mac` 是同样的顺序。
 
-修复：macsw `d59c4a33`（BS-1553）改为先清 trigger 和事件，再取描述符；查到空以后才置起的 trigger 会保持挂起，重新使能时触发中断。
+修复：macsw `af78b80c` 改为先清 trigger 和事件，再取描述符；查到空以后才置起的 trigger 会保持挂起，重新使能时触发中断。
 
 验证：
 
 - 复现配置加修复：45 轮 0 次，也没有出现连续 3 个 beacon 丢失；TCP RX 均值 13.3，与修复前相同。
 - 现役配置加修复，3×20 秒：TCP TX 20.8、UDP TX 46.1、TCP RX 21.7、UDP RX 47.6～48.9（60M 过载），堆 211,236 字节，与修复前相同。
-- IRQ 宏的 memory clobber（BS-1552）与此无关：去掉 clobber 和保留 clobber 都能复现。
+- IRQ 宏的 memory clobber（`b08e0750`）与此无关：去掉 clobber 和保留 clobber 都能复现。
 - 复现配置上的 8 次断线重连后，TCP/UDP TX 都回到基线。ST010 记录过的一次“重连后 TX 减半”没有再出现；“ADDBA 等待响应时断线”的假设已用注入实验排除。
 
 ## 13. 后续发布门禁
 
 在将本方案用于正式 SDK release 前，还应完成：
 
-1. 将 manifest 的 floating `master` 转为冻结 revision/tag 或 release manifest，并把内部 gerrit 源码项目从公开 manifest 拆到内部 overlay；
+1. 将 manifest 的 floating `master` 转为冻结 revision/tag，并提供不含内部源码仓、使用预编译库的对外清单；
 2. 重新核对各组件许可、来源和对外同步策略；
 3. 对 WPA3-SAE 补做 500 轮连接和 500 秒级四方向压力；
 4. 明确 country code、发射功率和 RF calibration 的产品行为（当前 `SIOCSIWTXPOW`、`SIOCGIWTXPOW` 返回 `-ENOSYS`）；
@@ -804,23 +800,8 @@ R2 之后按模块继续排列。perfmon 采样选出四组候选，每组单独
 6. 保留最简 `nsh` 与独立 `wifi` 两个构建目标，避免测试工具和 Wi-Fi 组件重新回流到基础配置；
 7. 在发布候选 `wifi` 镜像上重跑 500 轮扫描、500 轮连接和 TCP/UDP 四方向压力。
 
-## 14. 证据索引
+## 14. 相关文档
 
-- 最终验收：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/FINAL_ACCEPTANCE.md`
-- `wifi` 镜像（TRNG 前）：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/closure-wifi-{build,flash-1m,reboot,wpa2-usb3}.log`
-- 当前 `wifi` 镜像：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/wpa3-trng-wifi-{build,flash-1m,reboot}.log`、`closure-wifi-wpa3-ax86u-single.log`、`wpa3-connect-100.csv`、`wpa3-iperf-100s-01/`；TRNG 前的 WPA3 失败现场为 `closure-wifi-wpa3-single-01.log`
-- 组件边界：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/component-integration-contract.md`
-- BL4 边界核对：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/bl4-integration-boundary.md`
-- 迁移记录：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/repo-migration/MIGRATION.md`
-- 原始调研：`vendor/bouffalolab/docs/bl616cl-wifi-sta-porting-research.md`
-- 测试与串口证据：`.tasks/2026-09-02-bl616cl-wifi-sta-porting/work/`
-- 既有缺陷修复与故障注入：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST005-existing-defects/work/README.md`
-- RX 拷贝、memcpy 测量与断流复现：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST006-rx-copy-research/work/README.md`
-- TLSF 切换的构建、启动、ostest 与回归：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST011-tlsf-allocator/work/README.md`
-- WRAM 与 IOB 池缩小（R1）、IOB 用量与分配方案调研：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST009-iob-dynamic-zero-copy/work/README.md`
-- 网络参数扫描（OOO/SACK、池大小、IOB 几何、代码布局敏感性）：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST010-net-throughput/work/README.md` 的 T5 各节
-- 热点采样与 flash 80 MHz A/B、复位、KASAN 启动排查：同一 README 的“热点代码布局”各节，数据在 `work/prof/`、`work/fhs/`
-- Wi-Fi 热函数布局实验、perfmon 验证与回归工具首次运行：同一 README 的“热点代码布局 Stage 2”和“perfmon 与布局回归工具”两节，数据在 `work/layout/`、`work/perfmon/`
-- RX 硬件缓冲与 `vela_bl616cl` profile：同一 README 的“RX 硬件缓冲”两节，数据在 `work/rxdiag/`、`work/rxcfg/`
-- Wi-Fi 热函数布局：同一 README 的“热点代码布局 Stage 2”一节，数据在 `work/layout/`
-- RX 零拷贝（R2）的实现、A/B、探针与调试镜像：`.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST009-iob-dynamic-zero-copy/work/README.md` 的“R2 实施与验证”“R2 补充验证”两节，数据在 `work/r2/`
+- 原始调研：[bl616cl-wifi-sta-porting-research.md](bl616cl-wifi-sta-porting-research.md)
+- Wi-Fi 热函数布局与组件更新后的回归步骤：[bl616cl-hot-code-layout.md](bl616cl-hot-code-layout.md)
+- perfmon 采样：[bl616cl-perfmon.md](bl616cl-perfmon.md)

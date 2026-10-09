@@ -294,7 +294,7 @@ nsh>
 
 ```text
 UBSAN_TEST BEGIN case=add-overflow
-ubsan_prologue: UBSAN: add-overflow in /home/miot/Work/miot/code/bl_vela_sdk/apps/vendor/bouffalolab/apps/os_feature_tests/ubsan/ubsan_test.c:39:16
+ubsan_prologue: UBSAN: add-overflow in apps/vendor/bouffalolab/apps/os_feature_tests/ubsan/ubsan_test.c:39:16
 UBSAN_TEST RESULT case=add-overflow FAULT verification=required
 nsh>
 ```
@@ -306,7 +306,7 @@ nsh>
 
 ```text
 UBSAN_TEST BEGIN case=shift-out-of-bounds
-ubsan_prologue: UBSAN: shift-out-of-bounds in /home/miot/Work/miot/code/bl_vela_sdk/apps/vendor/bouffalolab/apps/os_feature_tests/ubsan/ubsan_test.c:44:16
+ubsan_prologue: UBSAN: shift-out-of-bounds in apps/vendor/bouffalolab/apps/os_feature_tests/ubsan/ubsan_test.c:44:16
 __ubsan_handle_shift_out_of_bounds: shift exponent 32 is too large for 32-bit type 'long int'
 UBSAN_TEST RESULT case=shift-out-of-bounds FAULT verification=required
 nsh>
