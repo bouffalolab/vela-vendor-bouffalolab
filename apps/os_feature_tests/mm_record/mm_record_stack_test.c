@@ -306,7 +306,9 @@ static int stack_fixture_init(struct stack_fixture_s *fixture,
   mm_initialize_heap(&config, &fixture->heap);
   if (fixture->heap == NULL || fixture->heap->mm_procfs == NULL)
     {
-      /* A NULL procfs entry cannot be torn down safely until ST028 lands. */
+      /* NuttX cannot yet tear down a heap whose procfs entry failed to
+       * register, so leave the heap in place.
+       */
 
       if (fixture->tls != NULL)
         {
