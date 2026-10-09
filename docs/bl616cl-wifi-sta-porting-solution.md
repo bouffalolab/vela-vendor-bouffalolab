@@ -379,6 +379,7 @@ private 的 TX 路径与 master 相同。此前为复制方案加入的 TX pool�
 
 `wl80211.h` 强制使用统一的 tree layout，避免不同 translation unit 对 RB tree entry 的大小和布局理解不一致。这是扫描结果树跨 public header、private core 和 chip adapter 时的 ABI 约束。
 
+枚举大小是另一条 ABI 约束。macsw、wl80211 core 用 `-fshort-enums` 编译（macsw 的 `_Static_assert` 依赖它），原生 SDK 编的 phyrf 与 BLE controller 库同样如此；Vela 侧（`chips/bl616cl`、wl80211 host port、supplicant 等）沿用 NuttX 默认的 4 字节枚举。按 DWARF 比对，当前跨边界的结构体、函数签名和全局变量都不含枚举成员、枚举数组或枚举指针，wl80211 公开结构体用 `uint8_t` 加 `ref @ enum` 注释代替枚举。以下接口两侧布局不同，Vela 目前没有使用，接入前要先处理（例如放进带 `-fshort-enums` 编译的 shim）：`coexm_rf_path_get()`、`struct coexm_hw_plan` 与 `struct coexm_protect_profile`、`wl80211_monitor_start()` 参数中的 `channel_width`、覆盖 `wireless_regdb_init()` 时传给 phyrf 的 `country_reg_map_t`。新增跨边界接口不要在结构体成员、指针参数或回调签名里使用枚举。
 
 scan-result tree 没有锁，Vela 靠 adapter 的 `g_wifi_scan_sem` 保证读写不并发：只有显式扫描写这棵树（连接阶段的扫描写 `connect.c` 自己的候选列表），显式扫描只由 `bl616cl_wifi_sta_scan()` 发起，`SIOCGIWSCAN` 读取也要先拿同一个信号量，而 `SCAN_DONE` 在扫描 op 出队释放之后才释放它。这个前提在 Vela 打开 `CONFIG_WL80211_P2P` 或出现别的扫描发起方时不再成立，需要重新评估。曾提交的扫描结果锁经评审撤回。
 

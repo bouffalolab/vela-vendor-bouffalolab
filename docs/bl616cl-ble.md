@@ -38,7 +38,7 @@ mible 命令 / 应用
 | 文件 | `libbtblecontroller_bl616cl_m2s1.a`，sha256 `bdd4a6a5c391a308a80049dd1c29f3fbfced905ce4efe4cf4ae0536b601f90b5` |
 | 版本 | 1.6.210（`btble_controller_get_lib_ver()`；此前用的 v2.3.32 为 1.6.199） |
 | 能力 | 仅 BLE，2 条连接，全部角色，EM 16 KiB（`CONFIG_BL616CL_EM_16K`） |
-| ABI | rv32imafc_xtheade / ilp32f，与 phyrf 库一致 |
+| ABI | rv32imafc_xtheade / ilp32f，与 phyrf 库一致；原生 SDK 默认带 `-fshort-enums`，Vela 调用的接口不含枚举 |
 
 内部 bouffalo_sdk 源码树只有 controller 源码，没有 BL616CL 预编译库；开发期
 直接把公开库提交在 vendor 仓里。
