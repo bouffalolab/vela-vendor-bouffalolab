@@ -19,13 +19,16 @@ endif()
 `include()` helper：
 
 ```cmake
-# components/wl80211/CMakeLists.txt
-bl_add_component(NAME wl80211)
+# components/foo/CMakeLists.txt
+bl_add_component(NAME foo)
 ```
 
 helper 默认优先使用 `components/<name>/<name>/` 源码；源码不存在或组件被
 `BL_USE_LIB_COMPONENTS` 指定时，改用 `components/<name>/libs/<chip>/lib<name>.a`。
 源码和预编译模式都导出相同的组件头文件。
+
+Wi-Fi 的 macsw/wl80211 core 不使用 `bl_add_component()`：源码/预编译选择见
+`cmake/bl_wifi.cmake` 与 `docs/bl616cl-wifi-sta-porting-solution.md` 4.5 节。
 
 `vendor/bouffalolab/drivers` 是独立 drivers release repo，不属于 components
 双模目录。其 CMake 文件面向 Bouffalo SDK，OpenVela 由父仓 wrapper 显式选择

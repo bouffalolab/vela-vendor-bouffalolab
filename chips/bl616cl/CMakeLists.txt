@@ -104,12 +104,13 @@ if(CONFIG_BL_COMPONENT_WL80211)
 
   set(BL616CL_VENDOR_DIR ${CMAKE_CURRENT_LIST_DIR}/../..)
   set(BL616CL_WIFI_DIR ${BL616CL_VENDOR_DIR}/components/wireless/wifi)
+  include(${BL616CL_VENDOR_DIR}/cmake/bl_wifi.cmake)
   target_include_directories(
     arch
-    PRIVATE ${BL616CL_WIFI_DIR}/wl80211/wl80211/include
-            ${BL616CL_WIFI_DIR}/wl80211/wl80211
-            ${BL616CL_WIFI_DIR}/wl80211/wl80211/macsw
-            ${BL616CL_WIFI_DIR}/macsw/macsw/inc
+    PRIVATE ${BL_WL80211_PUBLIC_DIR}/include
+            ${BL_WL80211_PUBLIC_DIR}
+            ${BL_WL80211_PUBLIC_DIR}/macsw
+            ${BL_MACSW_INC_DIR}
             ${BL616CL_WIFI_DIR}/bl_wpa_supplicant/bl_wpa_supplicant/include/bl_supplicant
             ${BL616CL_VENDOR_DIR}/drivers/soc/bl616cl/phyrf/include
             ${BL616CL_VENDOR_DIR}/drivers/rfparam/Inc)

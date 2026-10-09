@@ -15,37 +15,46 @@ set(WL80211_ARCHIVE ${WL80211_SUBBUILD_DIR}/libwl80211_${CHIP}.a)
 
 string(REGEX REPLACE "gcc$" "" CROSS_COMPILE "${CMAKE_C_COMPILER}")
 set(PHYRF_INCLUDE ${BL_BOUFFALO_DRIVERS_DIR}/soc/${CHIP}/phyrf/include)
-set(MACSW_INCLUDE
-    ${CMAKE_CURRENT_LIST_DIR}/../macsw/macsw/inc
-    ${CMAKE_CURRENT_LIST_DIR}/../macsw/macsw/include)
+set(MACSW_INCLUDE ${BL_MACSW_INC_DIR})
 set(SUPPLICANT_INCLUDE
     ${CMAKE_CURRENT_LIST_DIR}/../bl_wpa_supplicant/bl_wpa_supplicant/include
     ${CMAKE_CURRENT_LIST_DIR}/../bl_wpa_supplicant/bl_wpa_supplicant/include/bl_supplicant)
 
-# Build the wl80211 core archive with its own CMake project in standalone
-# mode (the same flow the Bouffalo SDK library.mk uses to produce
-# libwl80211_<chip>.a). Private net80211 sources never compile in the
-# NuttX build environment; the Vela side consumes the archive only.
-execute_process(
-  COMMAND ${CMAKE_COMMAND} -S ${WL80211_SRC_DIR} -B ${WL80211_SUBBUILD_DIR} -G Ninja
-          -DCMAKE_SYSTEM_NAME=Generic
-          -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
-          -DCROSS_COMPILE=${CROSS_COMPILE}
-          -DCHIP=${CHIP}
-          -DCONFIG_MACSW_SELECT=${CONFIG_MACSW_SELECT}
-          -DPHYRF_INCLUDE=${PHYRF_INCLUDE}
-          "-DMACSW_INCLUDE=${MACSW_INCLUDE}"
-          "-DSUPPLICANT_INCLUDE=${SUPPLICANT_INCLUDE}"
-  RESULT_VARIABLE wl80211_configure_result
-  COMMAND_ERROR_IS_FATAL ANY)
+if(BL_WIFI_PREBUILT)
+  message(STATUS "BL Wi-Fi: macsw/wl80211 cores from prebuilt bundles")
+  set(WL80211_ARCHIVE ${CMAKE_CURRENT_LIST_DIR}/prebuilt/lib/libwl80211_${CHIP}.a)
+else()
+  message(STATUS "BL Wi-Fi: macsw/wl80211 cores from source")
+  list(APPEND MACSW_INCLUDE ${CMAKE_CURRENT_LIST_DIR}/../macsw/macsw/include)
 
-execute_process(
-  COMMAND ${CMAKE_COMMAND} --build ${WL80211_SUBBUILD_DIR}
-  RESULT_VARIABLE wl80211_build_result
-  COMMAND_ERROR_IS_FATAL ANY)
+  # Build the wl80211 core archive with its own CMake project in standalone
+  # mode (the same flow the Bouffalo SDK library.mk uses to produce
+  # libwl80211_<chip>.a). Private net80211 sources never compile in the
+  # NuttX build environment; the Vela side consumes the archive only.
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} -S ${WL80211_SRC_DIR} -B ${WL80211_SUBBUILD_DIR} -G Ninja
+            -DCMAKE_SYSTEM_NAME=Generic
+            -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
+            -DCROSS_COMPILE=${CROSS_COMPILE}
+            -DCHIP=${CHIP}
+            -DCONFIG_MACSW_SELECT=${CONFIG_MACSW_SELECT}
+            -DPHYRF_INCLUDE=${PHYRF_INCLUDE}
+            "-DMACSW_INCLUDE=${MACSW_INCLUDE}"
+            "-DSUPPLICANT_INCLUDE=${SUPPLICANT_INCLUDE}"
+            # Keep the build path out of the objects exported to
+            # wl80211/prebuilt.
+            "-DCMAKE_C_FLAGS=-ffile-prefix-map=${BL_SDK_ROOT}=."
+    RESULT_VARIABLE wl80211_configure_result
+    COMMAND_ERROR_IS_FATAL ANY)
 
-if(NOT EXISTS ${WL80211_ARCHIVE})
-  message(FATAL_ERROR "wl80211 core archive not found: ${WL80211_ARCHIVE}")
+  execute_process(
+    COMMAND ${CMAKE_COMMAND} --build ${WL80211_SUBBUILD_DIR}
+    RESULT_VARIABLE wl80211_build_result
+    COMMAND_ERROR_IS_FATAL ANY)
+
+  if(NOT EXISTS ${WL80211_ARCHIVE})
+    message(FATAL_ERROR "wl80211 core archive not found: ${WL80211_ARCHIVE}")
+  endif()
 endif()
 
 nuttx_add_extra_library(${WL80211_ARCHIVE})
@@ -58,7 +67,7 @@ nuttx_add_extra_library(${BL_BOUFFALO_DRIVERS_DIR}/soc/bl616cl/phyrf/lib-gcc_10.
 # Bouffalo SDK build selects the FreeRTOS/lwIP set (wl80211_platform.c,
 # lwip.c, wifi_mgmr_cli.c) from the same repository instead. The BL616CL
 # netdev and adapter live in chips/bl616cl.
-set(WL80211_PUBLIC_DIR ${CMAKE_CURRENT_LIST_DIR}/wl80211)
+set(WL80211_PUBLIC_DIR ${BL_WL80211_PUBLIC_DIR})
 
 nuttx_add_kernel_library(bl_wl80211)
 target_sources(
