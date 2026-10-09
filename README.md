@@ -1,111 +1,132 @@
-# Bouffalo Lab Vendor (vela)
+# Bouffalo Lab Vendor（openvela）
 
-Bouffalo Lab 芯片原厂维护的、基于 **openvela** 的适配层：芯片移植 + 板级 +
-驱动 + 中间件 + 示例。对外镜像为 `github/bouffalolab/vela-vendor-bouffalolab`，
-通过 BL Vela SDK 的 repo manifest（`vendor/bouffalolab`，remote `bouffalo`，
-默认 revision `trunk`）接入整树。
+Bouffalo Lab 维护的 openvela 适配层，是 BL Vela SDK 中的 `vendor/bouffalolab`：
+芯片移植、板级、驱动 wrapper、无线组件、测试应用和宿主工具。本仓不能单独构建，
+需要用 repo manifest 拉取整个 SDK（openvela 基座 + 本仓 + 驱动等仓）。
 
-当前脚手架：chip = `bl616cl`，board = `ai-m64l-32s-kit`。
+当前支持芯片 BL616CL（RISC-V E907），开发板为安信可 Ai-M64L-32S-Kit。
+
+## 获取代码
+
+需要 Linux x86-64 主机，并预先安装 `repo` 和 `git-lfs`（安装后执行一次
+`git lfs install`）。
+
+```bash
+mkdir bl_vela_sdk && cd bl_vela_sdk
+repo init -u https://github.com/bouffalolab/vela-manifest.git \
+          -b main -m manifests/bl-vela-sdk-release.xml
+repo sync -j8
+git -C vendor/bouffalolab lfs pull bouffalo
+```
+
+`repo sync` 不会下载 LFS 对象。不执行最后一步时，固件后处理和烧录工具仍是 LFS
+指针文件，构建会在后处理阶段失败。对外清单跟踪各仓的开发分支，暂未提供固定版本。
+
+有内部源码权限的开发者使用 `manifests/bl-vela-sdk.xml`，Wi-Fi core 从源码构建；
+对外清单使用本仓中的预编译包，见下文“Wi-Fi 与 BLE”。
+
+## 构建与烧录
+
+以下命令都在 SDK 根目录执行。根目录的 `vela` 是 manifest 创建的软链接，指向本仓
+`vela`，它补齐 openvela 预置的工具链、CMake、Ninja 和 Python 依赖，只走
+CMake + Ninja（本仓不提供 `Make.defs`/`Makefile`）。
+
+```bash
+./vela build ai-m64l-32s-kit/wifi              # configure + 编译
+./vela flash ai-m64l-32s-kit/wifi --port /dev/ttyUSB0
+./vela menuconfig ai-m64l-32s-kit/wifi         # 配置有变化时回写板级 defconfig
+./vela clean ai-m64l-32s-kit/wifi              # 删除 cmake_out/ai-m64l-32s-kit_wifi
+./vela build --list                            # 列出可用的板级配置
+```
+
+目标写到 `configs/<name>` 一层；`vendor/bouffalolab/boards/` 前缀可省略，无歧义时
+chip 和 `configs/` 层也可省略（`bl616cl/ai-m64l-32s-kit/configs/nsh`、
+`ai-m64l-32s-kit/nsh`、`nsh` 等价）。默认并行度为逻辑核数的一半，可用 `-j N` 覆盖。
+
+Ai-M64L-32S-Kit 的配置：
+
+| 配置 | 内容 |
+|---|---|
+| `nsh` | 基础控制台 |
+| `nsh-peripherals` | 外设测试、perfmon、KASAN、stack canary |
+| `ostest` | NuttX OS 测试 |
+| `wifi` | Wi-Fi STA |
+| `ble` | BLE（controller 库 + zblue host）和 `mible` 测试命令，不开 Wi-Fi |
+
+构建产物在 `cmake_out/<board>_<config>/`：
+
+- `final_nuttx`：最终 ELF，GDB、coredump 和符号分析用它；
+- `nuttx.bin`：boot2 可加载的应用镜像，`nuttx.raw.bin` 是后处理前的备份；
+- `nuttx.whole.bin`：4 MiB whole image（boot2、双 partition、app），可从 flash
+  `0x0` 写入，MFG 等数据分区保持擦除态；
+- `partition.bin`：分区表；
+- `flash_prog_cfg.ini`：按分区烧录的 FlashCube 配置。
+
+烧录只调用 FlashCube，不编译：
+
+```bash
+./vela flash ai-m64l-32s-kit/nsh --port /dev/ttyUSB0           # 按 flash_prog_cfg.ini 分区烧录
+./vela flash --config <ini> --port /dev/ttyUSB0                 # 指定 FlashCube 配置
+./vela flash --image <bin> --addr 0x0 --port /dev/ttyUSB0       # 单个 bin 写到指定地址
+```
+
+默认波特率 2000000，可用 `--baudrate` 覆盖；烧录后通过板载 DTR/RTS 自动复位运行。
+`--image` 按地址原样写入，不检查镜像内容。
+
+控制台为 UART0，2000000 bps。Ai-M64L-32S-Kit 的 DTR/RTS 接在 boot/chipen 上，打开
+串口会让模组重启一次；picocom 要加 `--lower-rts`，否则模组保持在复位状态。
+
+shell 补全：`./vela completion install`，或 `./vela completion <bash|zsh|fish>` 打印脚本。
 
 ## 目录布局
 
 | 目录 | 作用 | 接入构建的方式 |
 |---|---|---|
-| `chips/` | 芯片移植（custom chip） | kernel/arch 侧按 defconfig 的 `CONFIG_ARCH_CHIP_CUSTOM_DIR` 纳入 |
-| `boards/` | 板级（custom board） | kernel/arch 侧按 defconfig 的 `CONFIG_ARCH_BOARD_CUSTOM_DIR` 纳入 |
-| `drivers/` | Bouffalo drivers release 独立仓，驱动各自生成 `.a` | 父仓 OpenVela wrapper 显式选择支持的源码；当前为 `bl616cl_lhal.cmake` |
-| `components/` | 中间件/可复用组件，**各自独立 `.a`** | 顶层 `nuttx_add_subdirectory()` 自动发现 |
-| `examples/` | 示例 app（`nuttx_add_application`） | 顶层 `nuttx_add_subdirectory()` 自动发现 |
-| `tools/` | 宿主侧工具（镜像/签名/FlashCube），**不编入固件** | 故意无 `CMakeLists.txt` → 不纳入构建 |
-
-各子目录的 `README.md` 给了"如何新增一项"的可抄骨架。
+| `chips/` | 芯片移植（custom chip，当前 `bl616cl`） | 按 defconfig 的 `CONFIG_ARCH_CHIP_CUSTOM_DIR` 纳入 |
+| `boards/` | 板级（`bl616cl/ai-m64l-32s-kit`，`bl616cl/common` 为共用启动代码） | 按 defconfig 的 `CONFIG_ARCH_BOARD_CUSTOM_DIR` 纳入 |
+| `drivers/` | Bouffalo SDK `drivers/` 的只读镜像（lhal、soc、rfparam、预编译 phyrf），独立仓 | `cmake/bl616cl_lhal.cmake`、`bl616cl_std.cmake` 显式选择源码 |
+| `components/` | 中间件，当前为 `wireless/`（`wifi`、`ble`、`rfparam`） | 自动发现 |
+| `apps/` | 测试与示例 app：`mcu_peripheral_tests`、`os_feature_tests`、`perf_tools`、`wireless_tests` | 自动发现 |
+| `cmake/` | 构建辅助（驱动 wrapper、组件 helper、Wi-Fi 源码/预编译选择） | 顶层 `CMakeLists.txt` include |
+| `docs/` | BL616CL 功能文档 | — |
+| `tools/` | 宿主侧工具（固件后处理、FlashCube、性能工具），不编入固件 | 无 `CMakeLists.txt` |
 
 ## 接入 openvela 的三条路径
 
-1. **chips/ + boards/**：不被顶层 glob，而是由 kernel/arch 侧根据 defconfig 里的
+1. **chips/ + boards/**：不被顶层 glob，由 kernel/arch 侧根据 defconfig 里的
    `CONFIG_ARCH_CHIP_CUSTOM_DIR` / `CONFIG_ARCH_BOARD_CUSTOM_DIR` 显式
-   `add_subdirectory` 进来——只拉点名的那一个目录。
+   `add_subdirectory`，只拉点名的那一个目录。
 
-2. **examples/ + components/**：由本仓顶层 `CMakeLists.txt` 的
-   `nuttx_add_subdirectory()` 发现。它只 glob **一层** `*/CMakeLists.txt`、非递归、
-   逐层 opt-in，并生成对应 Kconfig 菜单。
+2. **apps/ + components/**：由本仓顶层 `CMakeLists.txt` 的
+   `nuttx_add_subdirectory()` 发现，两者再各自 `nuttx_add_subdirectory()`。每层只 glob
+   直接子目录的 `*/CMakeLists.txt`、非递归、逐层 opt-in，并生成 Kconfig 菜单
+   `Bouffalo Lab` → `Bouffalo Apps` / `Bouffalo Components`。新增组件的骨架见
+   [`components/README.md`](components/README.md)。
 
-3. **drivers/**：release repo 的 CMake 文件面向 Bouffalo SDK，OpenVela 不执行这些
-   文件。父仓通过 `cmake/bl616cl_lhal.cmake` 显式选择已适配源码，并用
-   `nuttx_add_kernel_library()` 生成 `bl_lhal`；IRQ、security mutex 等 OS 相关接口由
-   chip 适配层提供。
+3. **drivers/**：drivers 仓的 CMake 面向 Bouffalo SDK，openvela 不执行这些文件。
+   本仓通过 `cmake/*.cmake` 显式选择已适配源码，并用 `nuttx_add_kernel_library()`
+   生成 `bl_lhal`、`bl_std` 等库；IRQ、security mutex 等 OS 相关接口由 chip 适配层
+   提供。
 
-## 构建
+## Wi-Fi 与 BLE
 
-构建走 **cmake + Ninja**（不再用 make，本仓不提供 `Make.defs`/`Makefile`）。
-
-```bash
-./vela clean bl616cl/ai-m64l-32s-kit/configs/nsh
-./vela build bl616cl/ai-m64l-32s-kit/configs/nsh -j8
-```
-
-SDK 根目录的 `vela` 是 repo manifest 的 linkfile 软链接（指向本仓
-`vendor/bouffalolab/vela`），在根目录直接执行即可；也可以显式运行
-`vendor/bouffalolab/vela`。
-
-target 指向到 `configs/<name>` 的 board 目录；`vendor/bouffalolab/boards/` 前缀可省略，
-无歧义时 chip、`configs/` 层也可省略（`ai-m64l-32s-kit/nsh`、`nsh` 均可用）。
-`vela` 补齐 OpenVela 预置工具链和 Python 依赖环境，只走 CMake/Ninja。
-默认并行度 = 物理核数一半，可用 `-j N` / `--jobs N` 覆盖。
-
-配置菜单（任选其一）：
-
-```bash
-./vela menuconfig bl616cl/ai-m64l-32s-kit/configs/nsh
-```
-
-菜单中可见 `Bouffalo Lab`（→ Examples / Components）。
-
-Ai-M64L-32S-Kit 的默认构建还会运行仓内官方 `bflb_fw_post_proc`，产出：
-
-- `cmake_out/ai-m64l-32s-kit_nsh/final_nuttx`：静态分析用 ELF；
-- `cmake_out/ai-m64l-32s-kit_nsh/nuttx.raw.bin`：处理前备份；
-- `cmake_out/ai-m64l-32s-kit_nsh/nuttx.bin`：boot2 可加载的应用镜像。
-- `cmake_out/ai-m64l-32s-kit_nsh/nuttx.whole.bin`：包含 boot2、双 partition、
-  app 的 4 MiB whole image，可从 flash `0x0` 写入；MFG 分区保持擦除态。
-- `cmake_out/ai-m64l-32s-kit_nsh/partition.bin`：分区表（编译时由 `bflb_fw_post_proc`
-  生成一次并落盘，供按分区烧录）。
-- `cmake_out/ai-m64l-32s-kit_nsh/flash_prog_cfg.ini`：按分区烧录的 FlashCube 配置
-  （boot2 / partition / app 三段，均指向绝对路径）。
-
-烧录 firmware（纯烧录操作，不执行 CMake configure/build）：
-
-```bash
-# 指定 board：按构建时生成的 flash_prog_cfg.ini 分区烧录（推荐）
-./vela flash bl616cl/ai-m64l-32s-kit/configs/nsh --port /dev/ttyUSB0
-./vela flash nsh --port /dev/ttyUSB0       # board 可简写
-./vela flash --port /dev/ttyUSB0           # 唯一输出目录时自动定位
-
-# 显式指定 FlashCube 配置 ini（与 board/--image 互斥）
-./vela flash --config <ini> --port /dev/ttyUSB0
-
-# 直接烧单个 bin 到指定地址（--addr 仅与 --image 搭配，默认 0x0）
-./vela flash --image <boot2>.bin --addr 0x0 --port /dev/ttyUSB0
-./vela flash --image cmake_out/ai-m64l-32s-kit_nsh/nuttx.bin \
-  --addr 0x10000 --port /dev/ttyUSB0
-```
-
-`--image` 文件为 4 MiB 时视为 whole image，仍执行魔数/MFG 布局校验。
-默认 baudrate 为 2000000，可通过 `--baudrate` 覆盖。烧录成功后 FlashCube
-使用 `--reset`，通过板载 DTR/RTS 自动下载电路复位到正常启动状态。
-
-shell 补全（bash/zsh/fish）：`./vela completion install` 零注入安装到 shell
-已扫描的补全目录（oh-my-zsh fpath / bash-completion 用户目录 / fish）；
-`./vela completion <shell>` 也可打印脚本手动安装。候选动态扫描，新增板级即时生效。
+- **Wi-Fi STA**（`wifi` 配置）：wl80211 + macsw + `bl_wpa_supplicant`，通过 NuttX
+  netdev 和 `wapi`/`ifconfig` 使用。对外清单不含 macsw、wl80211 源码，这两个 core 使用
+  `components/wireless/wifi/{macsw,wl80211}/prebuilt/` 中的预编译包（openvela
+  GCC 13.4 编译的 fat LTO 库，带 LTO 早期调试信息，`final_nuttx` 中有 core 的行号）。
+  见 [Wi-Fi STA 移植方案](docs/bl616cl-wifi-sta-porting-solution.md) 4.5 节。
+- **BLE**（`ble` 配置）：controller 为 Bouffalo SDK 的预编译库，host 为 zblue。见
+  [BLE 文档](docs/bl616cl-ble.md)。
 
 ## 现状
 
-`bl616cl/ai-m64l-32s-kit` 已具备 RISC-V/E907 reset、cache/RAM section、UART0、
-MTimer、NuttX IRQ adapter、watchdog、GPIO、timer、oneshot、基础 board late
-bring-up 和 boot2 应用镜像构建链。CMake postbuild 已生成并静态验证 4 MiB
-whole image；clean CMake/Ninja 构建、FlashCube 烧录、2 Mbps NSH 启动、MCU
-外设测试和 ostest 已在 Ai-M64L-32S-Kit 实板通过。WiFi/RF、PSRAM、PM 和
-flash 高频切换仍属后续阶段。
+已在 Ai-M64L-32S-Kit 实板验证：启动与 boot2 镜像、UART、GPIO、Timer/oneshot、WDT、
+RTC、TRNG、DMA0、cache、Wi-Fi STA、BLE，以及 coredump、KASAN、UBSAN、stack canary、
+Note RAM trace、perfmon 等调试能力。I2C、SPI、PWM 已通过软件验证，实物验证待补；
+PSRAM 第二 heap、PM/低功耗、SPI flash MTD、ADC、加解密引擎尚未适配。
+
+完整列表见 [BL616CL OpenVela 能力矩阵](docs/bl616cl-openvela-capability-matrix.md)，
+全部文档见 [`docs/README.md`](docs/README.md)。
 
 ## License
 
