@@ -290,5 +290,5 @@ I2C1-only 临时配置没有该节点，因此该 case 不计为通过。RTC 本
 - 外接 EEPROM、上拉和逻辑分析仪尚未冻结，所有 `hw` case 均未取得实测 PASS。
 - I2C1 fake 证明软件消息合同，不证明实际 SCL 频率、ACK/NACK、repeated-start
   波形、电气质量或 EEPROM 数据保持。
-- 完成 ST021 验收仍需补齐 I2C1 实物总线、oneshot/RTC 回归；若要验收双实例，还需
+- 完成 I2C 验收仍需补齐 I2C1 实物总线、oneshot/RTC 回归；若要验收双实例，还需
   先为 I2C0 冻结不冲突的模组 pin 和两路 target。

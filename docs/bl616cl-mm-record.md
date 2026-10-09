@@ -420,7 +420,7 @@ default allocator 的有效依赖不仅是 `LIBC_BACKTRACE_DEPTH>0`，还需要
 | `nsh` | 产品能力 + default on + 测试 app | 默认状态专项 |
 | `nsh` | 产品能力 + default off + 测试 app | M02-001..013 主测试 |
 | `nsh` | init size 4、load factor 75、测试 app | fresh-boot 4→8 扩容 |
-| `nsh` | realloc 专项开启、M02 专项关闭 | 保留 ST027 独立入口 |
+| `nsh` | realloc 专项开启、M02 专项关闭 | 保留 realloc 专项独立入口 |
 
 五类 M02 配置 clean build 实测：off 和产品均为 `1224/1224`，default-on、test、
 expand 均为 `1230/1230`；历史 realloc 专项为 `1227/1227`。目标身份检查结果：

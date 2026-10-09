@@ -46,13 +46,13 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 
 | ID | 能力与目标选项 | 状态 | 裁剪和依赖 | 验证要求 |
 |---|---|---|---|---|
-| A01 | frame pointer：`FRAME_POINTER` | 已验证（ST002） | 通用编译选项；配合现有 `SCHED_BACKTRACE` | USB2 实测当前线程 4 层、阻塞线程 12 层符号回溯；ELF/镜像增量已记录 |
-| A02 | 栈高水位：`STACK_COLORATION`、`STACKCHECK_MARGIN`、`SYSTEM_STACKMONITOR` | 已验证（ST003） | RISC-V 通用实现；BL616CL 在开中断前补齐 IRQ 栈染色 | USB2 实测 `ps` 高水位、monitor 启停及 GPIO/timer/oneshot/WDT 回归；关闭态裁剪成立 |
-| A03 | 编译器 stack canary：`STACK_CANARIES` | 已验证（ST009） | 工具链全局加入 `-fstack-protector-all`；负测 app 默认关闭 | USB2 实测精确一字节覆盖进入 `__stack_chk_fail`/panic，普通任务终止后 NSH 存活，冷启动及外设回归通过；关闭态对照和测试 app 裁剪成立 |
+| A01 | frame pointer：`FRAME_POINTER` | 已验证 | 通用编译选项；配合现有 `SCHED_BACKTRACE` | USB2 实测当前线程 4 层、阻塞线程 12 层符号回溯；ELF/镜像增量已记录 |
+| A02 | 栈高水位：`STACK_COLORATION`、`STACKCHECK_MARGIN`、`SYSTEM_STACKMONITOR` | 已验证 | RISC-V 通用实现；BL616CL 在开中断前补齐 IRQ 栈染色 | USB2 实测 `ps` 高水位、monitor 启停及 GPIO/timer/oneshot/WDT 回归；关闭态裁剪成立 |
+| A03 | 编译器 stack canary：`STACK_CANARIES` | 已验证 | 工具链全局加入 `-fstack-protector-all`；负测 app 默认关闭 | USB2 实测精确一字节覆盖进入 `__stack_chk_fail`/panic，普通任务终止后 NSH 存活，冷启动及外设回归通过；关闭态对照和测试 app 裁剪成立 |
 | A04 | 静态栈报告：`STACK_USAGE`、`STACK_USAGE_WARNING` | 可直接开启，P2 工具 | 仅构建期，不作为运行保护 | 生成 `.su`；阈值负测能使构建告警 |
-| A05 | lazy FPU：`ARCH_LAZYFPU` | 已验证（ST014） | RISC-V 通用实现；依赖 NuttX user context/signal 修复；测试 app 默认关闭 | USB2 实测双任务、异步 signal 全 FPR/FCSR、MTIMER、coredump、裁剪、开销和外设回归 |
+| A05 | lazy FPU：`ARCH_LAZYFPU` | 已验证 | RISC-V 通用实现；依赖 NuttX user context/signal 修复；测试 app 默认关闭 | USB2 实测双任务、异步 signal 全 FPR/FCSR、MTIMER、coredump、裁剪、开销和外设回归 |
 | A06 | CLIC threshold 上下文：`ARCH_RV_HAVE_CLIC` | 需要适配，P2 | 当前自定义 CLIC 仍用全局 `mstatus` 屏蔽；开启会改变 trap frame 和 `up_irq_save()` 语义 | 嵌套/优先级/上下文切换专项；不能只做编译验证 |
-| A07 | NuttX range cache API：`ARCH_ICACHE`/`ARCH_DCACHE` 能力 | 已验证（ST036） | 默认开启、可显式裁剪；I=32 KiB、D=16 KiB；DMA 前置 | all/range、地址域、partial ownership、coherent、toggle、alias、XIP 和外设回归 |
+| A07 | NuttX range cache API：`ARCH_ICACHE`/`ARCH_DCACHE` 能力 | 已验证 | 默认开启、可显式裁剪；I=32 KiB、D=16 KiB；DMA 前置 | all/range、地址域、partial ownership、coherent、toggle、alias、XIP 和外设回归 |
 | A08 | cycle/HPM perf events：`ARCH_HAVE_PERF_EVENTS`、`ARCH_PERF_EVENTS` | 需要适配，P2 | RISC-V 有参考 `riscv_perf_cycle.c`，当前未编入且未初始化频率 | 与 MTIME 对时；溢出、换算、开销；之后才评估 perf-tools |
 | A09 | T-Head `xtheade`/`-mtune=e907` | 延后 | 当前 GCC 拒绝 `-mtune=e907`，汇编器要求扩展版本 | 先完成工具链版本、反汇编和 ABI 矩阵 |
 | A10 | MMU、S-mode、SMP、Vector、DPFPU、shadow stack | 不支持 | 当前为单核 M-mode RV32IMAF+C，无对应硬件/移植 select | 无；硬件或工具链依据变化后重审 |
@@ -186,11 +186,11 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 
 | ID | 能力与目标选项 | 状态 | 裁剪和依赖 | 验证要求 |
 |---|---|---|---|---|
-| M01 | 分配归属：`MM_RECORD_PID`、`MM_RECORD_SEQNO` | 已验证（ST007） | 默认 allocator 内建；RV32 每个已分配块增加 8 B，最小 chunk 从 16 B 增至 32 B | USB2 实测多线程归属、realloc 归属变化、sequence 窗口、释放清除和重复实例；关闭态裁剪成立 |
-| M02 | 分配回溯：`MM_RECORD_STACK`、`MM_RECORD_STACK_DEFAULT` | 已验证（ST026；ST027 修复 realloc 失败记录丢失） | 产品 depth 12、动态默认关闭；依赖 A01、procfs meminfo/memdump；测试 app 独立裁剪 | USB2 验证 global/TID 门控、过滤、realloc、完整 trace 引用、并发清理、4→8 扩容、KASAN、开销和外设回归 |
+| M01 | 分配归属：`MM_RECORD_PID`、`MM_RECORD_SEQNO` | 已验证 | 默认 allocator 内建；RV32 每个已分配块增加 8 B，最小 chunk 从 16 B 增至 32 B | USB2 实测多线程归属、realloc 归属变化、sequence 窗口、释放清除和重复实例；关闭态裁剪成立 |
+| M02 | 分配回溯：`MM_RECORD_STACK`、`MM_RECORD_STACK_DEFAULT` | 已验证（含 realloc 失败记录丢失的修复） | 产品 depth 12、动态默认关闭；依赖 A01、procfs meminfo/memdump；测试 app 独立裁剪 | USB2 验证 global/TID 门控、过滤、realloc、完整 trace 引用、并发清理、4→8 扩容、KASAN、开销和外设回归 |
 | M03 | OOM/破坏诊断：`DEBUG_MM`、`MM_DUMP_ON_FAILURE`、`MM_FILL_ALLOCATIONS`、`MM_NODE_GUARDSIZE` | 可直接开启，P1 诊断 | 高日志、内存和性能开销；不进默认产品配置 | OOM、越界、UAF 定向负测；正常 ostest |
-| M04 | KASAN generic heap：`MM_KASAN_GENERIC`、`MM_KASAN_INSTRUMENT_ALL` | 已验证（ST012） | 全镜像插桩；正式关闭测试 app 和 `MM_KASAN_GLOBAL`；启动 early stop 处理 warm reset | USB2 实测 heap 左/右越界和 UAF 精确报告、合法访问、连续 warm reset、裁剪、开销和外设回归 |
-| M05 | UBSAN：`MM_UBSAN`、目标局部插桩 | 已验证（ST013） | runtime 正式启用但无引用零链接开销；`MM_UBSAN_ALL` 因 RAM 和 handler 闭包不可用；测试 app 默认关闭 | USB2 实测 signed overflow、shift 越界、三次合法对照、裁剪、开销和外设回归 |
+| M04 | KASAN generic heap：`MM_KASAN_GENERIC`、`MM_KASAN_INSTRUMENT_ALL` | 已验证 | 全镜像插桩；正式关闭测试 app 和 `MM_KASAN_GLOBAL`；启动 early stop 处理 warm reset | USB2 实测 heap 左/右越界和 UAF 精确报告、合法访问、连续 warm reset、裁剪、开销和外设回归 |
+| M05 | UBSAN：`MM_UBSAN`、目标局部插桩 | 已验证 | runtime 正式启用但无引用零链接开销；`MM_UBSAN_ALL` 因 RAM 和 handler 闭包不可用；测试 app 默认关闭 | USB2 实测 signed overflow、shift 越界、三次合法对照、裁剪、开销和外设回归 |
 | M06 | TLSF、mempool、task heap | 延后 | 会改变碎片、时延或隔离语义，缺少目标指标 | allocation latency、碎片、峰值、压力回归后再决策 |
 | M07 | PSRAM 第二 heap：`MM_REGIONS>1` | 需要适配，P2 | 需 PSRAM init、cache/TZC、linker region；当前 `riscv_addregion()` 为空 | 探测容量、跨 region 分配、DMA/cache、一致性和压力 |
 | M08 | protected/kernel build 双 heap | 不支持当前基线 | 缺少完整 MPU/MMU、用户地址空间和 `up_allocate_kheap()` 适配 | 需另立移植目标，不能作为配置开关开启 |
@@ -327,14 +327,14 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 
 | ID | 能力与目标选项 | 状态 | 裁剪和依赖 | 验证要求 |
 |---|---|---|---|---|
-| D01 | CPU load：`SCHED_CPULOAD_SYSCLK` | 已验证（ST004） | `SYSTEM_CPULOAD` 只提供可裁剪测试负载；tick 同步采样只能作基础观测 | USB2 实测 idle、单个 50% 和两个 50% 聚合满载；procfs、`ps`、`top` 均随负载变化；关闭态裁剪成立 |
-| D02 | IRQ monitor：`SCHED_IRQMONITOR` | 已验证（ST005） | 依赖 procfs；当前 alarm driver 已提供 `up_perf_*`；每 IRQ 两次时间读取开销已在实板观察 | USB2 实测 `irqinfo`/`/proc/irqs` 的 count/rate/max time、连续窗口重计数、GPIO/timer/oneshot IRQ 变化和外设回归；关闭态裁剪成立 |
-| D03 | critical monitor：`SCHED_CRITMONITOR`、`SYSTEM_CRITMONITOR` | 已验证（ST006） | 正式配置只统计，不设告警阈值；阈值和 panic 使用临时配置独立验证 | USB2 实测全局/线程统计、读后新窗口、monitor 启停、告警与 panic 边界及外设回归；关闭态裁剪成立 |
-| D04 | Note RAM trace：instrumentation、`DRIVERS_NOTERAM`、`SYSTEM_TRACE` | 已验证（ST011） | 正式只开 switch/IRQ，默认停止、8 KiB overwrite；测试 app 默认关闭；禁止 csection/spinlock 回写 Note RAM | USB2 实测 start/stop/dump、时间单调、事件顺序、过滤、严格 overflow、裁剪和外设回归 |
-| D05 | syslog coredump：`COREDUMP`、`BOARD_COREDUMP_SYSLOG` | 已验证（ST010） | 单触发线程、无 full/compression/base64；零长度 memory range 哨兵；关闭彩色 syslog；负测 app 默认关闭 | USB2 完整 HEX 转换为 ELF32 RISC-V CORE；准确负测 ELF 恢复 LWP 9、PC/SP 和触发栈；最终产品裁剪与外设回归成立 |
+| D01 | CPU load：`SCHED_CPULOAD_SYSCLK` | 已验证 | `SYSTEM_CPULOAD` 只提供可裁剪测试负载；tick 同步采样只能作基础观测 | USB2 实测 idle、单个 50% 和两个 50% 聚合满载；procfs、`ps`、`top` 均随负载变化；关闭态裁剪成立 |
+| D02 | IRQ monitor：`SCHED_IRQMONITOR` | 已验证 | 依赖 procfs；当前 alarm driver 已提供 `up_perf_*`；每 IRQ 两次时间读取开销已在实板观察 | USB2 实测 `irqinfo`/`/proc/irqs` 的 count/rate/max time、连续窗口重计数、GPIO/timer/oneshot IRQ 变化和外设回归；关闭态裁剪成立 |
+| D03 | critical monitor：`SCHED_CRITMONITOR`、`SYSTEM_CRITMONITOR` | 已验证 | 正式配置只统计，不设告警阈值；阈值和 panic 使用临时配置独立验证 | USB2 实测全局/线程统计、读后新窗口、monitor 启停、告警与 panic 边界及外设回归；关闭态裁剪成立 |
+| D04 | Note RAM trace：instrumentation、`DRIVERS_NOTERAM`、`SYSTEM_TRACE` | 已验证 | 正式只开 switch/IRQ，默认停止、8 KiB overwrite；测试 app 默认关闭；禁止 csection/spinlock 回写 Note RAM | USB2 实测 start/stop/dump、时间单调、事件顺序、过滤、严格 overflow、裁剪和外设回归 |
+| D05 | syslog coredump：`COREDUMP`、`BOARD_COREDUMP_SYSLOG` | 已验证 | 单触发线程、无 full/compression/base64；零长度 memory range 哨兵；关闭彩色 syslog；负测 app 默认关闭 | USB2 完整 HEX 转换为 ELF32 RISC-V CORE；准确负测 ELF 恢复 LWP 9、PC/SP 和触发栈；最终产品裁剪与外设回归成立 |
 | D06 | stack/cpu/resource monitor 工具 | 可直接开启，P1 | 分别依赖 coloration、cpuload、procfs；工具本身也消耗资源 | 启停、周期、输出和自身 CPU/stack 开销 |
 | D07 | EXTCLK CPU load | 需要资源重构，P2 | TIMER1 当前由 `/dev/oneshot` 独占；必须用 choice 确定 owner | 与 SYSCLK 对照；异步采样；不能同时注册同一 lower-half |
-| D08 | E907 hardware perf/perf-tools | 部分已验证（ST010 perfmon） | BL616CL 私有 `BL616CL_PERFMON` 已接入 I/D-cache、分支事件、按 IRQ 计时和 tick PC 采样，`perfmon` 命令在 `nsh-peripherals` 默认打开，Wi-Fi 负载用 `perf_build.sh` 临时镜像；通用 `SCHED_PERF_EVENTS`/perf-tools 仍未接入，依赖 A08 | perfmon：空闲 cycle 与 320 MHz 对时、四方向 iperf 下计数与 IRQ 表、裁剪（见 `bl616cl-perfmon.md`）；通用框架待 A08 |
+| D08 | E907 hardware perf/perf-tools | 部分已验证（perfmon） | BL616CL 私有 `BL616CL_PERFMON` 已接入 I/D-cache、分支事件、按 IRQ 计时和 tick PC 采样，`perfmon` 命令在 `nsh-peripherals` 默认打开，Wi-Fi 负载用 `perf_build.sh` 临时镜像；通用 `SCHED_PERF_EVENTS`/perf-tools 仍未接入，依赖 A08 | perfmon：空闲 cycle 与 320 MHz 对时、四方向 iperf 下计数与 IRQ 表、裁剪（见 `bl616cl-perfmon.md`）；通用框架待 A08 |
 
 Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启用，
 因为 ring buffer 自身进入 critical section，会形成 instrumentation 递归。D04 的
@@ -535,8 +535,8 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 
 | ID | 能力 | 状态 | 裁剪和资源边界 | 验证要求 |
 |---|---|---|---|---|
-| E01 | WDT interrupt/capture、automonitor | 已验证（ST024） | `BL616CL_WDT` 控制 lower-half；`BL616CL_WDT_CAPTURE` 控制 ISR/capture，并在 BY_CAPTURE 时由 Kconfig 自动联动；生产 automonitor 使用 BY_WDOG | WDT-001~005 覆盖边界、live timeout、双 fd、capture handler、automonitor 接管和 `SYS_RWDT` 复位；关闭态裁剪成立 |
-| E02 | TIMER1 普通 timer | 已验证（ST025） | `BL616CL_TIMER1` 控制实例并依赖 `!BL616CL_ONESHOT`；`BL616CL_TIMER_TEST` 仅测试 hook；独立 `/dev/timer1` | USB2 实测周期、tick、poll/单 waiter、多 fd、双实例、raw callback；off/TIMER0/TIMER1/dual/oneshot 五配置裁剪通过 |
+| E01 | WDT interrupt/capture、automonitor | 已验证 | `BL616CL_WDT` 控制 lower-half；`BL616CL_WDT_CAPTURE` 控制 ISR/capture，并在 BY_CAPTURE 时由 Kconfig 自动联动；生产 automonitor 使用 BY_WDOG | WDT-001~005 覆盖边界、live timeout、双 fd、capture handler、automonitor 接管和 `SYS_RWDT` 复位；关闭态裁剪成立 |
+| E02 | TIMER1 普通 timer | 已验证 | `BL616CL_TIMER1` 控制实例并依赖 `!BL616CL_ONESHOT`；`BL616CL_TIMER_TEST` 仅测试 hook；独立 `/dev/timer1` | USB2 实测周期、tick、poll/单 waiter、多 fd、双实例、raw callback；off/TIMER0/TIMER1/dual/oneshot 五配置裁剪通过 |
 | E03 | TIMER0 input capture | 需要适配，P2 | device table 有 capture IRQ；对接 NuttX capture lower-half并配置输入 pin | 频率、占空比、边沿、溢出和无信号超时 |
 | E04 | GPIO multipin batch | 需要适配，P2 | 当前 ioexpander multipin ops 为 `NULL`；仅 `IOEXPANDER_MULTIPIN` 时编译 | 跨 pin 原子性边界、输入/输出混合、与 IRQ 并发 |
 | E05 | GPIO debounce/wakeup | 延后 | 需要区分硬件能力、软件 worker 和 PDS/HBN 唤醒域 | 抖动波形、丢边沿、睡眠唤醒和功耗 |
@@ -549,14 +549,14 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 
 | ID | 外设/能力 | 状态 | 建议裁剪边界 | 主要前置与验证 |
 |---|---|---|---|---|
-| P01 | UART1/UART2 | UART1 已验证（ST035）；UART2 待独立重评 | `BL616CL_UART1/2`、独立 pin/baud/buffer | UART1 GPIO14/15 回环、FIFO IRQ、基础 termios、standard serial ABI、并发、溢出恢复、console 隔离和裁剪已验证；UART2 已有 GPIO16/17 短接资源，仍需审计 std signal、clock、IRQ、board owner 和实例链 |
-| P02 | TRNG `/dev/random` | 已验证（ST015） | `BL616CL_TRNG`；测试 app 独立关闭；可选 `DEV_URANDOM_ARCH` | chip adapter 直接实现 `devrandom_register()`；USB2 已验证任意长度、非对齐、标准 API、基本统计、多线程、裁剪和外设回归 |
-| P03 | RTC/Alarm | 已验证（ST016）；upper-half ioctl 补全（ST017） | `BL616CL_RTC`、`BL616CL_RTC_ALARM`；ioctl 测试 app 独立关闭；RC32K/DIG32K 二选一 | 48 位 HBN RTC lower-half 与 `/dev/rtc0`；UTC/亚秒、absolute/relative Alarm、取消/替换/re-arm、回绕、warm reset、unlink 和裁剪已验证；九个标准 ioctl 的 NULL/ID/ENOSYS 合同已在 debug/release fake lower 实测 |
-| P04 | I2C0/I2C1 master | 软件闭环已通过（ST021），P1；实物 blocked | 每实例选项、SCL/SDA pin、频率 | polling lower-half、裁剪和无 target 负向路径已验证；正向 target、波形、I2C0 pin 仍待资源 |
-| P05 | SPI0/SPI1 master | 软件闭环已通过（ST023），P1；实物 blocked | 每实例选项、pin、mode、CS policy | polling lower-half、裁剪和 fake 合同已验证；SPI0 环回及 SPI1 pin/target 仍待资源 |
-| P06 | PWM | 软件闭环已通过（ST033），P1；G4 waiting | `BL616CL_PWM`、`AI_M64L_KIT_PWM`、test hook/app 独立裁剪；首版排除改变 ABI 的 multichannel/pulse/fixed/deadtime | PWM0 CH3+/GPIO22、continuous、整数频率、duty、cpol/dcpol、live update 和 multi-fd 已完成三态构建、裁剪、8/8 实机软件合同和现役回归；frequency/duty/停止电平/更新毛刺待逻辑分析仪 |
+| P01 | UART1/UART2 | UART1 已验证；UART2 待独立重评 | `BL616CL_UART1/2`、独立 pin/baud/buffer | UART1 GPIO14/15 回环、FIFO IRQ、基础 termios、standard serial ABI、并发、溢出恢复、console 隔离和裁剪已验证；UART2 已有 GPIO16/17 短接资源，仍需审计 std signal、clock、IRQ、board owner 和实例链 |
+| P02 | TRNG `/dev/random` | 已验证 | `BL616CL_TRNG`；测试 app 独立关闭；可选 `DEV_URANDOM_ARCH` | chip adapter 直接实现 `devrandom_register()`；USB2 已验证任意长度、非对齐、标准 API、基本统计、多线程、裁剪和外设回归 |
+| P03 | RTC/Alarm | 已验证；upper-half ioctl 已补全 | `BL616CL_RTC`、`BL616CL_RTC_ALARM`；ioctl 测试 app 独立关闭；RC32K/DIG32K 二选一 | 48 位 HBN RTC lower-half 与 `/dev/rtc0`；UTC/亚秒、absolute/relative Alarm、取消/替换/re-arm、回绕、warm reset、unlink 和裁剪已验证；九个标准 ioctl 的 NULL/ID/ENOSYS 合同已在 debug/release fake lower 实测 |
+| P04 | I2C0/I2C1 master | 软件闭环已通过，P1；实物 blocked | 每实例选项、SCL/SDA pin、频率 | polling lower-half、裁剪和无 target 负向路径已验证；正向 target、波形、I2C0 pin 仍待资源 |
+| P05 | SPI0/SPI1 master | 软件闭环已通过，P1；实物 blocked | 每实例选项、pin、mode、CS policy | polling lower-half、裁剪和 fake 合同已验证；SPI0 环回及 SPI1 pin/target 仍待资源 |
+| P06 | PWM | 软件闭环已通过，P1；G4 waiting | `BL616CL_PWM`、`AI_M64L_KIT_PWM`、test hook/app 独立裁剪；首版排除改变 ABI 的 multichannel/pulse/fixed/deadtime | PWM0 CH3+/GPIO22、continuous、整数频率、duty、cpol/dcpol、live update 和 multi-fd 已完成三态构建、裁剪、8/8 实机软件合同和现役回归；frequency/duty/停止电平/更新毛刺待逻辑分析仪 |
 | P07 | ADC | 需要适配，P2 | ADC、channel/pin、poll/DMA 分层 | analog lower-half；校准、量程、连续采样、溢出；外部基准电压 |
-| P08 | DMA0 | 已验证（ST037） | `BL616CL_DMA0` 默认关闭；test hook/app 独立；首版依赖 `!DMA_LINK` | 八通道 fixed-ident、1/2/4-byte mem2mem、TC/error 状态机、stop/residual、cache ownership 和并发生命周期；外设 consumer/LLI/cyclic 延后 |
+| P08 | DMA0 | 已验证 | `BL616CL_DMA0` 默认关闭；test hook/app 独立；首版依赖 `!DMA_LINK` | 八通道 fixed-ident、1/2/4-byte mem2mem、TC/error 状态机、stop/residual、cache ownership 和并发生命周期；外设 consumer/LLI/cyclic 延后 |
 | P09 | AES/SHA/GMAC | 需要适配，P2 | 算法分别裁剪，DMA 可独立 | 对接 OpenVela crypto；标准向量、分块/非对齐、并发和软件对照 |
 | P10 | EFUSE/unique ID | 需要适配，P2 | read 与 irreversible program 分离；默认只读 | 明确 NuttX ABI；只读实测、越界/权限；烧写需单独授权和治具 |
 | P11 | SPI flash MTD | 需要适配，P2 | `BL616CL_FLASH_MTD`、partition/fs 独立 | XIP 并发、擦写临界区、cache、边界、掉电恢复；不得覆盖 boot/app/MFG |
@@ -665,7 +665,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 - 最终 DIG32K/no-test clean build 为 1224/1224，`nuttx.bin` 为 479888 B，
   SHA256 为 `c999b23d1e84ba3683ac1c1806627fde3d881d9c7c1520790c2b8dec7ed7aa85`；
   app 分区烧录的 host/device SHA256 一致，产品回归脚本为 `failures=[]`。
-- ST017 在独立 NuttX 分支对九个标准 ioctl 增加 release 可用的 NULL/ID 检查，
+- RTC upper-half 在独立 NuttX 分支对九个标准 ioctl 增加 release 可用的 NULL/ID 检查，
   scalar cancel 先校验原始 `unsigned long arg` 再转换，避免宽 ABI 截断。vendor
   fake lower-half 覆盖所有标准方法的 `ENOSYS`、正常调用方法/顺序/参数、upper
   active 状态保持和私有 ioctl 转发；debug 与 `DEBUG_ASSERTIONS=off` 实板矩阵
@@ -673,7 +673,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
   `cases=41 failures=0`。
 - 当前未启用 `SYSTEM_TIME64`、`RTC_PERIODIC`、`SIGEV_THREAD`、PM/HBN
   wakeup 或 HBN_OUT0 公共 demux；warm reset 结果不外推到断电保持。NuttX RTC
-  upper-half 参数校验已提交 PR `#357`；并发生命周期问题仍由 ST018/ST019
+  upper-half 参数校验已提交 PR `#357`；并发生命周期问题另行
   独立闭环。
 
 ### E01 WDT 实测结论

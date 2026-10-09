@@ -281,7 +281,7 @@ rtc_product_alive
 `c999b23d1e84ba3683ac1c1806627fde3d881d9c7c1520790c2b8dec7ed7aa85`。
 烧录器读取 app 分区后的 device SHA256 与 host SHA256 相同。
 
-## ST017 RTC upper-half ioctl 参数校验
+## RTC upper-half ioctl 参数校验
 
 ### 背景
 
@@ -428,7 +428,7 @@ TRNG 读取 128 B、GPIO edge、timer 001/002/005、oneshot、WDT 002/003 和 NS
   `SIGEV_THREAD` 或 `SIGEV_NONE`。
 - `RTC_PERIODIC`、64 位时间、完整通知模式、PM/HBN wakeup 和 HBN_OUT0
   demux 分别通过后续子任务补全。
-- NuttX RTC upper-half 的运行时参数校验已由 ST017 补齐；唯一销毁权、
+- NuttX RTC upper-half 的运行时参数校验已补齐（见“RTC upper-half ioctl 参数校验”）；唯一销毁权、
   producer/work quiesce 和 `SIGEV_THREAD` 代际管理仍是独立上游问题。
 - `RTC_SET_TIME` 先调用 lower `settime()`，返回后才由 upper-half 执行
   `clock_synchronize()`；现有 lower ABI 没有同步完成 hook。本次只证明
@@ -438,7 +438,7 @@ TRNG 读取 128 B、GPIO edge、timer 001/002/005、oneshot、WDT 002/003 和 NS
   upper-half 并发生命周期安全的证明。
 - 没有外部 XTAL32K、电池或功耗测量，不能声明外部晶振、掉电保持或低功耗收益。
 
-## ST020 rtc_initialize 参数与所有权校验
+## rtc_initialize 参数与所有权校验
 
 ### 背景与问题原理
 
@@ -544,7 +544,7 @@ rtc_ioctl_test -c initialize
 echo $?
 ```
 
-LP64 集成回归使用 x86-64 `sim/nsh`，同时包含 ST017 ioctl 校验和 ST020 initialize
+LP64 集成回归使用 x86-64 `sim/nsh`，同时包含 ioctl 校验和 initialize
 校验；构建后分别启动全新的模拟器进程：
 
 ```bash
