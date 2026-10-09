@@ -101,7 +101,7 @@ defconfig 由 menuconfig/savedefconfig 生成，不手工维护 `.config`。
 
 2026-09-02 对原实现复审时发现测试 hook 污染 chip adapter，原三态裁剪只能证明产品
 制品未带入 hook，不能证明源码分层正确。后续修正删除了 chip 下全部 cache test 内容，
-实测结果以对应修正提交和 Jira `VELABL616-174` 的最新验收记录为准。
+实测结果以对应修正提交的最新验收记录为准。
 
 详细逐 case 流程和运行时关键输出见
 `apps/os_feature_tests/cache/README.md`。

@@ -1,7 +1,7 @@
 # BL616CL Wi-Fi STA 移植调研
 
 > 状态：待 review。本文只冻结调研结论和后续实现门禁，不代表 Wi-Fi 已接入、
-> 已构建或已通过实板验证。跟踪任务：Jira `VELABL616-179`。
+> 已构建或已通过实板验证。
 
 ## 1. 目标与边界
 
@@ -59,7 +59,7 @@ WAPI、DHCP 或 DNS 配置。
 
 ### 3.2 Bouffalo SDK 参考源
 
-参考根目录：`/home/miot/Work/bds/code/bouffalo_sdk_release/bouffalo_sdk`。
+参考根目录：Bouffalo SDK（`bouffalo_sdk`）源码树根目录。
 
 | 组件 | 冻结 revision / 产物 |
 |---|---|

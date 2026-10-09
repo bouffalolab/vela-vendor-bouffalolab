@@ -85,7 +85,6 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
   `clock_nanosleep`、`sleep`、`cmd_sleep` 等 12 个符号帧。
 - 反汇编：`dumpstack_main` 序言保存 `s0` 并执行 `addi s0,sp,16`，
   证明启用 frame pointer 链。
-- 提交：本项实现提交见 `VELABL616-138` 回写；能力矩阵随该提交更新。
 
 ### A02 实测结果（2026-08-28）
 
@@ -119,7 +118,6 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
   stack margin、assert 或 panic 报告。
 - 风险：当前 nsh 栈只余 80 字节高水位空间。16 字节 margin 验证通过不代表
   该栈余量充足，后续增加 NSH 命令深度时需重新测量或提高 init task 栈。
-- 提交：本项实现提交见 `VELABL616-139` 回写；能力矩阵随该提交更新。
 
 ### A03 实测结果（2026-08-29）
 

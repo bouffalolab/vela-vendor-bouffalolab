@@ -214,8 +214,6 @@ Wi-Fi 数据取自打开 perfmon 的 `wifi` 镜像，与 `perf_build.sh` 生成�
 - `nsh`、`ostest`、`wifi` 不打开本功能，构建产物中没有 perfmon 符号；关闭
   `BL616CL_PERFMON_PCSAMPLE` 的变体编译通过。
 
-数据在 `.tasks/2026-09-23-bl616cl-wifi-upstream-convergence/subtasks/ST010-net-throughput/work/perfmon/`。
-
 ## 限制
 
 - tick 采样看不到中断处理和关中断区间。关中断期间到期的 tick 会落在重新开

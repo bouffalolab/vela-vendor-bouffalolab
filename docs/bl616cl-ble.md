@@ -40,7 +40,7 @@ mible 命令 / 应用
 | 能力 | 仅 BLE，2 条连接，全部角色，EM 16 KiB（`CONFIG_BL616CL_EM_16K`） |
 | ABI | rv32imafc_xtheade / ilp32f，与 phyrf 库一致 |
 
-内部 gerrit 的 bouffalo_sdk 只有 controller 源码，没有 BL616CL 预编译库；开发期
+内部 bouffalo_sdk 源码树只有 controller 源码，没有 BL616CL 预编译库；开发期
 直接把公开库提交在 vendor 仓里。
 
 库是任务模式：`btble_controller_init()` 通过 `btblecontroller_task_new()` 创建
