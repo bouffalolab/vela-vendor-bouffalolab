@@ -71,7 +71,7 @@ manifest 当前按 `master` 跟踪无线子仓，移植验收时使用的提交 
 
 发布版本应进一步把最终验证使用的 revision 写入冻结 manifest 或 release lock，不能只依赖 floating `master`。
 
-macsw 与 wl80211 public/private 是内部源码仓，没有访问权限的使用者无法 sync 开发清单 `bl-vela-sdk.xml`。
+macsw 与 wl80211 public/private 是内部源码仓，没有访问权限的使用者无法 sync 开发清单 `bl-vela-sdk.xml`。对外清单 `bl-vela-sdk-release.xml` 与开发清单相同，只是不含这三个内部源码仓，Wi-Fi core 改用 vendor 中的预编译包（见 4.5）。
 
 ## 4. Vendor 适配层
 
@@ -110,6 +110,8 @@ components/wireless/
 5. 使用标准 ISA `-march=rv32imafc_zicsr_zifencei`，并关闭不适用于该源码的局部告警；
 6. 以 external kernel library 方式交给 NuttX 最终链接。
 
+预编译模式（见 4.5）不进入 macsw 工程，直接链接 `macsw/prebuilt/lib` 下的两个库。
+
 `vela_bl616cl` 是 macsw 的功能/资源 profile，不是工具链或 ABI 标识。它对应 macsw 仓的 `inc/macsw_vela_bl616cl_config.h`：在 `macsw_default_config.h` 基础上把 `CFG_RXL_BUFFER1_AMSDU_CNT` 从 1 改为 2、`CFG_REORD_BUF` 从 12 改为 8，原因见 12.8。芯片、profile、工具链必须作为一组输入锁定。
 
 ### 4.3 wl80211 core、host port 与 chip 适配分界
@@ -133,7 +135,7 @@ wl80211/wl80211/src
 - supplicant include；
 - Vela 工具链。
 
-vendor 主构建随后只消费该 archive，并额外链接 BL616CL PHYRF 库。这样隔离了 private core 的 SDK 侧 CMake、FreeRTOS/lwIP 假设和 NuttX 头文件差异。
+vendor 主构建随后只消费该 archive，并额外链接 BL616CL PHYRF 库。这样隔离了 private core 的 SDK 侧 CMake、FreeRTOS/lwIP 假设和 NuttX 头文件差异。预编译模式不运行该子构建，改为链接 `wl80211/prebuilt/lib/libwl80211_bl616cl.a`，下面的 host port 源码也改从 `wl80211/prebuilt/` 编译。
 
 NuttX host port 直接从 public 子仓编译，wrapper 生成 `bl_wl80211` 库；原生 Bouffalo SDK 从同一仓库选择 FreeRTOS/lwIP 文件（`wl80211_platform.c`、`lwip.c`、`wifi_mgmr_cli.c`），两套源文件互不进入对方构建：
 
@@ -179,6 +181,50 @@ wrapper 不执行公共仓库面向 Bouffalo SDK 的原始 CMake，也不编译 
 - `os_random()` 映射到 NuttX `random()`；`os_get_random()` 调用 `getrandom(buf, len, 0)` 并要求返回完整长度，经 `/dev/urandom` 由 BL616CL TRNG 驱动提供。
 
 PBKDF2 则使用 Vela 的 mbedTLS `mbedtls_pkcs5_pbkdf2_hmac()`，避免引入另一套 crypto 实现。
+
+### 4.5 源码模式与预编译包
+
+macsw 与 wl80211 core 有两种来源，由 `cmake/bl_wifi.cmake` 统一判断，macsw、wl80211、supplicant wrapper 和 `chips/bl616cl` 共用同一结果：
+
+| 工作区 | macsw/wl80211 core | 对应清单 |
+| --- | --- | --- |
+| 有 `macsw/macsw` 与 `wl80211/wl80211/src` 源码 | 源码构建 | 开发清单 `bl-vela-sdk.xml` |
+| 两者都没有 | vendor 内的预编译包 | 对外清单 `bl-vela-sdk-release.xml` |
+| 只有其一 | configure 报错 | — |
+
+`vela build <board> --use-lib macsw,wl80211` 在源码工作区强制使用预编译包，两个名字必须同时给出。configure 时打印 `BL Wi-Fi: macsw/wl80211 cores from source` 或 `... from prebuilt bundles`。
+
+预编译包放在 wrapper 旁边：
+
+```text
+components/wireless/wifi/
+├── macsw/prebuilt/
+│   ├── inc/                       # macsw 仓 inc/ 全部头文件
+│   ├── lib/libmacsw_bl616cl.a
+│   ├── lib/libmacsw_config_bl616cl_vela_bl616cl.a
+│   └── VERSION                    # 源码提交、profile、工具链
+└── wl80211/prebuilt/
+    ├── include/  macsw/wl80211_mac.h  wl80211_platform.h  wl80211_async_event.h
+    ├── wifi_mgmr.c  country.c  supplicant.c  nuttx.c  rtos_al_nuttx.c   # NuttX host port
+    ├── lib/libwl80211_bl616cl.a
+    └── VERSION
+```
+
+库就是源码模式构建出的 fat LTO 对象，只剥掉调试段；host port 源码和头文件取自同一 public 提交，与库一起更新。由此带来三条约束：
+
+- 预编译包只能配 openvela 预置的 GCC 13.4 使用，工具链或 `vela_bl616cl` profile 变化后必须重新导出。原生 Bouffalo SDK 发布的 macsw/wl80211 库是 T-Head GCC 10.2 的 LTO 对象，13.4 链接时报 `lto1: error: unknown cpu 'e907' for '-mtune'`，不能替代。
+- LTO 早期调试信息也被剥掉，预编译模式在最终链接末尾追加 `-g0`（`wifi/CMakeLists.txt`），否则 LTRANS 生成的调试信息会引用已不存在的符号。该模式下 macsw/wl80211 代码没有调试信息，其余代码不受影响。
+- 两个 core 编译时带 `-ffile-prefix-map=<SDK 根目录>=.`，`__FILE__` 字符串和 LTO 对象里不留构建机目录。该选项只改变 `.rodata` 中的路径字符串，`.text` 中 2934 个符号的地址和大小与加选项前一致。
+
+更新预编译包：
+
+```bash
+./vela build ai-m64l-32s-kit/wifi              # 源码模式；三个源码仓不能有未提交改动
+vendor/bouffalolab/tools/bl616cl/export_wifi_prebuilt.sh
+./vela build ai-m64l-32s-kit/wifi --use-lib macsw,wl80211
+```
+
+脚本检查源码仓状态，把两个 core 构建到最新，再导出库、头文件、host port 源码和 `VERSION`；库里出现 SDK 根目录路径时拒绝导出。导出后用 `--use-lib` 重建，与源码模式的 `nuttx.bin` 比较：首次导出时两者只差镜像内的构建时间。
 
 ## 5. BL616CL 平台适配
 
@@ -332,6 +378,7 @@ wl80211 public/private 侧的配套修改如下，BL616CL 与 openvela 需要的
 private 的 TX 路径与 master 相同。此前为复制方案加入的 TX pool（private `b86b33e`、`2fee8fe`、`089097b`，public `93e1af5`、`7369603`）已撤回。
 
 `wl80211.h` 强制使用统一的 tree layout，避免不同 translation unit 对 RB tree entry 的大小和布局理解不一致。这是扫描结果树跨 public header、private core 和 chip adapter 时的 ABI 约束。
+
 
 scan-result tree 没有锁，Vela 靠 adapter 的 `g_wifi_scan_sem` 保证读写不并发：只有显式扫描写这棵树（连接阶段的扫描写 `connect.c` 自己的候选列表），显式扫描只由 `bl616cl_wifi_sta_scan()` 发起，`SIOCGIWSCAN` 读取也要先拿同一个信号量，而 `SCAN_DONE` 在扫描 op 出队释放之后才释放它。这个前提在 Vela 打开 `CONFIG_WL80211_P2P` 或出现别的扫描发起方时不再成立，需要重新评估。曾提交的扫描结果锁经评审撤回。
 
@@ -792,11 +839,11 @@ R2 之后按模块继续排列。perfmon 采样选出四组候选，每组单独
 
 在将本方案用于正式 SDK release 前，还应完成：
 
-1. 将 manifest 的 floating `master` 转为冻结 revision/tag，并提供不含内部源码仓、使用预编译库的对外清单；
+1. 将 manifest 的 floating `master` 转为冻结 revision/tag（对外清单 `bl-vela-sdk-release.xml` 已不含内部源码仓，见 4.5）；
 2. 重新核对各组件许可、来源和对外同步策略；
 3. 对 WPA3-SAE 补做 500 轮连接和 500 秒级四方向压力；
 4. 明确 country code、发射功率和 RF calibration 的产品行为（当前 `SIOCSIWTXPOW`、`SIOCGIWTXPOW` 返回 `-ENOSYS`）；
-5. 在新的 openvela/NuttX 基线或工具链变化后重新编译 PHYRF、macsw、wl80211 和 supplicant，并重新检查 ABI；
+5. 在新的 openvela/NuttX 基线或工具链变化后重新编译 PHYRF、macsw、wl80211 和 supplicant，重新导出 Wi-Fi 预编译包，并重新检查 ABI；
 6. 保留最简 `nsh` 与独立 `wifi` 两个构建目标，避免测试工具和 Wi-Fi 组件重新回流到基础配置；
 7. 在发布候选 `wifi` 镜像上重跑 500 轮扫描、500 轮连接和 TCP/UDP 四方向压力。
 

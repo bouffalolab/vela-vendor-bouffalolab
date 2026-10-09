@@ -42,8 +42,8 @@ target_include_directories(bl_wpa_supplicant PRIVATE
   ${wpa_source}/include/bl_supplicant
   ${wpa_source}/port/include
   ${wpa_source}/src
-  ${CMAKE_CURRENT_LIST_DIR}/../wl80211/wl80211/include
-  ${CMAKE_CURRENT_LIST_DIR}/../wl80211/wl80211
+  ${BL_WL80211_PUBLIC_DIR}/include
+  ${BL_WL80211_PUBLIC_DIR}
   ${BL_BOUFFALO_DRIVERS_DIR}/lhal/include
   ${BL_BOUFFALO_DRIVERS_DIR}/lhal/include/arch
   ${CMAKE_CURRENT_LIST_DIR}/../../../../apps/crypto/mbedtls/include)

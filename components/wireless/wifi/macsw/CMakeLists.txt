@@ -9,6 +9,14 @@ if(NOT CONFIG_ARCH_CHIP_BL616CL OR NOT CONFIG_MACSW_SELECT STREQUAL "vela_bl616c
 endif()
 
 set(CHIP bl616cl)
+
+if(BL_WIFI_PREBUILT)
+  foreach(target macsw_${CHIP} macsw_config_${CHIP}_${CONFIG_MACSW_SELECT})
+    nuttx_add_extra_library(${CMAKE_CURRENT_LIST_DIR}/prebuilt/lib/lib${target}.a)
+  endforeach()
+  return()
+endif()
+
 string(REGEX REPLACE "gcc$" "" CROSS_COMPILE "${CMAKE_C_COMPILER}")
 set(PHYRF_INCLUDE
     ${BL_BOUFFALO_DRIVERS_DIR}/soc/bl616cl/phyrf/include)
@@ -25,5 +33,7 @@ foreach(target macsw_bl616cl macsw_config_bl616cl_${CONFIG_MACSW_SELECT})
   # The NuttX kernel build injects -Wshadow/-Wundef which the macsw source
   # does not support under its own -Werror; silence them locally.
   target_compile_options(${target} PRIVATE -Wno-shadow -Wno-undef)
+  # Keep the build path out of the objects exported to macsw/prebuilt.
+  target_compile_options(${target} PRIVATE -ffile-prefix-map=${BL_SDK_ROOT}=.)
   nuttx_add_external_library(${target} MODE KERNEL)
 endforeach()
