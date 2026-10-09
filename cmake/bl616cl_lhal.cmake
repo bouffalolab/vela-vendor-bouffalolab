@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# bl_lhal is shipped as a prebuilt library for external users, so every
-# bl616cl-capable source file must be compiled in regardless of the current
-# Kconfig selection. Otherwise a library built with a minimal .config lacks
-# code that external users later enable (the library is never rebuilt with
-# all options turned on). Sources are kept in sync with the upstream
-# bl616cl list in drivers/lhal/CMakeLists.txt.
+# Every bl616cl-capable source file is compiled regardless of the Kconfig
+# selection, so this list does not track which option needs which file and
+# enabling a BL616CL feature never fails on a missing lhal symbol. The final
+# link pulls only the referenced objects: unused files cost build time, not
+# flash. Sources are kept in sync with the upstream bl616cl list in
+# drivers/lhal/CMakeLists.txt.
 #
 # Deliberately excluded (known to break the build or conflict):
 # - src/bflb_irq.c: chips/bl616cl provides all bflb_irq_* via the NuttX
