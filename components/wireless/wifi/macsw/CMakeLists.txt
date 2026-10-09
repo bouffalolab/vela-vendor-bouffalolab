@@ -33,7 +33,9 @@ foreach(target macsw_bl616cl macsw_config_bl616cl_${CONFIG_MACSW_SELECT})
   # The NuttX kernel build injects -Wshadow/-Wundef which the macsw source
   # does not support under its own -Werror; silence them locally.
   target_compile_options(${target} PRIVATE -Wno-shadow -Wno-undef)
-  # Keep the build path out of the objects exported to macsw/prebuilt.
-  target_compile_options(${target} PRIVATE -ffile-prefix-map=${BL_SDK_ROOT}=.)
+  # Keep the build path out of __FILE__ strings and debug info. -g2 overrides
+  # the kernel -g3, whose macro info makes the archive about 170 MB.
+  target_compile_options(${target} PRIVATE -ffile-prefix-map=${BL_SDK_ROOT}=.
+                                           -g2)
   nuttx_add_external_library(${target} MODE KERNEL)
 endforeach()

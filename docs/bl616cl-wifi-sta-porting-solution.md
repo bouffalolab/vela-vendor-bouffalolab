@@ -210,11 +210,11 @@ components/wireless/wifi/
     └── VERSION
 ```
 
-库就是源码模式构建出的 fat LTO 对象，只剥掉调试段；host port 源码和头文件取自同一 public 提交，与库一起更新。由此带来三条约束：
+库就是源码模式构建出的 fat LTO 对象，与原生 SDK 发布的库一样只保留 LTO 早期调试信息（`.gnu.debuglto_*`），去掉普通 `.debug_*` 段；host port 源码和头文件取自同一 public 提交，与库一起更新。由此带来三条约束：
 
 - 预编译包只能配 openvela 预置的 GCC 13.4 使用，工具链或 `vela_bl616cl` profile 变化后必须重新导出。原生 Bouffalo SDK 发布的 macsw/wl80211 库是 T-Head GCC 10.2 的 LTO 对象，13.4 链接时报 `lto1: error: unknown cpu 'e907' for '-mtune'`，不能替代。
-- LTO 早期调试信息也被剥掉，预编译模式在最终链接末尾追加 `-g0`（`wifi/CMakeLists.txt`），否则 LTRANS 生成的调试信息会引用已不存在的符号。该模式下 macsw/wl80211 代码没有调试信息，其余代码不受影响。
-- 两个 core 编译时带 `-ffile-prefix-map=<SDK 根目录>=.`，`__FILE__` 字符串和 LTO 对象里不留构建机目录。该选项只改变 `.rodata` 中的路径字符串，`.text` 中 2934 个符号的地址和大小与加选项前一致。
+- LTO 链接用早期调试信息生成 core 的调试信息，所以预编译模式的 `final_nuttx` 与源码模式一样带 macsw/wl80211 的行号、CFI 和变量信息，GDB 和 coredump 分析可用。不能用 `objcopy --strip-debug` 剥离：它会连早期调试信息一起去掉，LTRANS 生成的调试信息随之引用不存在的符号，链接失败。macsw 用 `-g2` 编译，覆盖内核的 `-g3`；`-g3` 的宏信息会让库达到约 170 MB。
+- 两个 core 编译时带 `-ffile-prefix-map=<SDK 根目录>=.`，`__FILE__` 字符串和调试信息里不留构建机目录，固件中没有构建机路径；库的 LTO 段仍记录导出时的构建目录，不进入固件。该选项只改变 `.rodata` 中的路径字符串，`.text` 中 2934 个符号的地址和大小与加选项前一致。
 
 更新预编译包：
 
@@ -224,7 +224,7 @@ vendor/bouffalolab/tools/bl616cl/export_wifi_prebuilt.sh
 ./vela build ai-m64l-32s-kit/wifi --use-lib macsw,wl80211
 ```
 
-脚本检查源码仓状态，把两个 core 构建到最新，再导出库、头文件、host port 源码和 `VERSION`；库里出现 SDK 根目录路径时拒绝导出。导出后用 `--use-lib` 重建，与源码模式的 `nuttx.bin` 比较：首次导出时两者只差镜像内的构建时间。
+脚本检查源码仓状态，把两个 core 构建到最新，再导出库、头文件、host port 源码和 `VERSION`。导出后用 `--use-lib` 重建，与源码模式的 `nuttx.bin` 比较：两者应只差镜像内的构建时间。
 
 ## 5. BL616CL 平台适配
 

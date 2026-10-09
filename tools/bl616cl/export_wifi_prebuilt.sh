@@ -7,8 +7,9 @@
 #
 # build-dir defaults to cmake_out/ai-m64l-32s-kit_wifi and must come from
 # "vela build ai-m64l-32s-kit/wifi" without --use-lib. The libraries keep the
-# fat LTO objects of that build; only debug sections are stripped. Rebuild
-# with "--use-lib macsw,wl80211" afterwards and compare the images.
+# fat LTO objects of that build and, like the native SDK libraries, only the
+# early LTO debug info. Rebuild with "--use-lib macsw,wl80211" afterwards and
+# compare the images.
 
 set -euo pipefail
 
@@ -89,19 +90,19 @@ git -C "$WL80211_PUBLIC" archive HEAD include macsw/wl80211_mac.h \
   wl80211_platform.h wl80211_async_event.h wifi_mgmr.c country.c supplicant.c \
   nuttx.c rtos_al_nuttx.c | tar -x -C "$STAGE/wl80211"
 
-for lib in libmacsw_$CHIP.a libmacsw_config_${CHIP}_$PROFILE.a; do
-  "$OBJCOPY" --strip-debug "$MACSW_LIB_DIR/$lib" "$STAGE/macsw/lib/$lib"
-done
-"$OBJCOPY" --strip-debug "$WL80211_BUILD/libwl80211_$CHIP.a" \
-  "$STAGE/wl80211/lib/libwl80211_$CHIP.a"
+# The LTO link builds the debug info of the cores from the early debug info
+# (.gnu.debuglto_*), so drop only the debug info of the fat code, which an
+# LTO link never uses. --strip-debug would remove both.
+strip_late_debug()
+{
+  "$OBJCOPY" -R '.debug_*' -R '.rela.debug_*' "$1" "$2"
+}
 
-# The wrappers map the SDK root away with -ffile-prefix-map; a hit means the
-# cores were built before that.
-for lib in "$STAGE"/*/lib/*.a; do
-  if grep -a -q -F "$SDK_ROOT" "$lib"; then
-    fail "$(basename "$lib") contains $SDK_ROOT; rebuild the cores"
-  fi
+for lib in libmacsw_$CHIP.a libmacsw_config_${CHIP}_$PROFILE.a; do
+  strip_late_debug "$MACSW_LIB_DIR/$lib" "$STAGE/macsw/lib/$lib"
 done
+strip_late_debug "$WL80211_BUILD/libwl80211_$CHIP.a" \
+  "$STAGE/wl80211/lib/libwl80211_$CHIP.a"
 
 TOOLCHAIN=$("$CC" --version | head -n 1)
 MACSW_SHA=$(git -C "$MACSW_SRC" rev-parse HEAD)
@@ -112,7 +113,7 @@ chip: $CHIP
 profile: $PROFILE
 macsw: $MACSW_SHA
 toolchain: $TOOLCHAIN
-objects: fat LTO, -fshort-enums, debug sections stripped
+objects: fat LTO, -fshort-enums, early LTO debug info only
 EOF
 
 cat > "$STAGE/wl80211/VERSION" <<EOF
@@ -123,7 +124,7 @@ public: $(git -C "$WL80211_PUBLIC" rev-parse HEAD)
 private: $(git -C "$WL80211_PRIVATE" rev-parse HEAD)
 macsw: $MACSW_SHA
 toolchain: $TOOLCHAIN
-objects: fat LTO, -fshort-enums, debug sections stripped
+objects: fat LTO, -fshort-enums, early LTO debug info only
 EOF
 
 for component in macsw wl80211; do

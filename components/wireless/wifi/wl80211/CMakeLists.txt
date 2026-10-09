@@ -41,8 +41,7 @@ else()
             -DPHYRF_INCLUDE=${PHYRF_INCLUDE}
             "-DMACSW_INCLUDE=${MACSW_INCLUDE}"
             "-DSUPPLICANT_INCLUDE=${SUPPLICANT_INCLUDE}"
-            # Keep the build path out of the objects exported to
-            # wl80211/prebuilt.
+            # Keep the build path out of __FILE__ strings and debug info.
             "-DCMAKE_C_FLAGS=-ffile-prefix-map=${BL_SDK_ROOT}=."
     RESULT_VARIABLE wl80211_configure_result
     COMMAND_ERROR_IS_FATAL ANY)
