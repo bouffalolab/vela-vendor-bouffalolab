@@ -127,7 +127,7 @@ LHAL `init/start/stop/deinit` 返回 `void`，等待硬件状态超过 100ms 时
 - `pwm_register()` 注册失败时通用 upper allocation 未释放。本项只保证静态 lower 在
   注册前不占 pin/clock，不在运行时用重复注册制造泄漏。
 
-ST034 补充修复了 active close 生命周期：最后一个 fd close 调用 lower shutdown 后，
+后续补充修复了 active close 生命周期：最后一个 fd close 调用 lower shutdown 后，
 upper 同步清除 `started`。否则 reopen 后 `PWMIOC_START` 会因旧状态跳过 lower start，
 向应用返回成功但硬件不输出。
 
@@ -194,9 +194,9 @@ patch 可以进入 vendor 开发 `trunk`，但在补齐仪器数据前本能力�
 汇总为 `PWM Summary: executed=8 passed=8 failed=0 -> PASS`。随后在同一固件和同一串口
 完成现役回归：GPIO edge 3 cycles、TIMER-001 0.253% 最大误差、TIMER-002 周期比
 2.000、TIMER-005、oneshot 100000 us、WDT-002（3026 ms 内 keepalive 6 次）、
-WDT-003、`/dev/rtc0` 以及 `date` 两秒递增；系统存活检查为 `ST033_PWM_ALIVE=0`。
+WDT-003、`/dev/rtc0` 以及 `date` 两秒递增；系统存活检查返回 0。
 
-ST034 先在未修复 NuttX 上复现 `executed=8 passed=7 failed=1`，唯一失败为 active
+active close 修复先在未修复 NuttX 上复现 `executed=8 passed=7 failed=1`，唯一失败为 active
 close/reopen 未重新调用 lower。修复后同一 USB2、配置和命令得到 8/8 PASS；同次
 TIMER-001 最大误差 0.275%，其他现役外设回归和系统存活检查继续通过。
 

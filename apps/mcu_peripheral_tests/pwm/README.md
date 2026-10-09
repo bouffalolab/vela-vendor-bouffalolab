@@ -251,9 +251,9 @@ PWM Summary: executed=8 passed=8 failed=0 -> PASS
 同一固件继续执行 GPIO edge、TIMER-001/002/005、oneshot、WDT-002/003 和 RTC 回归，
 均通过；TIMER-001 最大误差 253 us（0.253%），TIMER-002 周期比 2.000，WDT-002
 在 3026 ms 内 keepalive 6 次，RTC 时间从 `00:00:21` 递增到 `00:00:23`，最终
-`ST033_PWM_ALIVE=0`。
+系统存活检查返回 0。
 
-ST034 使用未修复 NuttX 首先得到 `executed=8 passed=7 failed=1`，唯一失败为
+active close 修复前，未修复 NuttX 得到 `executed=8 passed=7 failed=1`，唯一失败为
 `active close/reopen did not restart lower`。NuttX upper 在最后 close 后清除
 `started` 后，同一 USB2、固件配置和命令得到 8/8 PASS；同次 TIMER-001 最大误差
 275 us（0.275%），其余上述回归和系统存活检查继续通过。
