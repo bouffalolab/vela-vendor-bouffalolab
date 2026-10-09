@@ -1980,7 +1980,7 @@ int bl616cl_wifi_sta_pmksa(struct iwreq *iwr, bool set)
 
             {
               ret = pbkdf2_sha1(g_wifi_cfg.pwd,
-                                (uint8_t *)g_wifi_cfg.ssid,
+                                g_wifi_cfg.ssid,
                                 g_wifi_cfg.ssid_len,
                                 4096,
                                 result,
