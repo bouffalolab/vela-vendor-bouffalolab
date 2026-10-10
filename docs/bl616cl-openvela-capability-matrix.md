@@ -557,7 +557,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | P06 | PWM | 软件闭环已通过，P1；G4 waiting | `BL616CL_PWM`、`AI_M64L_KIT_PWM`、test hook/app 独立裁剪；首版排除改变 ABI 的 multichannel/pulse/fixed/deadtime | PWM0 CH3+/GPIO22、continuous、整数频率、duty、cpol/dcpol、live update 和 multi-fd 已完成三态构建、裁剪、8/8 实机软件合同和现役回归；frequency/duty/停止电平/更新毛刺待逻辑分析仪 |
 | P07 | ADC | 需要适配，P2 | ADC、channel/pin、poll/DMA 分层 | analog lower-half；校准、量程、连续采样、溢出；外部基准电压 |
 | P08 | DMA0 | 已验证 | `BL616CL_DMA0` 默认关闭；test hook/app 独立；首版依赖 `!DMA_LINK` | 八通道 fixed-ident、1/2/4-byte mem2mem、TC/error 状态机、stop/residual、cache ownership 和并发生命周期；外设 consumer/LLI/cyclic 延后 |
-| P09 | AES/SHA/GMAC | 需要适配，P2 | 算法分别裁剪，DMA 可独立 | 对接 OpenVela crypto；标准向量、分块/非对齐、并发和软件对照 |
+| P09 | AES/SHA `/dev/crypto` 与 mbedTLS ALT；GMAC、PKA、CRC32 | AES/SHA 已验证；GMAC/PKA 延后；CRC32 不支持 | `BL616CL_CRYPTO`、`_AES`、`_SHA` 分别裁剪；bounce 大小与直连可配；软件驱动关闭；ALT 逐项开 | AES-CBC/CTR/XTS、SHA-1/2 经 `hwcr_init()` 注册；cmocka、`mcu_crypto_test`、`mbedselftest` 在直连开/关两种 KASAN 构建通过；超时恢复实测；CRC32 硬件语义不符；`wifi` 实测 ALT 不缩短连接时间（SHA1 ALT 使 WPA2 慢约 1.6 s），不开。见 [bl616cl-crypto.md](bl616cl-crypto.md) |
 | P10 | EFUSE/unique ID | 需要适配，P2 | read 与 irreversible program 分离；默认只读 | 明确 NuttX ABI；只读实测、越界/权限；烧写需单独授权和治具 |
 | P11 | SPI flash MTD | 需要适配，P2 | `BL616CL_FLASH_MTD`、partition/fs 独立 | XIP 并发、擦写临界区、cache、边界、掉电恢复；不得覆盖 boot/app/MFG |
 | P12 | I2S、AUADC、AUDAC | 延后 | controller/方向/DMA/channel 分层 | 依赖 DMA/cache、codec/clock/pin；采样率、欠载/溢出、长时音频 |
@@ -620,6 +620,27 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
   DMA adapter 不代替 client 维护 cache。
 - 外设 consumer、pause/resume、cyclic、LLI/link/insert 保持延后；后续必须按 UART、
   I2C、SPI、ADC、MTD 或 crypto 分别建立 owner、request、cache 和实物验证闭环。
+
+### P09 AES/SHA 实测结论（2026-10-10）
+
+- SEC_ENG 的 AES（CBC 三个 ID、128 位进位的 CTR、ECB 加软件 tweak 的 XTS）与
+  SHA-1/224/256/384/512 注册为 OpenVela crypto 硬件驱动，经 `/dev/crypto` 使用；
+  不注册 HMAC、CFB/OFB、MD5 等，软件驱动保持关闭。TRNG 改用同一公共层的时钟和锁。
+- 数据经每引擎 1 KiB non-cacheable bounce 缓冲；内部 RAM 中对齐的大请求（默认
+  ≥ 256 B、目的按 32 B cache 行对齐）由引擎直接读写调用者缓冲，XTS、PSRAM、flash
+  总是走 bounce。
+- 带 KASAN/canary 的 `nsh-peripherals` 上，直连开、关两次构建的 cmocka
+  AES-CBC/CTR/XTS/HASH（MD5 预期失败）、`mcu_crypto_test all`、TRNG 测试全部通过；
+  4096 B CBC 64 次耗时直连开 10.2 ms、关 80.2 ms。
+- 打开 AES、SHA1、SHA256、SHA512 ALT 后 `mbedselftest` 30 个套件全部通过；带
+  SSL/TLS 或 PSA hash clone 的镜像不能开 SHA ALT（clone 只共享内核 session）。
+- 关闭 SEC 时钟制造真实超时：返回 `ETIMEDOUT`、session 作废，新 session 结果正确；
+  引擎恢复后会把被打断的那段做完并写出。
+- 硬件 CRC32 多项式最低位固定为 1、只处理 4 B 整字，不注册 `CRYPTO_CRC32`。
+- `wifi` 逐个开 ALT 各连 20 次：没有 ALT 缩短连接时间；SHA1 ALT 使 WPA2-PSK 中位数
+  从 3.25 s 增到 4.89 s（PBKDF2 每次 HMAC 都新建 session），SHA256 ALT 使 WPA3 慢约
+  33 ms，所以 `wifi` 不开 ALT。
+- GMAC（只有 GHASH）、PKA 本期不做。
 
 ### P02 TRNG 实测结论
 
@@ -718,7 +739,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | 7 | M04、M05 KASAN/UBSAN | 各自独立配置、负测和 commit |
 | 8 | A05 lazy FPU | 在诊断基线稳定后做性能优化 |
 | 9 | P01 UART1、P02、P03 已完成；P01 UART2 和 P04/P05/P06 实物边界保留后续 | UART2 回矩阵重评；I2C、SPI、PWM 按资源条件恢复；RTC 扩展能力另按独立子任务补全 |
-| 10 | A07+P08 已完成；P07/P09/P11 保留后续 | cache/DMA 公共前置已闭环；ADC、crypto、MTD 仍需各自 adapter、owner 和实物证据 |
+| 10 | A07+P08 已完成；P09 AES/SHA 已完成；P07/P11 保留后续 | cache/DMA 公共前置已闭环；ADC、MTD 仍需各自 adapter、owner 和实物证据 |
 
 同一行合并的配置只表示一个不可分割的验收闭包；不同表项不得合并成一个
 commit。每项完成时至少记录静态、构建、烧录/启动和功能运行四层；故障诊断项

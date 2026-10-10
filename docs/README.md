@@ -16,6 +16,9 @@
 - [BL616CL TRNG 随机设备适配与验证](bl616cl-trng.md)：配置和验证
   `/dev/random`、可选硬件 `/dev/urandom`、任意长度读取、基本数据检查、裁剪和
   外设回归。
+- [BL616CL 硬件加密](bl616cl-crypto.md)：SEC_ENG AES/SHA 经 `/dev/crypto` 的注册
+  算法与语义、Kconfig、bounce 与直连条件、超时行为、mbedTLS ALT 的限制（SHA clone、
+  CFB/OFB）和实板结果。
 - [BL616CL RISC-V Lazy FPU 配置与验证](bl616cl-lazy-fpu.md)：配置和验证
   `ARCH_LAZYFPU`、双任务与异步 signal FPU 状态隔离、裁剪、开销和外设回归。
 - [BL616CL Syslog Coredump 配置与离线解码](bl616cl-syslog-coredump.md)：配置和
