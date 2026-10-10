@@ -43,10 +43,12 @@
 
 enum bl616cl_aes_mode_e
 {
-  BL616CL_AES_CBC,
+  BL616CL_AES_CBC, /* IV is the first chaining value */
+  BL616CL_AES_CTR, /* IV is the 128-bit big-endian counter block */
+  BL616CL_AES_XTS, /* IV is the tweak input, encrypted with key 2 */
 };
 
-/* An AES context: key, mode and chaining value of one session. */
+/* An AES context: keys, mode and chaining state of one session. */
 
 struct bl616cl_aes_s;
 
@@ -74,13 +76,14 @@ int bl616cl_sec_aes_initialize(void);
  * Name: bl616cl_sec_aes_new
  *
  * Description:
- *   Allocate an AES context. The chaining value starts at zero.
+ *   Allocate an AES context. The chaining state starts at zero.
  *
  * Input Parameters:
  *   aes - Receives the new context.
  *   mode - Block cipher mode.
- *   key - Key bytes; only read during this call.
- *   keylen - Key length in bytes: 16, 24 or 32.
+ *   key - Key bytes; only read during this call. For XTS, key 1 followed
+ *     by key 2.
+ *   keylen - Key length in bytes: 16, 24 or 32; for XTS 32 or 64.
  *
  * Returned Value:
  *   Zero (OK) on success; -EINVAL for an unsupported key length; -ENOMEM
@@ -112,7 +115,7 @@ void bl616cl_sec_aes_free(FAR struct bl616cl_aes_s *aes);
  * Name: bl616cl_sec_aes_setiv
  *
  * Description:
- *   Set the chaining value (CBC IV) for the next operation.
+ *   Restart the chaining state from an IV at the next operation.
  *
  * Input Parameters:
  *   aes - The context.
@@ -131,16 +134,20 @@ void bl616cl_sec_aes_setiv(FAR struct bl616cl_aes_s *aes,
  *
  * Description:
  *   Encrypt or decrypt with the SEC AES engine in link mode. The operation
- *   continues from the chaining value left by the previous one, so a
- *   message can be processed in several calls. After an engine failure
- *   the context is unusable and every later call returns the same error.
+ *   continues from the chaining state left by the previous one, so a
+ *   message can be processed in several calls. The CTR counter carries
+ *   over all 128 bits. XTS runs the engine in ECB mode and applies the
+ *   tweak on the CPU, because the engine cannot resume a data unit. After
+ *   an engine failure the context is unusable and every later call returns
+ *   the same error.
  *
  * Input Parameters:
  *   aes - The context.
  *   encrypt - True to encrypt, false to decrypt.
  *   src - Input data.
  *   dst - Output buffer of len bytes; may equal src.
- *   len - Number of bytes, a multiple of BL616CL_AES_BLOCK_SIZE.
+ *   len - Number of bytes, a multiple of BL616CL_AES_BLOCK_SIZE except
+ *     for CTR, where a partial last block still uses a whole counter.
  *
  * Returned Value:
  *   Zero (OK) on success; -EINVAL if len is not a multiple of the block

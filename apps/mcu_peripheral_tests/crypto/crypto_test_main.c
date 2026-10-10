@@ -1,0 +1,895 @@
+/****************************************************************************
+ * vendor/bouffalolab/apps/mcu_peripheral_tests/crypto/crypto_test_main.c
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ ****************************************************************************/
+
+/****************************************************************************
+ * Included Files
+ ****************************************************************************/
+
+#include <nuttx/config.h>
+
+#include <sys/ioctl.h>
+
+#include <crypto/cryptodev.h>
+
+#include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define CRYPTO_DEVICE     "/dev/crypto"
+#define CRYPTO_BLOCK_SIZE 16
+#define CRYPTO_MAX_KEY    64
+#define CRYPTO_MAX_LEN    5000
+#define CRYPTO_MAX_PIECES 4
+#define CRYPTO_GUARD_SIZE 8
+#define CRYPTO_BUF_SIZE   (CRYPTO_MAX_LEN + CRYPTO_GUARD_SIZE)
+#define CRYPTO_NSESSIONS  3
+#define CRYPTO_NBUFS      (CRYPTO_NSESSIONS + 1)
+#define CRYPTO_CANARY     0xa5
+#define CRYPTO_DATA_SEED  0x5b
+
+/* Expected FNV-1a checksums of the ciphertext, printed by
+ * crypto_vectors.py from an independent AES implementation.
+ */
+
+#define CRYPTO_CBC_BULK_FNV UINT32_C(0x6b7607fa)
+#define CRYPTO_CTR_WORD_FNV UINT32_C(0xe62bc615)
+#define CRYPTO_CTR_ALL_FNV  UINT32_C(0x9f224e8a)
+#define CRYPTO_CTR_BULK_FNV UINT32_C(0x1ab3f11e)
+#define CRYPTO_XTS_BULK_FNV UINT32_C(0x412a210c)
+#define CRYPTO_XTS_128_FNV  UINT32_C(0x85abb628)
+
+/****************************************************************************
+ * Private Types
+ ****************************************************************************/
+
+/* A message of crypto_fill(CRYPTO_DATA_SEED) bytes, encrypted in one call
+ * or in pieces continued with COP_FLAG_UPDATE.
+ */
+
+struct crypto_vector_s
+{
+  const char *name;
+  uint32_t cipher;
+  uint8_t keyseed;                  /* Key bytes are crypto_fill(keyseed) */
+  uint8_t keylen;
+  uint8_t iv[CRYPTO_BLOCK_SIZE];
+  size_t len;
+  uint32_t fnv;                     /* Expected ciphertext checksum */
+  size_t pieces[CRYPTO_MAX_PIECES]; /* Streaming split, ends with 0 */
+};
+
+/* A NIST SP 800-38A F.2 CBC encryption vector. */
+
+struct crypto_kat_s
+{
+  const char *name;
+  uint32_t cipher;
+  const uint8_t *key;
+  size_t keylen;
+  const uint8_t *ct;
+};
+
+/****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+/* The bulk lengths cross the default 1024-byte bounce buffer. */
+
+static const struct crypto_vector_s g_cbc_bulk =
+{
+  "cbc-bulk", CRYPTO_AES_CBC, 0x30, 16,
+  {
+    0xa0, 0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7,
+    0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf
+  },
+  2064, CRYPTO_CBC_BULK_FNV,
+  {
+    1040, 1024
+  }
+};
+
+/* The low 32 bits of the counter wrap after two blocks and carry into the
+ * next word; the second piece starts at the wrap.
+ */
+
+static const struct crypto_vector_s g_ctr_word =
+{
+  "ctr-word", CRYPTO_AES_CTR, 0x30, 16,
+  {
+    0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7,
+    0xf8, 0xf9, 0xfa, 0xfb, 0xff, 0xff, 0xff, 0xfe
+  },
+  69, CRYPTO_CTR_WORD_FNV,
+  {
+    32, 37
+  }
+};
+
+/* The carry ripples through all 128 bits and wraps to zero inside the
+ * second piece.
+ */
+
+static const struct crypto_vector_s g_ctr_all =
+{
+  "ctr-all", CRYPTO_AES_CTR, 0x30, 16,
+  {
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe
+  },
+  69, CRYPTO_CTR_ALL_FNV,
+  {
+    16, 32, 21
+  }
+};
+
+/* The low 32 bits wrap after 240 blocks, inside a bounce buffer chunk. */
+
+static const struct crypto_vector_s g_ctr_bulk =
+{
+  "ctr-bulk", CRYPTO_AES_CTR, 0x91, 32,
+  {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0xff, 0xff, 0xff, 0x10
+  },
+  5000, CRYPTO_CTR_BULK_FNV,
+  {
+    1040, 3008, 952
+  }
+};
+
+/* One 4096-byte data unit (sector 0x1234) with two 256-bit keys. */
+
+static const struct crypto_vector_s g_xts_bulk =
+{
+  "xts-bulk", CRYPTO_AES_XTS, 0x30, 64,
+  {
+    0x34, 0x12
+  },
+  4096, CRYPTO_XTS_BULK_FNV,
+  {
+    16, 1008, 1040, 2032
+  }
+};
+
+static const struct crypto_vector_s g_xts_128 =
+{
+  "xts-128", CRYPTO_AES_XTS, 0x91, 32,
+  {
+    0x07
+  },
+  1040, CRYPTO_XTS_128_FNV,
+  {
+    528, 512
+  }
+};
+
+static const uint8_t g_nist_iv[CRYPTO_BLOCK_SIZE] =
+{
+  0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+  0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+};
+
+static const uint8_t g_nist_pt[64] =
+{
+  0x6b, 0xc1, 0xbe, 0xe2, 0x2e, 0x40, 0x9f, 0x96,
+  0xe9, 0x3d, 0x7e, 0x11, 0x73, 0x93, 0x17, 0x2a,
+  0xae, 0x2d, 0x8a, 0x57, 0x1e, 0x03, 0xac, 0x9c,
+  0x9e, 0xb7, 0x6f, 0xac, 0x45, 0xaf, 0x8e, 0x51,
+  0x30, 0xc8, 0x1c, 0x46, 0xa3, 0x5c, 0xe4, 0x11,
+  0xe5, 0xfb, 0xc1, 0x19, 0x1a, 0x0a, 0x52, 0xef,
+  0xf6, 0x9f, 0x24, 0x45, 0xdf, 0x4f, 0x9b, 0x17,
+  0xad, 0x2b, 0x41, 0x7b, 0xe6, 0x6c, 0x37, 0x10
+};
+
+static const uint8_t g_nist_key192[24] =
+{
+  0x8e, 0x73, 0xb0, 0xf7, 0xda, 0x0e, 0x64, 0x52,
+  0xc8, 0x10, 0xf3, 0x2b, 0x80, 0x90, 0x79, 0xe5,
+  0x62, 0xf8, 0xea, 0xd2, 0x52, 0x2c, 0x6b, 0x7b
+};
+
+static const uint8_t g_nist_ct192[64] =
+{
+  0x4f, 0x02, 0x1d, 0xb2, 0x43, 0xbc, 0x63, 0x3d,
+  0x71, 0x78, 0x18, 0x3a, 0x9f, 0xa0, 0x71, 0xe8,
+  0xb4, 0xd9, 0xad, 0xa9, 0xad, 0x7d, 0xed, 0xf4,
+  0xe5, 0xe7, 0x38, 0x76, 0x3f, 0x69, 0x14, 0x5a,
+  0x57, 0x1b, 0x24, 0x20, 0x12, 0xfb, 0x7a, 0xe0,
+  0x7f, 0xa9, 0xba, 0xac, 0x3d, 0xf1, 0x02, 0xe0,
+  0x08, 0xb0, 0xe2, 0x79, 0x88, 0x59, 0x88, 0x81,
+  0xd9, 0x20, 0xa9, 0xe6, 0x4f, 0x56, 0x15, 0xcd
+};
+
+static const uint8_t g_nist_key256[32] =
+{
+  0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe,
+  0x2b, 0x73, 0xae, 0xf0, 0x85, 0x7d, 0x77, 0x81,
+  0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7,
+  0x2d, 0x98, 0x10, 0xa3, 0x09, 0x14, 0xdf, 0xf4
+};
+
+static const uint8_t g_nist_ct256[64] =
+{
+  0xf5, 0x8c, 0x4c, 0x04, 0xd6, 0xe5, 0xf1, 0xba,
+  0x77, 0x9e, 0xab, 0xfb, 0x5f, 0x7b, 0xfb, 0xd6,
+  0x9c, 0xfc, 0x4e, 0x96, 0x7e, 0xdb, 0x80, 0x8d,
+  0x67, 0x9f, 0x77, 0x7b, 0xc6, 0x70, 0x2c, 0x7d,
+  0x39, 0xf2, 0x33, 0x69, 0xa9, 0xd9, 0xba, 0xcf,
+  0xa5, 0x30, 0xe2, 0x63, 0x04, 0x23, 0x14, 0x61,
+  0xb2, 0xeb, 0x05, 0xe2, 0xc3, 0x9b, 0xe9, 0xfc,
+  0xda, 0x6c, 0x19, 0x07, 0x8c, 0x6a, 0x9d, 0x1b
+};
+
+/* The three CBC ids are the same cipher; the key length selects AES-128,
+ * AES-192 or AES-256.
+ */
+
+static const struct crypto_kat_s g_kats[] =
+{
+  {
+    "cbc192", CRYPTO_AES_192_CBC, g_nist_key192, sizeof(g_nist_key192),
+    g_nist_ct192
+  },
+  {
+    "cbc256", CRYPTO_AES_256_CBC, g_nist_key256, sizeof(g_nist_key256),
+    g_nist_ct256
+  },
+  {
+    "cbc-id-256", CRYPTO_AES_CBC, g_nist_key256, sizeof(g_nist_key256),
+    g_nist_ct256
+  }
+};
+
+/****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+static void crypto_usage(const char *progname)
+{
+  printf("Usage: %s <all|cbc|ctr|xts|session|edge>\n", progname);
+}
+
+static void crypto_fill(uint8_t *buffer, size_t len, uint8_t seed)
+{
+  size_t i;
+
+  for (i = 0; i < len; i++)
+    {
+      buffer[i] = (uint8_t)(seed + i * 13 + (i >> 7));
+    }
+}
+
+static uint32_t crypto_checksum(const uint8_t *buffer, size_t len)
+{
+  uint32_t hash = UINT32_C(2166136261);
+  size_t i;
+
+  for (i = 0; i < len; i++)
+    {
+      hash ^= buffer[i];
+      hash *= UINT32_C(16777619);
+    }
+
+  return hash;
+}
+
+static void crypto_guard(uint8_t *buffer, size_t len)
+{
+  memset(buffer + len, CRYPTO_CANARY, CRYPTO_GUARD_SIZE);
+}
+
+static bool crypto_guard_ok(const uint8_t *buffer, size_t len)
+{
+  size_t i;
+
+  for (i = 0; i < CRYPTO_GUARD_SIZE; i++)
+    {
+      if (buffer[len + i] != CRYPTO_CANARY)
+        {
+          return false;
+        }
+    }
+
+  return true;
+}
+
+static int crypto_open(void)
+{
+  int cfd = -1;
+  int fd;
+
+  fd = open(CRYPTO_DEVICE, O_RDWR);
+  if (fd < 0)
+    {
+      printf("CRYPTO_TEST FAIL open errno=%d\n", errno);
+      return -1;
+    }
+
+  if (ioctl(fd, CRIOGET, &cfd) < 0)
+    {
+      printf("CRYPTO_TEST FAIL CRIOGET errno=%d\n", errno);
+      cfd = -1;
+    }
+
+  close(fd);
+  return cfd;
+}
+
+static int crypto_session_new(int cfd, uint32_t cipher,
+                              const uint8_t *key, size_t keylen,
+                              uint32_t *ses)
+{
+  struct session_op sop;
+
+  memset(&sop, 0, sizeof(sop));
+  sop.cipher = cipher;
+  sop.op = COP_ENCRYPT;
+  sop.keylen = keylen;
+  sop.key = (caddr_t)key;
+
+  if (ioctl(cfd, CIOCGSESSION, &sop) < 0)
+    {
+      return -errno;
+    }
+
+  *ses = sop.ses;
+  return 0;
+}
+
+static void crypto_session_free(int cfd, uint32_t ses)
+{
+  ioctl(cfd, CIOCFSESSION, &ses);
+}
+
+static int crypto_crypt(int cfd, uint32_t ses, uint16_t op, uint16_t flags,
+                        const uint8_t *iv, const uint8_t *src,
+                        uint8_t *dst, size_t len)
+{
+  struct crypt_op cop;
+
+  memset(&cop, 0, sizeof(cop));
+  cop.ses = ses;
+  cop.op = op;
+  cop.flags = flags;
+  cop.len = len;
+  cop.olen = len;
+  cop.ivlen = CRYPTO_BLOCK_SIZE;
+  cop.src = (caddr_t)src;
+  cop.dst = (caddr_t)dst;
+  cop.iv = (caddr_t)iv;
+
+  return ioctl(cfd, CIOCCRYPT, &cop) < 0 ? -errno : 0;
+}
+
+/* Run a vector in one call, or in its pieces when split is true. Later
+ * pieces still pass the IV, which COP_FLAG_UPDATE must ignore.
+ */
+
+static int crypto_stream(int cfd, uint32_t ses, uint16_t op,
+                         const struct crypto_vector_s *vector,
+                         const uint8_t *src, uint8_t *dst, bool split)
+{
+  size_t off = 0;
+  int ret;
+  int i;
+
+  if (!split)
+    {
+      return crypto_crypt(cfd, ses, op, 0, vector->iv, src, dst,
+                          vector->len);
+    }
+
+  for (i = 0; i < CRYPTO_MAX_PIECES && vector->pieces[i] != 0; i++)
+    {
+      ret = crypto_crypt(cfd, ses, op, i == 0 ? 0 : COP_FLAG_UPDATE,
+                         vector->iv, src + off, dst + off,
+                         vector->pieces[i]);
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      off += vector->pieces[i];
+    }
+
+  return off == vector->len ? 0 : -EINVAL;
+}
+
+/* Check one result: the call succeeded, nothing was written past len, and
+ * the output is the plaintext (plain != NULL) or has the expected
+ * ciphertext checksum.
+ */
+
+static int crypto_expect(const struct crypto_vector_s *vector,
+                         const char *step, int ret, const uint8_t *buffer,
+                         const uint8_t *plain)
+{
+  uint32_t checksum;
+
+  if (ret < 0)
+    {
+      printf("CRYPTO_TEST %s FAIL step=%s ret=%d\n",
+             vector->name, step, ret);
+      return -1;
+    }
+
+  if (!crypto_guard_ok(buffer, vector->len))
+    {
+      printf("CRYPTO_TEST %s FAIL step=%s overrun\n", vector->name, step);
+      return -1;
+    }
+
+  if (plain != NULL)
+    {
+      if (memcmp(buffer, plain, vector->len) != 0)
+        {
+          printf("CRYPTO_TEST %s FAIL step=%s plaintext mismatch\n",
+                 vector->name, step);
+          return -1;
+        }
+
+      return 0;
+    }
+
+  checksum = crypto_checksum(buffer, vector->len);
+  if (checksum != vector->fnv)
+    {
+      printf("CRYPTO_TEST %s FAIL step=%s checksum=%08" PRIx32
+             " expected=%08" PRIx32 "\n",
+             vector->name, step, checksum, vector->fnv);
+      return -1;
+    }
+
+  return 0;
+}
+
+/* Encrypt and decrypt a vector in one call, in pieces, and in place. */
+
+static int crypto_check_vector(int cfd, const struct crypto_vector_s *vector,
+                               uint8_t *buf[])
+{
+  uint8_t key[CRYPTO_MAX_KEY];
+  uint8_t *in = buf[0];
+  uint8_t *out = buf[1];
+  uint8_t *aux = buf[2];
+  uint32_t ses;
+  int ret;
+
+  crypto_fill(key, vector->keylen, vector->keyseed);
+  ret = crypto_session_new(cfd, vector->cipher, key, vector->keylen, &ses);
+  if (ret < 0)
+    {
+      printf("CRYPTO_TEST %s FAIL session ret=%d\n", vector->name, ret);
+      return -1;
+    }
+
+  crypto_fill(in, vector->len, CRYPTO_DATA_SEED);
+
+  crypto_guard(out, vector->len);
+  ret = crypto_stream(cfd, ses, COP_ENCRYPT, vector, in, out, false);
+  if (crypto_expect(vector, "encrypt", ret, out, NULL) < 0)
+    {
+      goto fail;
+    }
+
+  crypto_guard(aux, vector->len);
+  ret = crypto_stream(cfd, ses, COP_DECRYPT, vector, out, aux, false);
+  if (crypto_expect(vector, "decrypt", ret, aux, in) < 0)
+    {
+      goto fail;
+    }
+
+  crypto_guard(aux, vector->len);
+  ret = crypto_stream(cfd, ses, COP_ENCRYPT, vector, in, aux, true);
+  if (crypto_expect(vector, "encrypt-split", ret, aux, NULL) < 0)
+    {
+      goto fail;
+    }
+
+  ret = crypto_stream(cfd, ses, COP_DECRYPT, vector, aux, aux, true);
+  if (crypto_expect(vector, "decrypt-split-inplace", ret, aux, in) < 0)
+    {
+      goto fail;
+    }
+
+  ret = crypto_stream(cfd, ses, COP_ENCRYPT, vector, aux, aux, false);
+  if (crypto_expect(vector, "encrypt-inplace", ret, aux, NULL) < 0)
+    {
+      goto fail;
+    }
+
+  crypto_session_free(cfd, ses);
+  printf("CRYPTO_TEST vector=%s PASS len=%zu checksum=%08" PRIx32 "\n",
+         vector->name, vector->len, vector->fnv);
+  return 0;
+
+fail:
+  crypto_session_free(cfd, ses);
+  return -1;
+}
+
+/* Encrypt a NIST vector from src to dst, then decrypt it in place at
+ * work. The addresses may be unaligned.
+ */
+
+static int crypto_check_kat(int cfd, const struct crypto_kat_s *kat,
+                            uint8_t *src, uint8_t *dst, uint8_t *work)
+{
+  uint32_t ses;
+  int ret;
+
+  ret = crypto_session_new(cfd, kat->cipher, kat->key, kat->keylen, &ses);
+  if (ret < 0)
+    {
+      printf("CRYPTO_TEST %s FAIL session ret=%d\n", kat->name, ret);
+      return -1;
+    }
+
+  memcpy(src, g_nist_pt, sizeof(g_nist_pt));
+  ret = crypto_crypt(cfd, ses, COP_ENCRYPT, 0, g_nist_iv, src, dst,
+                     sizeof(g_nist_pt));
+  if (ret < 0 || memcmp(dst, kat->ct, sizeof(g_nist_pt)) != 0)
+    {
+      printf("CRYPTO_TEST %s FAIL encrypt ret=%d src=%p dst=%p\n",
+             kat->name, ret, src, dst);
+      crypto_session_free(cfd, ses);
+      return -1;
+    }
+
+  memcpy(work, kat->ct, sizeof(g_nist_pt));
+  ret = crypto_crypt(cfd, ses, COP_DECRYPT, 0, g_nist_iv, work, work,
+                     sizeof(g_nist_pt));
+  crypto_session_free(cfd, ses);
+  if (ret < 0 || memcmp(work, g_nist_pt, sizeof(g_nist_pt)) != 0)
+    {
+      printf("CRYPTO_TEST %s FAIL decrypt-inplace ret=%d work=%p\n",
+             kat->name, ret, work);
+      return -1;
+    }
+
+  return 0;
+}
+
+static int crypto_test_cbc(int cfd, uint8_t *buf[])
+{
+  size_t i;
+
+  for (i = 0; i < sizeof(g_kats) / sizeof(g_kats[0]); i++)
+    {
+      if (crypto_check_kat(cfd, &g_kats[i], buf[0], buf[1], buf[2]) < 0)
+        {
+          return -1;
+        }
+
+      printf("CRYPTO_TEST kat=%s PASS\n", g_kats[i].name);
+    }
+
+  if (crypto_check_vector(cfd, &g_cbc_bulk, buf) < 0)
+    {
+      return -1;
+    }
+
+  printf("CRYPTO_TEST RESULT case=cbc PASS\n");
+  return 0;
+}
+
+static int crypto_test_ctr(int cfd, uint8_t *buf[])
+{
+  if (crypto_check_vector(cfd, &g_ctr_word, buf) < 0 ||
+      crypto_check_vector(cfd, &g_ctr_all, buf) < 0 ||
+      crypto_check_vector(cfd, &g_ctr_bulk, buf) < 0)
+    {
+      return -1;
+    }
+
+  printf("CRYPTO_TEST RESULT case=ctr PASS\n");
+  return 0;
+}
+
+static int crypto_test_xts(int cfd, uint8_t *buf[])
+{
+  if (crypto_check_vector(cfd, &g_xts_bulk, buf) < 0 ||
+      crypto_check_vector(cfd, &g_xts_128, buf) < 0)
+    {
+      return -1;
+    }
+
+  printf("CRYPTO_TEST RESULT case=xts PASS\n");
+  return 0;
+}
+
+/* Stream three sessions at once, one piece of each in turn, so that every
+ * call continues from a chaining state saved while the engine served the
+ * other sessions.
+ */
+
+static int crypto_test_session(int cfd, uint8_t *buf[])
+{
+  const struct crypto_vector_s *vectors[CRYPTO_NSESSIONS] =
+  {
+    &g_cbc_bulk, &g_ctr_bulk, &g_xts_bulk
+  };
+
+  uint8_t key[CRYPTO_MAX_KEY];
+  uint32_t ses[CRYPTO_NSESSIONS];
+  size_t off[CRYPTO_NSESSIONS];
+  int opened = 0;
+  int ret = 0;
+  int piece;
+  int i;
+
+  crypto_fill(buf[0], CRYPTO_MAX_LEN, CRYPTO_DATA_SEED);
+
+  for (i = 0; i < CRYPTO_NSESSIONS; i++)
+    {
+      crypto_fill(key, vectors[i]->keylen, vectors[i]->keyseed);
+      ret = crypto_session_new(cfd, vectors[i]->cipher, key,
+                               vectors[i]->keylen, &ses[i]);
+      if (ret < 0)
+        {
+          printf("CRYPTO_TEST session FAIL open=%s ret=%d\n",
+                 vectors[i]->name, ret);
+          goto out;
+        }
+
+      crypto_guard(buf[i + 1], vectors[i]->len);
+      off[i] = 0;
+      opened++;
+    }
+
+  for (piece = 0; piece < CRYPTO_MAX_PIECES; piece++)
+    {
+      for (i = 0; i < CRYPTO_NSESSIONS; i++)
+        {
+          size_t len = vectors[i]->pieces[piece];
+
+          if (len == 0)
+            {
+              continue;
+            }
+
+          ret = crypto_crypt(cfd, ses[i], COP_ENCRYPT,
+                             piece == 0 ? 0 : COP_FLAG_UPDATE,
+                             vectors[i]->iv, buf[0] + off[i],
+                             buf[i + 1] + off[i], len);
+          if (ret < 0)
+            {
+              printf("CRYPTO_TEST session FAIL %s piece=%d ret=%d\n",
+                     vectors[i]->name, piece, ret);
+              goto out;
+            }
+
+          off[i] += len;
+        }
+    }
+
+  for (i = 0; i < CRYPTO_NSESSIONS; i++)
+    {
+      ret = crypto_expect(vectors[i], "interleaved", 0, buf[i + 1], NULL);
+      if (ret < 0)
+        {
+          goto out;
+        }
+    }
+
+  printf("CRYPTO_TEST RESULT case=session PASS sessions=%d\n",
+         CRYPTO_NSESSIONS);
+
+out:
+  for (i = 0; i < opened; i++)
+    {
+      crypto_session_free(cfd, ses[i]);
+    }
+
+  return ret < 0 ? -1 : 0;
+}
+
+static int crypto_check_zero(int cfd, uint32_t cipher, size_t keylen,
+                             uint8_t *buf[])
+{
+  uint8_t key[CRYPTO_MAX_KEY];
+  uint32_t ses;
+  int ret;
+
+  crypto_fill(key, keylen, 0x30);
+  ret = crypto_session_new(cfd, cipher, key, keylen, &ses);
+  if (ret < 0)
+    {
+      printf("CRYPTO_TEST edge FAIL zero cipher=%" PRIu32 " session=%d\n",
+             cipher, ret);
+      return -1;
+    }
+
+  crypto_guard(buf[1], 0);
+  ret = crypto_crypt(cfd, ses, COP_ENCRYPT, 0, g_nist_iv, buf[0], buf[1],
+                     0);
+  crypto_session_free(cfd, ses);
+  if (ret < 0 || !crypto_guard_ok(buf[1], 0))
+    {
+      printf("CRYPTO_TEST edge FAIL zero cipher=%" PRIu32 " ret=%d\n",
+             cipher, ret);
+      return -1;
+    }
+
+  return 0;
+}
+
+static int crypto_check_badlen(int cfd, uint32_t cipher, size_t keylen,
+                               size_t len, uint8_t *buf[])
+{
+  uint8_t key[CRYPTO_MAX_KEY];
+  uint32_t ses;
+  int ret;
+
+  crypto_fill(key, keylen, 0x30);
+  ret = crypto_session_new(cfd, cipher, key, keylen, &ses);
+  if (ret < 0)
+    {
+      printf("CRYPTO_TEST edge FAIL badlen cipher=%" PRIu32 " session=%d\n",
+             cipher, ret);
+      return -1;
+    }
+
+  ret = crypto_crypt(cfd, ses, COP_ENCRYPT, 0, g_nist_iv, buf[0], buf[1],
+                     len);
+  crypto_session_free(cfd, ses);
+  if (ret != -EINVAL)
+    {
+      printf("CRYPTO_TEST edge FAIL badlen cipher=%" PRIu32
+             " len=%zu ret=%d\n", cipher, len, ret);
+      return -1;
+    }
+
+  return 0;
+}
+
+static int crypto_test_edge(int cfd, uint8_t *buf[])
+{
+  const struct crypto_kat_s *kat = &g_kats[1];
+
+  if (crypto_check_zero(cfd, CRYPTO_AES_CBC, 16, buf) < 0 ||
+      crypto_check_zero(cfd, CRYPTO_AES_CTR, 16, buf) < 0 ||
+      crypto_check_zero(cfd, CRYPTO_AES_XTS, 32, buf) < 0)
+    {
+      return -1;
+    }
+
+  printf("CRYPTO_TEST edge zero-length PASS\n");
+
+  if (crypto_check_badlen(cfd, CRYPTO_AES_CBC, 16, 15, buf) < 0 ||
+      crypto_check_badlen(cfd, CRYPTO_AES_XTS, 32, 20, buf) < 0)
+    {
+      return -1;
+    }
+
+  printf("CRYPTO_TEST edge partial-block PASS\n");
+
+  if (crypto_check_kat(cfd, kat, buf[0] + 1, buf[1] + 3, buf[2] + 1) < 0 ||
+      crypto_check_kat(cfd, kat, buf[0] + 2, buf[0] + 2, buf[2] + 3) < 0)
+    {
+      return -1;
+    }
+
+  printf("CRYPTO_TEST edge unaligned PASS\n");
+  printf("CRYPTO_TEST RESULT case=edge PASS\n");
+  return 0;
+}
+
+static int crypto_run_case(const char *name, int cfd, uint8_t *buf[])
+{
+  if (strcmp(name, "cbc") == 0)
+    {
+      return crypto_test_cbc(cfd, buf);
+    }
+
+  if (strcmp(name, "ctr") == 0)
+    {
+      return crypto_test_ctr(cfd, buf);
+    }
+
+  if (strcmp(name, "xts") == 0)
+    {
+      return crypto_test_xts(cfd, buf);
+    }
+
+  if (strcmp(name, "session") == 0)
+    {
+      return crypto_test_session(cfd, buf);
+    }
+
+  if (strcmp(name, "edge") == 0)
+    {
+      return crypto_test_edge(cfd, buf);
+    }
+
+  return -EINVAL;
+}
+
+/****************************************************************************
+ * Public Functions
+ ****************************************************************************/
+
+int main(int argc, char *argv[])
+{
+  static const char *cases[] =
+  {
+    "cbc", "ctr", "xts", "session", "edge"
+  };
+
+  uint8_t *buf[CRYPTO_NBUFS];
+  int cfd;
+  int ret = 0;
+  size_t i;
+
+  if (argc != 2)
+    {
+      crypto_usage(argv[0]);
+      return EXIT_FAILURE;
+    }
+
+  printf("CRYPTO_TEST BEGIN case=%s\n", argv[1]);
+
+  memset(buf, 0, sizeof(buf));
+  for (i = 0; i < CRYPTO_NBUFS; i++)
+    {
+      buf[i] = malloc(CRYPTO_BUF_SIZE);
+      if (buf[i] == NULL)
+        {
+          printf("CRYPTO_TEST FAIL malloc size=%d\n", CRYPTO_BUF_SIZE);
+          ret = -1;
+          goto out;
+        }
+    }
+
+  cfd = crypto_open();
+  if (cfd < 0)
+    {
+      ret = -1;
+      goto out;
+    }
+
+  if (strcmp(argv[1], "all") != 0)
+    {
+      ret = crypto_run_case(argv[1], cfd, buf);
+      if (ret == -EINVAL)
+        {
+          crypto_usage(argv[0]);
+        }
+    }
+  else
+    {
+      for (i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)
+        {
+          if (crypto_run_case(cases[i], cfd, buf) < 0)
+            {
+              ret = -1;
+            }
+        }
+
+      printf("CRYPTO_TEST RESULT case=all %s\n", ret == 0 ? "PASS" : "FAIL");
+    }
+
+  close(cfd);
+
+out:
+  for (i = 0; i < CRYPTO_NBUFS; i++)
+    {
+      free(buf[i]);
+    }
+
+  return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+}

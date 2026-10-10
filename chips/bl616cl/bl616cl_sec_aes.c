@@ -30,6 +30,7 @@
 #include <syslog.h>
 
 #include <nuttx/kmalloc.h>
+#include <nuttx/nuttx.h>
 
 #include "bl616cl_lhal.h"
 #include "bflb_core.h"
@@ -38,14 +39,33 @@
 #include "bl616cl_sec_aes.h"
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+/* XTS multiplies the tweak by alpha in GF(2^128) with this polynomial. */
+
+#define BL616CL_AES_XTS_ALPHA 0x87
+
+/****************************************************************************
  * Private Types
  ****************************************************************************/
 
 struct bl616cl_aes_s
 {
-  struct bflb_aes_link_s desc; /* Key, mode and chaining value; the engine
-                                * fields are set for each operation */
-  int error;                   /* Sticky error after an engine failure */
+  struct bflb_aes_link_s desc;  /* Key (key 1 for XTS), engine mode and
+                                 * chaining value; the engine fields are
+                                 * set for each operation */
+  enum bl616cl_aes_mode_e mode; /* Block cipher mode */
+  int error;                    /* Sticky error after an engine failure */
+
+  /* XTS only */
+
+  uint32_t key2[8];             /* Key 2, encrypts the IV into the tweak */
+  bool restart;                 /* Compute the tweak from the IV first */
+
+  /* Tweak of the next block */
+
+  uint8_t tweak[BL616CL_AES_BLOCK_SIZE];
 };
 
 /****************************************************************************
@@ -61,19 +81,22 @@ static struct bflb_device_s *g_bl616cl_aes;
 
 static struct bflb_aes_link_s g_bl616cl_aes_desc BL616CL_SEC_ENG_NOCACHE;
 
+/* One block for computing the XTS tweak. */
+
+static uint8_t g_bl616cl_aes_block[BL616CL_AES_BLOCK_SIZE]
+  BL616CL_SEC_ENG_NOCACHE;
+
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: bl616cl_sec_aes_run
+ * Name: bl616cl_sec_aes_update
  *
  * Description:
- *   Run the working descriptor on one chunk. Called by
- *   bl616cl_sec_eng_transfer() with the AES engine locked.
+ *   Run the working descriptor once.
  *
  * Input Parameters:
- *   arg - Unused.
  *   src - Input in engine-visible memory.
  *   dst - Output in engine-visible memory.
  *   len - Number of bytes, a multiple of the block size.
@@ -84,14 +107,266 @@ static struct bflb_aes_link_s g_bl616cl_aes_desc BL616CL_SEC_ENG_NOCACHE;
  *
  ****************************************************************************/
 
-static int bl616cl_sec_aes_run(FAR void *arg, FAR const uint8_t *src,
-                               FAR uint8_t *dst, size_t len)
+static int bl616cl_sec_aes_update(FAR const uint8_t *src, FAR uint8_t *dst,
+                                  size_t len)
 {
-  UNUSED(arg);
-
   return bflb_aes_link_update(g_bl616cl_aes,
                               (uint32_t)(uintptr_t)&g_bl616cl_aes_desc,
                               src, dst, len);
+}
+
+/****************************************************************************
+ * Name: bl616cl_sec_aes_ctr_carry
+ *
+ * Description:
+ *   Carry into the upper 96 bits of the working descriptor's counter
+ *   block. The engine increments only the low 32 bits and wraps them
+ *   without a carry.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+static void bl616cl_sec_aes_ctr_carry(void)
+{
+  uint32_t words[3];
+  uint8_t *ctr = (uint8_t *)words;
+  int i;
+
+  words[0] = g_bl616cl_aes_desc.aes_iv0;
+  words[1] = g_bl616cl_aes_desc.aes_iv1;
+  words[2] = g_bl616cl_aes_desc.aes_iv2;
+
+  for (i = sizeof(words) - 1; i >= 0; i--)
+    {
+      if (++ctr[i] != 0)
+        {
+          break;
+        }
+    }
+
+  g_bl616cl_aes_desc.aes_iv0 = words[0];
+  g_bl616cl_aes_desc.aes_iv1 = words[1];
+  g_bl616cl_aes_desc.aes_iv2 = words[2];
+}
+
+/****************************************************************************
+ * Name: bl616cl_sec_aes_ctr
+ *
+ * Description:
+ *   Run CTR blocks, split where the low 32 bits of the counter wrap.
+ *
+ * Input Parameters:
+ *   src - Input in engine-visible memory.
+ *   dst - Output in engine-visible memory.
+ *   len - Number of bytes, a multiple of the block size.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+static int bl616cl_sec_aes_ctr(FAR const uint8_t *src, FAR uint8_t *dst,
+                               size_t len)
+{
+  uint64_t room;
+  size_t seg;
+  int ret;
+
+  while (len > 0)
+    {
+      /* The low 32 bits are bytes 12..15 of the counter, big-endian. */
+
+      room = (UINT64_C(1) << 32) -
+             __builtin_bswap32(g_bl616cl_aes_desc.aes_iv3);
+      seg = len / BL616CL_AES_BLOCK_SIZE < room ?
+            len : (size_t)room * BL616CL_AES_BLOCK_SIZE;
+
+      ret = bl616cl_sec_aes_update(src, dst, seg);
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      if (seg / BL616CL_AES_BLOCK_SIZE == room)
+        {
+          bl616cl_sec_aes_ctr_carry();
+        }
+
+      src += seg;
+      dst += seg;
+      len -= seg;
+    }
+
+  return OK;
+}
+
+/****************************************************************************
+ * Name: bl616cl_sec_aes_xts_mask
+ *
+ * Description:
+ *   XOR each block with its XTS tweak, advancing the tweak by one block
+ *   each time (multiplication by alpha, as in the crypto framework).
+ *
+ * Input Parameters:
+ *   buf - Blocks to mask in place.
+ *   len - Number of bytes, a multiple of the block size.
+ *   tweak - Tweak of the first block; advanced past the last one.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+static void bl616cl_sec_aes_xts_mask(FAR uint8_t *buf, size_t len,
+                                     FAR uint8_t *tweak)
+{
+  unsigned int carry;
+  unsigned int next;
+  size_t off;
+  int i;
+
+  for (off = 0; off < len; off += BL616CL_AES_BLOCK_SIZE)
+    {
+      carry = 0;
+      for (i = 0; i < BL616CL_AES_BLOCK_SIZE; i++)
+        {
+          buf[off + i] ^= tweak[i];
+          next = tweak[i] >> 7;
+          tweak[i] = (uint8_t)((tweak[i] << 1) | carry);
+          carry = next;
+        }
+
+      tweak[0] ^= BL616CL_AES_XTS_ALPHA & -carry;
+    }
+}
+
+/****************************************************************************
+ * Name: bl616cl_sec_aes_xts
+ *
+ * Description:
+ *   Run XTS blocks: mask with the tweak, run AES-ECB with key 1, mask
+ *   again.
+ *
+ * Input Parameters:
+ *   aes - The context; its tweak is advanced.
+ *   buf - Blocks in engine-visible memory, processed in place.
+ *   len - Number of bytes, a multiple of the block size.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+static int bl616cl_sec_aes_xts(FAR struct bl616cl_aes_s *aes,
+                               FAR uint8_t *buf, size_t len)
+{
+  uint8_t tweak[BL616CL_AES_BLOCK_SIZE];
+  int ret;
+
+  memcpy(tweak, aes->tweak, sizeof(tweak));
+  bl616cl_sec_aes_xts_mask(buf, len, tweak);
+  explicit_bzero(tweak, sizeof(tweak));
+
+  ret = bl616cl_sec_aes_update(buf, buf, len);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  bl616cl_sec_aes_xts_mask(buf, len, aes->tweak);
+  return OK;
+}
+
+/****************************************************************************
+ * Name: bl616cl_sec_aes_xts_start
+ *
+ * Description:
+ *   Compute the first tweak by encrypting the IV with key 2.
+ *
+ * Input Parameters:
+ *   aes - The context; the IV is in its descriptor.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+static int bl616cl_sec_aes_xts_start(FAR struct bl616cl_aes_s *aes)
+{
+  uint32_t iv[4];
+  int ret;
+
+  g_bl616cl_aes_desc = aes->desc;
+  g_bl616cl_aes_desc.aes_dec_en = 0;
+  g_bl616cl_aes_desc.aes_key0 = aes->key2[0];
+  g_bl616cl_aes_desc.aes_key1 = aes->key2[1];
+  g_bl616cl_aes_desc.aes_key2 = aes->key2[2];
+  g_bl616cl_aes_desc.aes_key3 = aes->key2[3];
+  g_bl616cl_aes_desc.aes_key4 = aes->key2[4];
+  g_bl616cl_aes_desc.aes_key5 = aes->key2[5];
+  g_bl616cl_aes_desc.aes_key6 = aes->key2[6];
+  g_bl616cl_aes_desc.aes_key7 = aes->key2[7];
+
+  iv[0] = aes->desc.aes_iv0;
+  iv[1] = aes->desc.aes_iv1;
+  iv[2] = aes->desc.aes_iv2;
+  iv[3] = aes->desc.aes_iv3;
+  memcpy(g_bl616cl_aes_block, iv, sizeof(iv));
+
+  ret = bl616cl_sec_aes_update(g_bl616cl_aes_block, g_bl616cl_aes_block,
+                               BL616CL_AES_BLOCK_SIZE);
+  if (ret >= 0)
+    {
+      memcpy(aes->tweak, g_bl616cl_aes_block, sizeof(aes->tweak));
+      aes->restart = false;
+    }
+
+  explicit_bzero(g_bl616cl_aes_block, sizeof(g_bl616cl_aes_block));
+  return ret;
+}
+
+/****************************************************************************
+ * Name: bl616cl_sec_aes_run
+ *
+ * Description:
+ *   Process one chunk in the bounce buffer. Called by
+ *   bl616cl_sec_eng_transfer() with the AES engine locked. A partial last
+ *   CTR block is run as a whole block; only len bytes are copied out.
+ *
+ * Input Parameters:
+ *   arg - The context.
+ *   src - Input in the bounce buffer.
+ *   dst - Output in the bounce buffer (same as src).
+ *   len - Number of bytes.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+static int bl616cl_sec_aes_run(FAR void *arg, FAR const uint8_t *src,
+                               FAR uint8_t *dst, size_t len)
+{
+  FAR struct bl616cl_aes_s *aes = arg;
+
+  len = ALIGN_UP(len, BL616CL_AES_BLOCK_SIZE);
+
+  switch (aes->mode)
+    {
+      case BL616CL_AES_CTR:
+        return bl616cl_sec_aes_ctr(src, dst, len);
+
+      case BL616CL_AES_XTS:
+        return bl616cl_sec_aes_xts(aes, dst, len);
+
+      default:
+        return bl616cl_sec_aes_update(src, dst, len);
+    }
 }
 
 /****************************************************************************
@@ -130,13 +405,14 @@ int bl616cl_sec_aes_initialize(void)
  * Name: bl616cl_sec_aes_new
  *
  * Description:
- *   Allocate an AES context. The chaining value starts at zero.
+ *   Allocate an AES context. The chaining state starts at zero.
  *
  * Input Parameters:
  *   aes - Receives the new context.
  *   mode - Block cipher mode.
- *   key - Key bytes; only read during this call.
- *   keylen - Key length in bytes: 16, 24 or 32.
+ *   key - Key bytes; only read during this call. For XTS, key 1 followed
+ *     by key 2.
+ *   keylen - Key length in bytes: 16, 24 or 32; for XTS 32 or 64.
  *
  * Returned Value:
  *   Zero (OK) on success; -EINVAL for an unsupported key length; -ENOMEM
@@ -151,6 +427,16 @@ int bl616cl_sec_aes_new(FAR struct bl616cl_aes_s **aes,
   FAR struct bl616cl_aes_s *ctx;
   uint32_t words[8];
   uint8_t keysize;
+
+  if (mode == BL616CL_AES_XTS)
+    {
+      if (keylen != 32 && keylen != 64)
+        {
+          return -EINVAL;
+        }
+
+      keylen /= 2;
+    }
 
   switch (keylen)
     {
@@ -170,21 +456,35 @@ int bl616cl_sec_aes_new(FAR struct bl616cl_aes_s **aes,
         return -EINVAL;
     }
 
-  DEBUGASSERT(mode == BL616CL_AES_CBC);
-
   ctx = kmm_zalloc(sizeof(*ctx));
   if (ctx == NULL)
     {
       return -ENOMEM;
     }
 
+  ctx->mode = mode;
+  ctx->desc.aes_key = keysize;
+  switch (mode)
+    {
+      case BL616CL_AES_CBC:
+        ctx->desc.aes_mode = AES_MODE_CBC;
+        break;
+
+      case BL616CL_AES_CTR:
+        ctx->desc.aes_mode = AES_MODE_CTR;
+        break;
+
+      case BL616CL_AES_XTS:
+        ctx->desc.aes_mode = AES_MODE_ECB;
+        ctx->restart = true;
+        memcpy(ctx->key2, key + keylen, keylen);
+        break;
+    }
+
   /* The descriptor holds the key bytes in memory order. */
 
   memset(words, 0, sizeof(words));
   memcpy(words, key, keylen);
-
-  ctx->desc.aes_key = keysize;
-  ctx->desc.aes_mode = AES_MODE_CBC;
   ctx->desc.aes_key0 = words[0];
   ctx->desc.aes_key1 = words[1];
   ctx->desc.aes_key2 = words[2];
@@ -226,7 +526,7 @@ void bl616cl_sec_aes_free(FAR struct bl616cl_aes_s *aes)
  * Name: bl616cl_sec_aes_setiv
  *
  * Description:
- *   Set the chaining value (CBC IV) for the next operation.
+ *   Restart the chaining state from an IV at the next operation.
  *
  * Input Parameters:
  *   aes - The context.
@@ -247,6 +547,7 @@ void bl616cl_sec_aes_setiv(FAR struct bl616cl_aes_s *aes,
   aes->desc.aes_iv1 = words[1];
   aes->desc.aes_iv2 = words[2];
   aes->desc.aes_iv3 = words[3];
+  aes->restart = aes->mode == BL616CL_AES_XTS;
 }
 
 /****************************************************************************
@@ -254,16 +555,20 @@ void bl616cl_sec_aes_setiv(FAR struct bl616cl_aes_s *aes,
  *
  * Description:
  *   Encrypt or decrypt with the SEC AES engine in link mode. The operation
- *   continues from the chaining value left by the previous one, so a
- *   message can be processed in several calls. After an engine failure
- *   the context is unusable and every later call returns the same error.
+ *   continues from the chaining state left by the previous one, so a
+ *   message can be processed in several calls. The CTR counter carries
+ *   over all 128 bits. XTS runs the engine in ECB mode and applies the
+ *   tweak on the CPU, because the engine cannot resume a data unit. After
+ *   an engine failure the context is unusable and every later call returns
+ *   the same error.
  *
  * Input Parameters:
  *   aes - The context.
  *   encrypt - True to encrypt, false to decrypt.
  *   src - Input data.
  *   dst - Output buffer of len bytes; may equal src.
- *   len - Number of bytes, a multiple of BL616CL_AES_BLOCK_SIZE.
+ *   len - Number of bytes, a multiple of BL616CL_AES_BLOCK_SIZE except
+ *     for CTR, where a partial last block still uses a whole counter.
  *
  * Returned Value:
  *   Zero (OK) on success; -EINVAL if len is not a multiple of the block
@@ -283,7 +588,7 @@ int bl616cl_sec_aes_crypt(FAR struct bl616cl_aes_s *aes, bool encrypt,
       return aes->error;
     }
 
-  if (len % BL616CL_AES_BLOCK_SIZE != 0)
+  if (aes->mode != BL616CL_AES_CTR && len % BL616CL_AES_BLOCK_SIZE != 0)
     {
       return -EINVAL;
     }
@@ -299,9 +604,6 @@ int bl616cl_sec_aes_crypt(FAR struct bl616cl_aes_s *aes, bool encrypt,
       return ret;
     }
 
-  aes->desc.aes_dec_en = !encrypt;
-  g_bl616cl_aes_desc = aes->desc;
-
   /* Set EN and LINK_MODE again on every use: another user may have left
    * the engine in non-link mode, and a link operation would then write to
    * a stale buffer.
@@ -309,11 +611,25 @@ int bl616cl_sec_aes_crypt(FAR struct bl616cl_aes_s *aes, bool encrypt,
 
   bflb_aes_link_init(g_bl616cl_aes);
 
-  ret = bl616cl_sec_eng_transfer(BL616CL_SEC_ENGINE_AES, src, dst, len,
-                                 bl616cl_sec_aes_run, NULL);
+  if (aes->restart)
+    {
+      ret = bl616cl_sec_aes_xts_start(aes);
+    }
+
+  if (ret >= 0)
+    {
+      /* CTR decryption is the same keystream as encryption. */
+
+      aes->desc.aes_dec_en = !encrypt && aes->mode != BL616CL_AES_CTR;
+      g_bl616cl_aes_desc = aes->desc;
+
+      ret = bl616cl_sec_eng_transfer(BL616CL_SEC_ENGINE_AES, src, dst, len,
+                                     bl616cl_sec_aes_run, aes);
+    }
+
   if (ret < 0)
     {
-      /* Stop the engine. The chaining value is unknown now, so the
+      /* Stop the engine. The chaining state is unknown now, so the
        * session cannot continue.
        */
 

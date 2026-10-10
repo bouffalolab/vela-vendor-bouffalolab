@@ -190,8 +190,9 @@ config BL616CL_CRYPTO_AES
 	bool "AES"
 	default y
 	---help---
-		Register AES-CBC with 128, 192 and 256-bit keys under
-		CRYPTO_AES_CBC, CRYPTO_AES_192_CBC and CRYPTO_AES_256_CBC.
+		Register AES-CBC (CRYPTO_AES_CBC, CRYPTO_AES_192_CBC and
+		CRYPTO_AES_256_CBC, each with 128, 192 or 256-bit keys), AES-CTR
+		with a 128-bit counter, and AES-XTS with 128 or 256-bit keys.
 
 config BL616CL_SEC_ENG_BOUNCE_SIZE
 	int "Bounce buffer size per engine"

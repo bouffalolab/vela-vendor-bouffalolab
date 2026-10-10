@@ -1,0 +1,27 @@
+config BL_MCU_PERIPHERAL_TESTS_CRYPTO
+	bool "MCU peripheral crypto tests"
+	default n
+	depends on BL616CL_CRYPTO_AES
+	---help---
+		Enable the BL616CL SEC_ENG crypto case runner. It drives the AES
+		modes through /dev/crypto and checks the results against reference
+		checksums from crypto_vectors.py: all three CBC ids, the 128-bit
+		CTR counter carry, XTS data units, streaming with COP_FLAG_UPDATE,
+		interleaved sessions, in-place and unaligned buffers, zero and
+		partial-block lengths, and messages larger than the bounce buffer.
+
+if BL_MCU_PERIPHERAL_TESTS_CRYPTO
+
+config BL_MCU_PERIPHERAL_TESTS_CRYPTO_PROGNAME
+	string "Program name"
+	default "mcu_crypto_test"
+
+config BL_MCU_PERIPHERAL_TESTS_CRYPTO_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_CRYPTO_STACKSIZE
+	int "Stack size"
+	default 4096
+
+endif

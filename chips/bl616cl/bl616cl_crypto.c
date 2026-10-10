@@ -96,6 +96,35 @@ static void bl616cl_crypto_release(FAR struct bl616cl_crypto_session_s *ses)
 
 #ifdef CONFIG_BL616CL_CRYPTO_AES
 /****************************************************************************
+ * Name: bl616cl_crypto_aes_mode
+ *
+ * Description:
+ *   Map a CRYPTO_AES_* algorithm to the AES mode.
+ *
+ * Input Parameters:
+ *   alg - A supported AES algorithm.
+ *
+ * Returned Value:
+ *   The AES mode.
+ *
+ ****************************************************************************/
+
+static enum bl616cl_aes_mode_e bl616cl_crypto_aes_mode(int alg)
+{
+  switch (alg)
+    {
+      case CRYPTO_AES_CTR:
+        return BL616CL_AES_CTR;
+
+      case CRYPTO_AES_XTS:
+        return BL616CL_AES_XTS;
+
+      default:
+        return BL616CL_AES_CBC;
+    }
+}
+
+/****************************************************************************
  * Name: bl616cl_crypto_cipher
  *
  * Description:
@@ -216,13 +245,16 @@ static int bl616cl_crypto_newsession(FAR uint32_t *sid,
           case CRYPTO_AES_CBC:
           case CRYPTO_AES_192_CBC:
           case CRYPTO_AES_256_CBC:
+          case CRYPTO_AES_CTR:
+          case CRYPTO_AES_XTS:
             if (ses->cipher != 0 || cri->cri_klen % 8 != 0)
               {
                 ret = -EINVAL;
                 break;
               }
 
-            ret = bl616cl_sec_aes_new(&ses->aes, BL616CL_AES_CBC,
+            ret = bl616cl_sec_aes_new(&ses->aes,
+                                      bl616cl_crypto_aes_mode(cri->cri_alg),
                                       (FAR const uint8_t *)cri->cri_key,
                                       cri->cri_klen / 8);
             ses->cipher = cri->cri_alg;
@@ -334,6 +366,8 @@ void hwcr_init(void)
       algs[CRYPTO_AES_CBC] = CRYPTO_ALG_FLAG_SUPPORTED;
       algs[CRYPTO_AES_192_CBC] = CRYPTO_ALG_FLAG_SUPPORTED;
       algs[CRYPTO_AES_256_CBC] = CRYPTO_ALG_FLAG_SUPPORTED;
+      algs[CRYPTO_AES_CTR] = CRYPTO_ALG_FLAG_SUPPORTED;
+      algs[CRYPTO_AES_XTS] = CRYPTO_ALG_FLAG_SUPPORTED;
     }
 #endif
 
