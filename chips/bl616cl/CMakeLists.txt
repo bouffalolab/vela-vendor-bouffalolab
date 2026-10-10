@@ -51,6 +51,10 @@ if(CONFIG_BL616CL_DMA0)
   target_link_options(nuttx PRIVATE -Wl,-u,riscv_dma_initialize)
 endif()
 
+if(CONFIG_BL616CL_SEC_ENG)
+  list(APPEND SRCS bl616cl_sec_eng.c)
+endif()
+
 if(CONFIG_BL616CL_TRNG)
   list(APPEND SRCS bl616cl_rng.c)
 endif()

@@ -32,12 +32,11 @@
 
 #include <nuttx/drivers/drivers.h>
 #include <nuttx/fs/fs.h>
-#include <nuttx/mutex.h>
 
 #include "bl616cl_lhal.h"
-#include "bflb_clock.h"
 #include "bflb_core.h"
 #include "hardware/sec_eng_reg.h"
+#include "bl616cl_sec_eng.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -59,7 +58,6 @@ static int bl616cl_rng_poll(struct file *filep, struct pollfd *fds,
  * Private Data
  ****************************************************************************/
 
-static mutex_t g_bl616cl_rng_lock = NXMUTEX_INITIALIZER;
 static struct bflb_device_s *g_bl616cl_trng;
 
 static const struct file_operations g_bl616cl_rng_fops =
@@ -272,9 +270,9 @@ fail:
  *
  * Description:
  *   Implement the file_operations read method of /dev/random and
- *   /dev/urandom. Serialized by a mutex, it fills the buffer with 32-byte
- *   TRNG blocks and wipes its stack copy afterward. A short read is
- *   returned if a later block fails.
+ *   /dev/urandom. Serialized by the SEC_ENG TRNG lock, it fills the buffer
+ *   with 32-byte TRNG blocks and wipes its stack copy afterward. A short
+ *   read is returned if a later block fails.
  *
  * Input Parameters:
  *   filep - File structure instance (unused).
@@ -284,7 +282,7 @@ fail:
  * Returned Value:
  *   The number of bytes read; 0 if buflen is zero; -ENODEV if the TRNG is
  *   not initialized; a negated errno value if no data could be generated
- *   (mutex error, -ETIMEDOUT or -EIO).
+ *   (lock error, -ETIMEDOUT or -EIO).
  *
  ****************************************************************************/
 
@@ -307,7 +305,7 @@ static ssize_t bl616cl_rng_read(struct file *filep, char *buffer,
       return -ENODEV;
     }
 
-  ret = nxmutex_lock(&g_bl616cl_rng_lock);
+  ret = bl616cl_sec_eng_lock(BL616CL_SEC_ENGINE_TRNG);
   if (ret < 0)
     {
       return ret;
@@ -333,7 +331,7 @@ static ssize_t bl616cl_rng_read(struct file *filep, char *buffer,
       generated += copylen;
     }
 
-  nxmutex_unlock(&g_bl616cl_rng_lock);
+  bl616cl_sec_eng_unlock(BL616CL_SEC_ENGINE_TRNG);
   memset(block, 0, sizeof(block));
 
   return generated > 0 ? (ssize_t)generated : ret;
@@ -391,7 +389,7 @@ static int bl616cl_rng_initialize(void)
       return OK;
     }
 
-  PERIPHERAL_CLOCK_SEC_ENABLE();
+  bl616cl_sec_eng_initialize();
   g_bl616cl_trng = bflb_device_get_by_name(BFLB_NAME_SEC_TRNG);
   if (g_bl616cl_trng == NULL)
     {

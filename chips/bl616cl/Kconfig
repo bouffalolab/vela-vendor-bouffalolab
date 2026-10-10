@@ -166,10 +166,18 @@ config BL616CL_WDT_CAPTURE
 	---help---
 		Enable watchdog interrupt capture mode and the WDT IRQ handler.
 
+config BL616CL_SEC_ENG
+	bool
+	default n
+	---help---
+		Shared SEC_ENG support: the SEC peripheral clock and the engine
+		locks. Selected by the drivers that use the security engine.
+
 config BL616CL_TRNG
 	bool "True random number generator (TRNG)"
 	default n
 	select ARCH_HAVE_RNG
+	select BL616CL_SEC_ENG
 	---help---
 		Enable the BL616CL security engine TRNG. DEV_RANDOM controls the
 		standard /dev/random device. DEV_URANDOM remains independent and
