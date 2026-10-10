@@ -52,6 +52,23 @@
 #define CRYPTO_XTS_BULK_FNV UINT32_C(0x412a210c)
 #define CRYPTO_XTS_128_FNV  UINT32_C(0x85abb628)
 
+#define CRYPTO_SHA1_BULK_FNV    UINT32_C(0xd0ba7a07)
+#define CRYPTO_SHA1_EMPTY_FNV   UINT32_C(0xbc65db8b)
+#define CRYPTO_SHA224_BULK_FNV  UINT32_C(0xdf6d72cf)
+#define CRYPTO_SHA224_EMPTY_FNV UINT32_C(0x4c2ef116)
+#define CRYPTO_SHA256_BULK_FNV  UINT32_C(0x08310087)
+#define CRYPTO_SHA256_EMPTY_FNV UINT32_C(0xff3c98e2)
+#define CRYPTO_SHA384_BULK_FNV  UINT32_C(0x5f551922)
+#define CRYPTO_SHA384_EMPTY_FNV UINT32_C(0xbcd2d1d3)
+#define CRYPTO_SHA512_BULK_FNV  UINT32_C(0x6b94fc4a)
+#define CRYPTO_SHA512_EMPTY_FNV UINT32_C(0xe64d8497)
+
+/* Hashed message length; a multiple of neither SHA block size. */
+
+#define CRYPTO_HASH_LEN    3000
+#define CRYPTO_MAX_DIGEST  64
+#define CRYPTO_NHASH_SESSIONS 2
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
@@ -70,6 +87,17 @@ struct crypto_vector_s
   size_t len;
   uint32_t fnv;                     /* Expected ciphertext checksum */
   size_t pieces[CRYPTO_MAX_PIECES]; /* Streaming split, ends with 0 */
+};
+
+/* A hash of CRYPTO_HASH_LEN bytes of crypto_fill(CRYPTO_DATA_SEED). */
+
+struct crypto_hash_s
+{
+  const char *name;
+  uint32_t mac;
+  size_t digestlen;
+  uint32_t fnv;                     /* Expected digest checksum */
+  uint32_t emptyfnv;                /* Digest checksum of no data */
 };
 
 /* A NIST SP 800-38A F.2 CBC encryption vector. */
@@ -254,13 +282,68 @@ static const struct crypto_kat_s g_kats[] =
   }
 };
 
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+static const struct crypto_hash_s g_hashes[] =
+{
+  {
+    "sha1", CRYPTO_SHA1, 20, CRYPTO_SHA1_BULK_FNV, CRYPTO_SHA1_EMPTY_FNV
+  },
+  {
+    "sha224", CRYPTO_SHA2_224, 28, CRYPTO_SHA224_BULK_FNV,
+    CRYPTO_SHA224_EMPTY_FNV
+  },
+  {
+    "sha256", CRYPTO_SHA2_256, 32, CRYPTO_SHA256_BULK_FNV,
+    CRYPTO_SHA256_EMPTY_FNV
+  },
+  {
+    "sha384", CRYPTO_SHA2_384, 48, CRYPTO_SHA384_BULK_FNV,
+    CRYPTO_SHA384_EMPTY_FNV
+  },
+  {
+    "sha512", CRYPTO_SHA2_512, 64, CRYPTO_SHA512_BULK_FNV,
+    CRYPTO_SHA512_EMPTY_FNV
+  }
+};
+
+/* After the 1-byte piece, the next piece completes a SHA-256 block from 63
+ * bytes and the engine reads the following blocks from an odd address.
+ * The last piece crosses the default 1024-byte bounce buffer.
+ */
+
+static const size_t g_hash_pieces[CRYPTO_MAX_PIECES] =
+{
+  1, 200, 1000, 1799
+};
+
+/* FIPS 180-2 "abc" digests of the truncated SHA-2 variants. */
+
+static const uint8_t g_sha224_abc[28] =
+{
+  0x23, 0x09, 0x7d, 0x22, 0x34, 0x05, 0xd8, 0x22,
+  0x86, 0x42, 0xa4, 0x77, 0xbd, 0xa2, 0x55, 0xb3,
+  0x2a, 0xad, 0xbc, 0xe4, 0xbd, 0xa0, 0xb3, 0xf7,
+  0xe3, 0x6c, 0x9d, 0xa7
+};
+
+static const uint8_t g_sha384_abc[48] =
+{
+  0xcb, 0x00, 0x75, 0x3f, 0x45, 0xa3, 0x5e, 0x8b,
+  0xb5, 0xa0, 0x3d, 0x69, 0x9a, 0xc6, 0x50, 0x07,
+  0x27, 0x2c, 0x32, 0xab, 0x0e, 0xde, 0xd1, 0x63,
+  0x1a, 0x8b, 0x60, 0x5a, 0x43, 0xff, 0x5b, 0xed,
+  0x80, 0x86, 0x07, 0x2b, 0xa1, 0xe7, 0xcc, 0x23,
+  0x58, 0xba, 0xec, 0xa1, 0x34, 0xc8, 0x25, 0xa7
+};
+#endif
+
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
 
 static void crypto_usage(const char *progname)
 {
-  printf("Usage: %s <all|cbc|ctr|xts|session|edge>\n", progname);
+  printf("Usage: %s <all|cbc|ctr|xts|sha|session|edge>\n", progname);
 }
 
 static void crypto_fill(uint8_t *buffer, size_t len, uint8_t seed)
@@ -612,9 +695,216 @@ static int crypto_test_xts(int cfd, uint8_t *buf[])
   return 0;
 }
 
-/* Stream three sessions at once, one piece of each in turn, so that every
- * call continues from a chaining state saved while the engine served the
- * other sessions.
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+static int crypto_hash_session(int cfd, uint32_t mac, uint32_t *ses)
+{
+  struct session_op sop;
+
+  memset(&sop, 0, sizeof(sop));
+  sop.mac = mac;
+
+  if (ioctl(cfd, CIOCGSESSION, &sop) < 0)
+    {
+      return -errno;
+    }
+
+  *ses = sop.ses;
+  return 0;
+}
+
+/* Add data with COP_FLAG_UPDATE, or finish into mac without it. */
+
+static int crypto_hash_op(int cfd, uint32_t ses, uint16_t flags,
+                          const uint8_t *src, size_t len, uint8_t *mac,
+                          size_t olen)
+{
+  struct crypt_op cop;
+
+  memset(&cop, 0, sizeof(cop));
+  cop.ses = ses;
+  cop.op = COP_ENCRYPT;
+  cop.flags = flags;
+  cop.len = len;
+  cop.olen = olen;
+  cop.src = (caddr_t)src;
+  cop.mac = (caddr_t)mac;
+
+  return ioctl(cfd, CIOCCRYPT, &cop) < 0 ? -errno : 0;
+}
+
+/* Check a digest: the call succeeded, exactly digestlen bytes were
+ * written, and the digest has the expected checksum.
+ */
+
+static int crypto_expect_digest(const struct crypto_hash_s *hash,
+                                const char *step, int ret,
+                                const uint8_t *digest, uint32_t fnv)
+{
+  uint32_t checksum;
+
+  if (ret < 0)
+    {
+      printf("CRYPTO_TEST %s FAIL step=%s ret=%d\n", hash->name, step, ret);
+      return -1;
+    }
+
+  if (!crypto_guard_ok(digest, hash->digestlen))
+    {
+      printf("CRYPTO_TEST %s FAIL step=%s overrun\n", hash->name, step);
+      return -1;
+    }
+
+  checksum = crypto_checksum(digest, hash->digestlen);
+  if (checksum != fnv)
+    {
+      printf("CRYPTO_TEST %s FAIL step=%s checksum=%08" PRIx32
+             " expected=%08" PRIx32 "\n",
+             hash->name, step, checksum, fnv);
+      return -1;
+    }
+
+  return 0;
+}
+
+/* Hash no data, the message in one call, then in pieces, on one session.
+ * Each finish starts a new message on the session. The digest length
+ * passed as olen is too short and must be ignored.
+ */
+
+static int crypto_check_hash(int cfd, const struct crypto_hash_s *hash,
+                             const uint8_t *msg)
+{
+  uint8_t digest[CRYPTO_MAX_DIGEST + CRYPTO_GUARD_SIZE];
+  size_t off = 0;
+  uint32_t ses;
+  int ret;
+  int i;
+
+  ret = crypto_hash_session(cfd, hash->mac, &ses);
+  if (ret < 0)
+    {
+      printf("CRYPTO_TEST %s FAIL session ret=%d\n", hash->name, ret);
+      return -1;
+    }
+
+  crypto_guard(digest, hash->digestlen);
+  ret = crypto_hash_op(cfd, ses, 0, NULL, 0, digest, 1);
+  if (crypto_expect_digest(hash, "empty", ret, digest,
+                           hash->emptyfnv) < 0)
+    {
+      goto fail;
+    }
+
+  crypto_guard(digest, hash->digestlen);
+  ret = crypto_hash_op(cfd, ses, COP_FLAG_UPDATE, msg, CRYPTO_HASH_LEN,
+                       NULL, 0);
+  if (ret == 0)
+    {
+      ret = crypto_hash_op(cfd, ses, 0, NULL, 0, digest, 1);
+    }
+
+  if (crypto_expect_digest(hash, "one-call", ret, digest, hash->fnv) < 0)
+    {
+      goto fail;
+    }
+
+  crypto_guard(digest, hash->digestlen);
+  for (i = 0; i < CRYPTO_MAX_PIECES && ret == 0; i++)
+    {
+      ret = crypto_hash_op(cfd, ses, COP_FLAG_UPDATE, msg + off,
+                           g_hash_pieces[i], NULL, 0);
+      off += g_hash_pieces[i];
+    }
+
+  if (ret == 0)
+    {
+      ret = crypto_hash_op(cfd, ses, 0, NULL, 0, digest, 1);
+    }
+
+  if (crypto_expect_digest(hash, "split", ret, digest, hash->fnv) < 0)
+    {
+      goto fail;
+    }
+
+  crypto_session_free(cfd, ses);
+  printf("CRYPTO_TEST hash=%s PASS digest=%zu checksum=%08" PRIx32 "\n",
+         hash->name, hash->digestlen, hash->fnv);
+  return 0;
+
+fail:
+  crypto_session_free(cfd, ses);
+  return -1;
+}
+
+static int crypto_check_hash_kat(int cfd, uint32_t mac,
+                                 const uint8_t *expect, size_t len)
+{
+  uint8_t digest[CRYPTO_MAX_DIGEST + CRYPTO_GUARD_SIZE];
+  uint32_t ses;
+  int ret;
+
+  ret = crypto_hash_session(cfd, mac, &ses);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  crypto_guard(digest, len);
+  ret = crypto_hash_op(cfd, ses, COP_FLAG_UPDATE, (const uint8_t *)"abc",
+                       3, NULL, 0);
+  if (ret == 0)
+    {
+      ret = crypto_hash_op(cfd, ses, 0, NULL, 0, digest, CRYPTO_MAX_DIGEST);
+    }
+
+  crypto_session_free(cfd, ses);
+  if (ret == 0 && (memcmp(digest, expect, len) != 0 ||
+                   !crypto_guard_ok(digest, len)))
+    {
+      ret = -EIO;
+    }
+
+  return ret;
+}
+
+static int crypto_test_sha(int cfd, uint8_t *buf[])
+{
+  size_t i;
+  int ret;
+
+  ret = crypto_check_hash_kat(cfd, CRYPTO_SHA2_224, g_sha224_abc,
+                              sizeof(g_sha224_abc));
+  if (ret == 0)
+    {
+      ret = crypto_check_hash_kat(cfd, CRYPTO_SHA2_384, g_sha384_abc,
+                                  sizeof(g_sha384_abc));
+    }
+
+  if (ret < 0)
+    {
+      printf("CRYPTO_TEST sha FAIL kat ret=%d\n", ret);
+      return -1;
+    }
+
+  printf("CRYPTO_TEST kat=sha224,sha384 PASS\n");
+
+  crypto_fill(buf[0], CRYPTO_HASH_LEN, CRYPTO_DATA_SEED);
+  for (i = 0; i < sizeof(g_hashes) / sizeof(g_hashes[0]); i++)
+    {
+      if (crypto_check_hash(cfd, &g_hashes[i], buf[0]) < 0)
+        {
+          return -1;
+        }
+    }
+
+  printf("CRYPTO_TEST RESULT case=sha PASS\n");
+  return 0;
+}
+#endif
+
+/* Stream the cipher and hash sessions at once, one piece of each in turn,
+ * so that every call continues from a chaining or hash state saved while
+ * the engines served the other sessions.
  */
 
 static int crypto_test_session(int cfd, uint8_t *buf[])
@@ -623,6 +913,18 @@ static int crypto_test_session(int cfd, uint8_t *buf[])
   {
     &g_cbc_bulk, &g_ctr_bulk, &g_xts_bulk
   };
+
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+  const struct crypto_hash_s *hashes[CRYPTO_NHASH_SESSIONS] =
+  {
+    &g_hashes[2], &g_hashes[3]
+  };
+
+  uint8_t digest[CRYPTO_MAX_DIGEST + CRYPTO_GUARD_SIZE];
+  uint32_t hses[CRYPTO_NHASH_SESSIONS];
+  size_t hoff = 0;
+  int hopened = 0;
+#endif
 
   uint8_t key[CRYPTO_MAX_KEY];
   uint32_t ses[CRYPTO_NSESSIONS];
@@ -633,6 +935,21 @@ static int crypto_test_session(int cfd, uint8_t *buf[])
   int i;
 
   crypto_fill(buf[0], CRYPTO_MAX_LEN, CRYPTO_DATA_SEED);
+
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+  for (i = 0; i < CRYPTO_NHASH_SESSIONS; i++)
+    {
+      ret = crypto_hash_session(cfd, hashes[i]->mac, &hses[i]);
+      if (ret < 0)
+        {
+          printf("CRYPTO_TEST session FAIL open=%s ret=%d\n",
+                 hashes[i]->name, ret);
+          goto out;
+        }
+
+      hopened++;
+    }
+#endif
 
   for (i = 0; i < CRYPTO_NSESSIONS; i++)
     {
@@ -675,6 +992,22 @@ static int crypto_test_session(int cfd, uint8_t *buf[])
 
           off[i] += len;
         }
+
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+      for (i = 0; i < CRYPTO_NHASH_SESSIONS; i++)
+        {
+          ret = crypto_hash_op(cfd, hses[i], COP_FLAG_UPDATE, buf[0] + hoff,
+                               g_hash_pieces[piece], NULL, 0);
+          if (ret < 0)
+            {
+              printf("CRYPTO_TEST session FAIL %s piece=%d ret=%d\n",
+                     hashes[i]->name, piece, ret);
+              goto out;
+            }
+        }
+
+      hoff += g_hash_pieces[piece];
+#endif
     }
 
   for (i = 0; i < CRYPTO_NSESSIONS; i++)
@@ -686,14 +1019,39 @@ static int crypto_test_session(int cfd, uint8_t *buf[])
         }
     }
 
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+  for (i = 0; i < CRYPTO_NHASH_SESSIONS; i++)
+    {
+      crypto_guard(digest, hashes[i]->digestlen);
+      ret = crypto_hash_op(cfd, hses[i], 0, NULL, 0, digest,
+                           hashes[i]->digestlen);
+      ret = crypto_expect_digest(hashes[i], "interleaved", ret, digest,
+                                 hashes[i]->fnv);
+      if (ret < 0)
+        {
+          goto out;
+        }
+    }
+
+  printf("CRYPTO_TEST RESULT case=session PASS sessions=%d\n",
+         CRYPTO_NSESSIONS + CRYPTO_NHASH_SESSIONS);
+#else
   printf("CRYPTO_TEST RESULT case=session PASS sessions=%d\n",
          CRYPTO_NSESSIONS);
+#endif
 
 out:
   for (i = 0; i < opened; i++)
     {
       crypto_session_free(cfd, ses[i]);
     }
+
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+  for (i = 0; i < hopened; i++)
+    {
+      crypto_session_free(cfd, hses[i]);
+    }
+#endif
 
   return ret < 0 ? -1 : 0;
 }
@@ -806,6 +1164,13 @@ static int crypto_run_case(const char *name, int cfd, uint8_t *buf[])
       return crypto_test_xts(cfd, buf);
     }
 
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+  if (strcmp(name, "sha") == 0)
+    {
+      return crypto_test_sha(cfd, buf);
+    }
+#endif
+
   if (strcmp(name, "session") == 0)
     {
       return crypto_test_session(cfd, buf);
@@ -827,7 +1192,11 @@ int main(int argc, char *argv[])
 {
   static const char *cases[] =
   {
-    "cbc", "ctr", "xts", "session", "edge"
+    "cbc", "ctr", "xts",
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+    "sha",
+#endif
+    "session", "edge"
   };
 
   uint8_t *buf[CRYPTO_NBUFS];

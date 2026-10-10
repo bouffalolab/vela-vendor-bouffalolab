@@ -4,11 +4,13 @@ config BL_MCU_PERIPHERAL_TESTS_CRYPTO
 	depends on BL616CL_CRYPTO_AES
 	---help---
 		Enable the BL616CL SEC_ENG crypto case runner. It drives the AES
-		modes through /dev/crypto and checks the results against reference
-		checksums from crypto_vectors.py: all three CBC ids, the 128-bit
-		CTR counter carry, XTS data units, streaming with COP_FLAG_UPDATE,
-		interleaved sessions, in-place and unaligned buffers, zero and
-		partial-block lengths, and messages larger than the bounce buffer.
+		modes and, with BL616CL_CRYPTO_SHA, the SHA algorithms through
+		/dev/crypto and checks the results against reference checksums from
+		crypto_vectors.py: all three CBC ids, the 128-bit CTR counter carry,
+		XTS data units, SHA-224/384, streaming with COP_FLAG_UPDATE,
+		interleaved AES and SHA sessions, in-place and unaligned buffers,
+		zero and partial-block lengths, and messages larger than the bounce
+		buffer.
 
 if BL_MCU_PERIPHERAL_TESTS_CRYPTO
 

@@ -63,6 +63,10 @@ if(CONFIG_BL616CL_CRYPTO_AES)
   list(APPEND SRCS bl616cl_sec_aes.c)
 endif()
 
+if(CONFIG_BL616CL_CRYPTO_SHA)
+  list(APPEND SRCS bl616cl_sec_sha.c)
+endif()
+
 if(CONFIG_BL616CL_TRNG)
   list(APPEND SRCS bl616cl_rng.c)
 endif()

@@ -194,6 +194,14 @@ config BL616CL_CRYPTO_AES
 		CRYPTO_AES_256_CBC, each with 128, 192 or 256-bit keys), AES-CTR
 		with a 128-bit counter, and AES-XTS with 128 or 256-bit keys.
 
+config BL616CL_CRYPTO_SHA
+	bool "SHA"
+	default y
+	---help---
+		Register SHA-1 and SHA-2 (CRYPTO_SHA1, CRYPTO_SHA2_224,
+		CRYPTO_SHA2_256, CRYPTO_SHA2_384 and CRYPTO_SHA2_512). HMAC is not
+		registered; mbedTLS builds it from the hash.
+
 config BL616CL_SEC_ENG_BOUNCE_SIZE
 	int "Bounce buffer size per engine"
 	default 1024

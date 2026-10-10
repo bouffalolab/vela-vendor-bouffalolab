@@ -52,6 +52,7 @@ enum bl616cl_sec_engine_e
 {
   BL616CL_SEC_ENGINE_TRNG,
   BL616CL_SEC_ENGINE_AES,
+  BL616CL_SEC_ENGINE_SHA,
   BL616CL_SEC_ENGINE_NUM
 };
 
@@ -130,7 +131,7 @@ void bl616cl_sec_eng_unlock(enum bl616cl_sec_engine_e engine);
  *   descriptor between chunks.
  *
  * Input Parameters:
- *   engine - An engine with a bounce buffer (AES).
+ *   engine - An engine with a bounce buffer (AES or SHA).
  *   src - Input data.
  *   dst - Output buffer of len bytes, or NULL if the engine has no output.
  *   len - Number of bytes; a multiple of the engine block size.

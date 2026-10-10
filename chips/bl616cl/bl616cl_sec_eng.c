@@ -58,6 +58,11 @@ static uint8_t g_bl616cl_sec_aes_bounce[CONFIG_BL616CL_SEC_ENG_BOUNCE_SIZE]
   BL616CL_SEC_ENG_NOCACHE;
 #endif
 
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+static uint8_t g_bl616cl_sec_sha_bounce[CONFIG_BL616CL_SEC_ENG_BOUNCE_SIZE]
+  BL616CL_SEC_ENG_NOCACHE;
+#endif
+
 static struct bl616cl_sec_engine_s g_bl616cl_sec_engines[] =
 {
   [BL616CL_SEC_ENGINE_TRNG] =
@@ -71,6 +76,16 @@ static struct bl616cl_sec_engine_s g_bl616cl_sec_engines[] =
       NXMUTEX_INITIALIZER,
 #ifdef CONFIG_BL616CL_CRYPTO_AES
       g_bl616cl_sec_aes_bounce
+#else
+      NULL
+#endif
+    },
+
+  [BL616CL_SEC_ENGINE_SHA] =
+    {
+      NXMUTEX_INITIALIZER,
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+      g_bl616cl_sec_sha_bounce
 #else
       NULL
 #endif
@@ -159,7 +174,7 @@ void bl616cl_sec_eng_unlock(enum bl616cl_sec_engine_e engine)
  *   descriptor between chunks.
  *
  * Input Parameters:
- *   engine - An engine with a bounce buffer (AES).
+ *   engine - An engine with a bounce buffer (AES or SHA).
  *   src - Input data.
  *   dst - Output buffer of len bytes, or NULL if the engine has no output.
  *   len - Number of bytes; a multiple of the engine block size.

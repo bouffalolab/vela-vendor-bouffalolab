@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 #
-# Print the expected checksums used by crypto_test_main.c. The ciphertext is
-# computed with an independent AES implementation (Python "cryptography")
-# over the same deterministic inputs as the on-board test.
+# Print the expected checksums used by crypto_test_main.c. The ciphertext and
+# the digests are computed with independent implementations (Python
+# "cryptography" and hashlib) over the same deterministic inputs as the
+# on-board test.
+
+import hashlib
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
@@ -50,3 +53,19 @@ for name, algo, mode, length in CASES:
     ct = encrypt(algo, mode, fill(0x5b, length))
     print("#define CRYPTO_%s_LEN %d" % (name, length))
     print("#define CRYPTO_%s_FNV UINT32_C(0x%08x)" % (name, fnv1a(ct)))
+
+HASHES = [
+    ("SHA1", "sha1"),
+    ("SHA224", "sha224"),
+    ("SHA256", "sha256"),
+    ("SHA384", "sha384"),
+    ("SHA512", "sha512"),
+]
+
+HASH_LEN = 3000
+
+for name, algo in HASHES:
+    digest = hashlib.new(algo, fill(0x5b, HASH_LEN)).digest()
+    empty = hashlib.new(algo, b"").digest()
+    print("#define CRYPTO_%s_BULK_FNV UINT32_C(0x%08x)" % (name, fnv1a(digest)))
+    print("#define CRYPTO_%s_EMPTY_FNV UINT32_C(0x%08x)" % (name, fnv1a(empty)))

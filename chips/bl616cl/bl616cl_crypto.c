@@ -33,19 +33,21 @@
 #include <nuttx/kmalloc.h>
 
 #include "bl616cl_sec_aes.h"
+#include "bl616cl_sec_sha.h"
 
 /****************************************************************************
  * Private Types
  ****************************************************************************/
 
-/* A session holds at most one cipher, as built by /dev/crypto. Its address
- * is the driver-local session id.
+/* A session holds one algorithm, a cipher or a hash. Its address is the
+ * driver-local session id.
  */
 
 struct bl616cl_crypto_session_s
 {
-  int cipher;                    /* CRYPTO_* cipher, or 0 */
+  int alg;                       /* CRYPTO_* algorithm, or 0 */
   FAR struct bl616cl_aes_s *aes; /* Cipher context */
+  FAR struct bl616cl_sha_s *sha; /* Hash context */
 };
 
 /****************************************************************************
@@ -90,6 +92,9 @@ static void bl616cl_crypto_release(FAR struct bl616cl_crypto_session_s *ses)
 {
 #ifdef CONFIG_BL616CL_CRYPTO_AES
   bl616cl_sec_aes_free(ses->aes);
+#endif
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+  bl616cl_sec_sha_free(ses->sha);
 #endif
   kmm_free(ses);
 }
@@ -170,6 +175,87 @@ static int bl616cl_crypto_cipher(FAR struct bl616cl_crypto_session_s *ses,
 }
 #endif
 
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+/****************************************************************************
+ * Name: bl616cl_crypto_sha_alg
+ *
+ * Description:
+ *   Map a CRYPTO_SHA* algorithm to the SHA algorithm.
+ *
+ * Input Parameters:
+ *   alg - A supported hash algorithm.
+ *
+ * Returned Value:
+ *   The SHA algorithm.
+ *
+ ****************************************************************************/
+
+static enum bl616cl_sha_alg_e bl616cl_crypto_sha_alg(int alg)
+{
+  switch (alg)
+    {
+      case CRYPTO_SHA1:
+        return BL616CL_SHA1;
+
+      case CRYPTO_SHA2_224:
+        return BL616CL_SHA224;
+
+      case CRYPTO_SHA2_256:
+        return BL616CL_SHA256;
+
+      case CRYPTO_SHA2_384:
+        return BL616CL_SHA384;
+
+      default:
+        return BL616CL_SHA512;
+    }
+}
+
+/****************************************************************************
+ * Name: bl616cl_crypto_hash
+ *
+ * Description:
+ *   Run one hash descriptor, as the upstream software driver does: with
+ *   CRD_F_UPDATE the data is added and crp_mac is not written; without it
+ *   the message is finished and the whole digest of the algorithm is
+ *   written to crp_mac, whatever crp_olen says. The data of a finishing
+ *   request is not hashed.
+ *
+ * Input Parameters:
+ *   ses - The session.
+ *   crp - The request.
+ *   crd - The hash descriptor.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+static int bl616cl_crypto_hash(FAR struct bl616cl_crypto_session_s *ses,
+                               FAR struct cryptop *crp,
+                               FAR struct cryptodesc *crd)
+{
+  if ((crd->crd_flags & CRD_F_UPDATE) != 0)
+    {
+      if (crd->crd_len < 0 || (crp->crp_buf == NULL && crd->crd_len > 0))
+        {
+          return -EINVAL;
+        }
+
+      return bl616cl_sec_sha_update(ses->sha,
+                                    (FAR const uint8_t *)crp->crp_buf +
+                                    crd->crd_skip, crd->crd_len);
+    }
+
+  if (crp->crp_mac == NULL)
+    {
+      return -EINVAL;
+    }
+
+  return bl616cl_sec_sha_finish(ses->sha, (FAR uint8_t *)crp->crp_mac);
+}
+#endif
+
 /****************************************************************************
  * Name: bl616cl_crypto_freesession
  *
@@ -247,7 +333,7 @@ static int bl616cl_crypto_newsession(FAR uint32_t *sid,
           case CRYPTO_AES_256_CBC:
           case CRYPTO_AES_CTR:
           case CRYPTO_AES_XTS:
-            if (ses->cipher != 0 || cri->cri_klen % 8 != 0)
+            if (ses->alg != 0 || cri->cri_klen % 8 != 0)
               {
                 ret = -EINVAL;
                 break;
@@ -257,7 +343,25 @@ static int bl616cl_crypto_newsession(FAR uint32_t *sid,
                                       bl616cl_crypto_aes_mode(cri->cri_alg),
                                       (FAR const uint8_t *)cri->cri_key,
                                       cri->cri_klen / 8);
-            ses->cipher = cri->cri_alg;
+            ses->alg = cri->cri_alg;
+            break;
+#endif
+
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+          case CRYPTO_SHA1:
+          case CRYPTO_SHA2_224:
+          case CRYPTO_SHA2_256:
+          case CRYPTO_SHA2_384:
+          case CRYPTO_SHA2_512:
+            if (ses->alg != 0)
+              {
+                ret = -EINVAL;
+                break;
+              }
+
+            ret = bl616cl_sec_sha_new(&ses->sha,
+                                      bl616cl_crypto_sha_alg(cri->cri_alg));
+            ses->alg = cri->cri_alg;
             break;
 #endif
 
@@ -319,16 +423,22 @@ static int bl616cl_crypto_process(FAR struct cryptop *crp)
 
   for (crd = crp->crp_desc; crd != NULL && ret >= 0; crd = crd->crd_next)
     {
-#ifdef CONFIG_BL616CL_CRYPTO_AES
-      if (ses->cipher != 0 && crd->crd_alg == ses->cipher)
-        {
-          ret = bl616cl_crypto_cipher(ses, crp, crd);
-        }
-      else
-#endif
+      if (ses->alg == 0 || crd->crd_alg != ses->alg)
         {
           ret = -EINVAL;
         }
+#ifdef CONFIG_BL616CL_CRYPTO_AES
+      else if (ses->aes != NULL)
+        {
+          ret = bl616cl_crypto_cipher(ses, crp, crd);
+        }
+#endif
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+      else if (ses->sha != NULL)
+        {
+          ret = bl616cl_crypto_hash(ses, crp, crd);
+        }
+#endif
     }
 
   return ret;
@@ -368,6 +478,17 @@ void hwcr_init(void)
       algs[CRYPTO_AES_256_CBC] = CRYPTO_ALG_FLAG_SUPPORTED;
       algs[CRYPTO_AES_CTR] = CRYPTO_ALG_FLAG_SUPPORTED;
       algs[CRYPTO_AES_XTS] = CRYPTO_ALG_FLAG_SUPPORTED;
+    }
+#endif
+
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+  if (bl616cl_sec_sha_initialize() >= 0)
+    {
+      algs[CRYPTO_SHA1] = CRYPTO_ALG_FLAG_SUPPORTED;
+      algs[CRYPTO_SHA2_224] = CRYPTO_ALG_FLAG_SUPPORTED;
+      algs[CRYPTO_SHA2_256] = CRYPTO_ALG_FLAG_SUPPORTED;
+      algs[CRYPTO_SHA2_384] = CRYPTO_ALG_FLAG_SUPPORTED;
+      algs[CRYPTO_SHA2_512] = CRYPTO_ALG_FLAG_SUPPORTED;
     }
 #endif
 
