@@ -30,6 +30,7 @@
 
 #include <nuttx/cache.h>
 #include <nuttx/mutex.h>
+#include <nuttx/nuttx.h>
 
 #include "bl616cl_lhal.h"
 #include "bflb_clock.h"
@@ -326,13 +327,13 @@ void bl616cl_sec_eng_unlock(enum bl616cl_sec_engine_e engine)
  *   can use safely is instead run on the caller's buffers, with the data
  *   cache cleaned and invalidated around it. The caller holds the engine
  *   lock and keeps any chaining state in its engine descriptor between
- *   chunks.
+ *   chunks. The part of the bounce buffer used is cleared before return.
  *
  * Input Parameters:
  *   engine - An engine with a bounce buffer (AES or SHA).
  *   src - Input data.
  *   dst - Output buffer of len bytes, or NULL if the engine has no output.
- *   len - Number of bytes; a multiple of the engine block size.
+ *   len - Number of bytes.
  *   direct - True if run() may be given the caller's buffers.
  *   run - Engine operation called for each chunk.
  *   arg - Argument passed to run().
@@ -352,7 +353,8 @@ int bl616cl_sec_eng_transfer(enum bl616cl_sec_engine_e engine,
 {
   FAR uint8_t *bounce;
   size_t chunk;
-  int ret;
+  size_t used;
+  int ret = OK;
 
   DEBUGASSERT(engine < BL616CL_SEC_ENGINE_NUM);
   bounce = g_bl616cl_sec_engines[engine].bounce;
@@ -365,6 +367,12 @@ int bl616cl_sec_eng_transfer(enum bl616cl_sec_engine_e engine,
     }
 #endif
 
+  /* A partial last AES block is run as a whole block in the bounce
+   * buffer, so round up to the block size.
+   */
+
+  used = MIN(ALIGN_UP(len, 16), CONFIG_BL616CL_SEC_ENG_BOUNCE_SIZE);
+
   while (len > 0)
     {
       chunk = MIN(len, CONFIG_BL616CL_SEC_ENG_BOUNCE_SIZE);
@@ -373,7 +381,7 @@ int bl616cl_sec_eng_transfer(enum bl616cl_sec_engine_e engine,
       ret = run(arg, bounce, dst != NULL ? bounce : NULL, chunk);
       if (ret < 0)
         {
-          return ret;
+          break;
         }
 
       if (dst != NULL)
@@ -386,6 +394,9 @@ int bl616cl_sec_eng_transfer(enum bl616cl_sec_engine_e engine,
       len -= chunk;
     }
 
-  return OK;
+  /* Do not leave message data, such as HMAC pads, in the buffer. */
+
+  explicit_bzero(bounce, used);
+  return ret;
 }
 #endif
