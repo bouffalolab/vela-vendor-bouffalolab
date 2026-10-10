@@ -151,12 +151,12 @@ static void bl616cl_sec_sha_load(FAR struct bl616cl_sha_s *sha)
  * Name: bl616cl_sec_sha_run
  *
  * Description:
- *   Hash one chunk in the bounce buffer. Called by
- *   bl616cl_sec_eng_transfer() with the SHA engine locked.
+ *   Hash one chunk. Called by bl616cl_sec_eng_transfer() with the SHA
+ *   engine locked.
  *
  * Input Parameters:
  *   arg - The context.
- *   src - Input in the bounce buffer.
+ *   src - Input, in the bounce buffer or the caller's buffer.
  *   dst - Unused (NULL).
  *   len - Number of bytes.
  *
@@ -360,7 +360,7 @@ int bl616cl_sec_sha_update(FAR struct bl616cl_sha_s *sha,
   bl616cl_sec_sha_load(sha);
 
   ret = bl616cl_sec_eng_transfer(BL616CL_SEC_ENGINE_SHA, data, NULL, len,
-                                 bl616cl_sec_sha_run, sha);
+                                 true, bl616cl_sec_sha_run, sha);
   if (ret < 0)
     {
       bflb_sha_link_deinit(g_bl616cl_sha);

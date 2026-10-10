@@ -334,14 +334,15 @@ static int bl616cl_sec_aes_xts_start(FAR struct bl616cl_aes_s *aes)
  * Name: bl616cl_sec_aes_run
  *
  * Description:
- *   Process one chunk in the bounce buffer. Called by
- *   bl616cl_sec_eng_transfer() with the AES engine locked. A partial last
- *   CTR block is run as a whole block; only len bytes are copied out.
+ *   Process one chunk. Called by bl616cl_sec_eng_transfer() with the AES
+ *   engine locked. A partial last CTR block is run as a whole block in the
+ *   bounce buffer; only len bytes are copied out. XTS chunks are always in
+ *   the bounce buffer, in place.
  *
  * Input Parameters:
  *   arg - The context.
- *   src - Input in the bounce buffer.
- *   dst - Output in the bounce buffer (same as src).
+ *   src - Input, in the bounce buffer or the caller's buffer.
+ *   dst - Output, in the bounce buffer or the caller's buffer.
  *   len - Number of bytes.
  *
  * Returned Value:
@@ -623,7 +624,12 @@ int bl616cl_sec_aes_crypt(FAR struct bl616cl_aes_s *aes, bool encrypt,
       aes->desc.aes_dec_en = !encrypt && aes->mode != BL616CL_AES_CTR;
       g_bl616cl_aes_desc = aes->desc;
 
+      /* XTS masks the data on the CPU, so it always uses the bounce
+       * buffer.
+       */
+
       ret = bl616cl_sec_eng_transfer(BL616CL_SEC_ENGINE_AES, src, dst, len,
+                                     aes->mode != BL616CL_AES_XTS,
                                      bl616cl_sec_aes_run, aes);
     }
 

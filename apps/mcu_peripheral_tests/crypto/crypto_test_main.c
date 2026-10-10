@@ -11,18 +11,23 @@
 
 #include <nuttx/config.h>
 
+#include <nuttx/compiler.h>
+
 #include <sys/ioctl.h>
+#include <sys/param.h>
 
 #include <crypto/cryptodev.h>
 
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 /****************************************************************************
@@ -69,6 +74,18 @@
 #define CRYPTO_MAX_DIGEST  64
 #define CRYPTO_NHASH_SESSIONS 2
 
+/* Requests around the default 256-byte threshold of the driver's direct
+ * path, and a large one; all are whole AES blocks.
+ */
+
+#define CRYPTO_DIRECT_MAX     4096
+#define CRYPTO_DIRECT_STACK   288
+#define CRYPTO_DIRECT_BUF     (CRYPTO_DIRECT_MAX + 64)
+#define CRYPTO_LINE_SIZE      32
+#define CRYPTO_NWORKERS       4
+#define CRYPTO_WORKER_LOOPS   50
+#define CRYPTO_PERF_LOOPS     64
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
@@ -98,6 +115,15 @@ struct crypto_hash_s
   size_t digestlen;
   uint32_t fnv;                     /* Expected digest checksum */
   uint32_t emptyfnv;                /* Digest checksum of no data */
+};
+
+/* One thread of the concurrency test. */
+
+struct crypto_worker_s
+{
+  int id;
+  int result;
+  const uint8_t *expect;            /* Reference output of the message */
 };
 
 /* A NIST SP 800-38A F.2 CBC encryption vector. */
@@ -343,7 +369,8 @@ static const uint8_t g_sha384_abc[48] =
 
 static void crypto_usage(const char *progname)
 {
-  printf("Usage: %s <all|cbc|ctr|xts|sha|session|edge>\n", progname);
+  printf("Usage: %s <all|cbc|ctr|xts|sha|session|edge|direct>\n",
+         progname);
 }
 
 static void crypto_fill(uint8_t *buffer, size_t len, uint8_t seed)
@@ -1147,6 +1174,461 @@ static int crypto_test_edge(int cfd, uint8_t *buf[])
   return 0;
 }
 
+/* Direct path: the driver may run a request on the caller's buffers when
+ * it is large enough, the input is word aligned and the output covers
+ * whole cache lines; otherwise it copies through its bounce buffer. Both
+ * paths must give the same result, and neither may touch bytes next to
+ * the output. The reference is computed from byte-offset buffers, which
+ * always use the bounce buffer.
+ */
+
+static const size_t g_direct_lens[] =
+{
+  224, 240, 256, 272, 288, CRYPTO_DIRECT_MAX
+};
+
+static int crypto_direct_cbc(int cfd, uint32_t ses, const uint8_t *src,
+                             uint8_t *dst, size_t len)
+{
+  return crypto_crypt(cfd, ses, COP_ENCRYPT, 0, g_nist_iv, src, dst, len);
+}
+
+/* Encrypt len bytes of the pattern at src into dst, compare with ref and
+ * the guard after dst, then decrypt dst in place back to the pattern.
+ */
+
+static int crypto_direct_check(int cfd, uint32_t ses, const char *kind,
+                               uint8_t *src, uint8_t *dst, size_t len,
+                               const uint8_t *ref, const uint8_t *plain)
+{
+  int ret;
+
+  memcpy(src, plain, len);
+  crypto_guard(dst, len);
+  ret = crypto_direct_cbc(cfd, ses, src, dst, len);
+  if (ret < 0 || memcmp(dst, ref, len) != 0 || !crypto_guard_ok(dst, len))
+    {
+      printf("CRYPTO_TEST direct FAIL cbc kind=%s len=%zu ret=%d\n",
+             kind, len, ret);
+      return -1;
+    }
+
+  ret = crypto_crypt(cfd, ses, COP_DECRYPT, 0, g_nist_iv, dst, dst, len);
+  if (ret < 0 || memcmp(dst, plain, len) != 0 ||
+      !crypto_guard_ok(dst, len))
+    {
+      printf("CRYPTO_TEST direct FAIL cbc-decrypt kind=%s len=%zu ret=%d\n",
+             kind, len, ret);
+      return -1;
+    }
+
+  return 0;
+}
+
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+static int crypto_direct_sha(int cfd, const uint8_t *msg, size_t len,
+                             uint8_t *digest)
+{
+  uint32_t ses;
+  int ret;
+
+  ret = crypto_hash_session(cfd, CRYPTO_SHA2_256, &ses);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = crypto_hash_op(cfd, ses, COP_FLAG_UPDATE, msg, len, NULL, 0);
+  if (ret == 0)
+    {
+      ret = crypto_hash_op(cfd, ses, 0, NULL, 0, digest, 32);
+    }
+
+  crypto_session_free(cfd, ses);
+  return ret;
+}
+
+static int crypto_direct_sha_check(int cfd, const char *kind,
+                                   const uint8_t *msg, size_t len,
+                                   const uint8_t *ref)
+{
+  uint8_t digest[32];
+  int ret;
+
+  ret = crypto_direct_sha(cfd, msg, len, digest);
+  if (ret < 0 || memcmp(digest, ref, sizeof(digest)) != 0)
+    {
+      printf("CRYPTO_TEST direct FAIL sha256 kind=%s len=%zu ret=%d\n",
+             kind, len, ret);
+      return -1;
+    }
+
+  return 0;
+}
+#endif
+
+static int crypto_direct_lengths(int cfd, uint8_t *a, uint8_t *b,
+                                 uint8_t *plain, uint8_t *ref)
+{
+  aligned_data(CRYPTO_LINE_SIZE) uint8_t stacksrc[CRYPTO_DIRECT_STACK];
+  aligned_data(CRYPTO_LINE_SIZE)
+    uint8_t stackdst[CRYPTO_DIRECT_STACK + CRYPTO_GUARD_SIZE];
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+  uint8_t refdigest[32];
+#endif
+  uint32_t ses;
+  size_t len;
+  size_t i;
+  int ret;
+
+  ret = crypto_session_new(cfd, CRYPTO_AES_256_CBC, g_nist_key256,
+                           sizeof(g_nist_key256), &ses);
+  if (ret < 0)
+    {
+      printf("CRYPTO_TEST direct FAIL session ret=%d\n", ret);
+      return -1;
+    }
+
+  for (i = 0; i < sizeof(g_direct_lens) / sizeof(g_direct_lens[0]); i++)
+    {
+      len = g_direct_lens[i];
+
+      /* Reference through the bounce buffer: byte-offset buffers. */
+
+      memcpy(a + 1, plain, len);
+      ret = crypto_direct_cbc(cfd, ses, a + 1, b + 1, len);
+      if (ret < 0)
+        {
+          printf("CRYPTO_TEST direct FAIL ref len=%zu ret=%d\n", len, ret);
+          goto fail;
+        }
+
+      memcpy(ref, b + 1, len);
+
+      if (crypto_direct_check(cfd, ses, "aligned", a, b, len, ref,
+                              plain) < 0 ||
+          crypto_direct_check(cfd, ses, "inplace", b, b, len, ref,
+                              plain) < 0 ||
+          crypto_direct_check(cfd, ses, "word", a + 4, b + 4, len, ref,
+                              plain) < 0 ||
+          crypto_direct_check(cfd, ses, "line-offset", a, b + 16, len, ref,
+                              plain) < 0)
+        {
+          goto fail;
+        }
+
+      if (len <= CRYPTO_DIRECT_STACK &&
+          crypto_direct_check(cfd, ses, "stack", stacksrc, stackdst, len,
+                              ref, plain) < 0)
+        {
+          goto fail;
+        }
+
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+      memcpy(a + 1, plain, len);
+      if (crypto_direct_sha(cfd, a + 1, len, refdigest) < 0)
+        {
+          printf("CRYPTO_TEST direct FAIL sha256 ref len=%zu\n", len);
+          goto fail;
+        }
+
+      memcpy(b, plain, len);
+      memcpy(a + 4, plain, len);
+      memcpy(stacksrc, plain, MIN(len, CRYPTO_DIRECT_STACK));
+      if (crypto_direct_sha_check(cfd, "aligned", b, len, refdigest) < 0 ||
+          crypto_direct_sha_check(cfd, "word", a + 4, len, refdigest) < 0 ||
+          (len <= CRYPTO_DIRECT_STACK &&
+           crypto_direct_sha_check(cfd, "stack", stacksrc, len,
+                                   refdigest) < 0))
+        {
+          goto fail;
+        }
+#endif
+
+      printf("CRYPTO_TEST direct len=%zu PASS\n", len);
+    }
+
+  crypto_session_free(cfd, ses);
+  return 0;
+
+fail:
+  crypto_session_free(cfd, ses);
+  return -1;
+}
+
+/* Time CBC encryption of CRYPTO_DIRECT_MAX bytes from aligned buffers
+ * (direct path when enabled) and from byte-offset ones (bounce buffer).
+ */
+
+static void crypto_direct_perf(int cfd, uint8_t *a, uint8_t *b)
+{
+  struct timespec start;
+  struct timespec end;
+  uint32_t ses;
+  long us[2];
+  int pass;
+  int i;
+
+  if (crypto_session_new(cfd, CRYPTO_AES_CBC, g_nist_key256, 16,
+                         &ses) < 0)
+    {
+      return;
+    }
+
+  for (pass = 0; pass < 2; pass++)
+    {
+      clock_gettime(CLOCK_MONOTONIC, &start);
+      for (i = 0; i < CRYPTO_PERF_LOOPS; i++)
+        {
+          crypto_direct_cbc(cfd, ses, a + pass, b + pass, CRYPTO_DIRECT_MAX);
+        }
+
+      clock_gettime(CLOCK_MONOTONIC, &end);
+      us[pass] = (end.tv_sec - start.tv_sec) * 1000000 +
+                 (end.tv_nsec - start.tv_nsec) / 1000;
+    }
+
+  crypto_session_free(cfd, ses);
+  printf("CRYPTO_TEST direct perf cbc len=%d aligned_us=%ld "
+         "offset_us=%ld loops=%d\n",
+         CRYPTO_DIRECT_MAX, us[0], us[1], CRYPTO_PERF_LOOPS);
+}
+
+/* Workers 0 and 1 encrypt and decrypt with CBC and CTR, worker 2 hashes,
+ * worker 3 reads the TRNG, all at once, each with its own descriptor.
+ */
+
+static void *crypto_worker(void *arg)
+{
+  struct crypto_worker_s *worker = arg;
+  uint8_t digest[32];
+  uint8_t *in = NULL;
+  uint8_t *out = NULL;
+  uint32_t ses = 0;
+  int cfd;
+  int fd;
+  int i;
+
+  worker->result = -1;
+  if (worker->id == 3)
+    {
+      fd = open("/dev/random", O_RDONLY);
+      if (fd < 0)
+        {
+          return NULL;
+        }
+
+      for (i = 0; i < CRYPTO_WORKER_LOOPS * 4; i++)
+        {
+          if (read(fd, digest, sizeof(digest)) != sizeof(digest))
+            {
+              close(fd);
+              return NULL;
+            }
+        }
+
+      close(fd);
+      worker->result = 0;
+      return NULL;
+    }
+
+  cfd = crypto_open();
+  in = memalign(CRYPTO_LINE_SIZE, CRYPTO_DIRECT_MAX);
+  out = memalign(CRYPTO_LINE_SIZE, CRYPTO_DIRECT_MAX);
+  if (cfd < 0 || in == NULL || out == NULL)
+    {
+      goto out;
+    }
+
+  crypto_fill(in, CRYPTO_DIRECT_MAX, CRYPTO_DATA_SEED);
+
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+  if (worker->id == 2)
+    {
+      for (i = 0; i < CRYPTO_WORKER_LOOPS; i++)
+        {
+          if (crypto_direct_sha(cfd, in, CRYPTO_DIRECT_MAX, digest) < 0 ||
+              memcmp(digest, worker->expect, sizeof(digest)) != 0)
+            {
+              goto out;
+            }
+        }
+
+      worker->result = 0;
+      goto out;
+    }
+#endif
+
+  if (crypto_session_new(cfd, worker->id == 0 ? CRYPTO_AES_CBC :
+                         CRYPTO_AES_CTR, g_nist_key256, 32, &ses) < 0)
+    {
+      goto out;
+    }
+
+  for (i = 0; i < CRYPTO_WORKER_LOOPS; i++)
+    {
+      if (crypto_crypt(cfd, ses, COP_ENCRYPT, 0, g_nist_iv, in, out,
+                       CRYPTO_DIRECT_MAX) < 0 ||
+          memcmp(out, worker->expect, CRYPTO_DIRECT_MAX) != 0 ||
+          crypto_crypt(cfd, ses, COP_DECRYPT, 0, g_nist_iv, out, out,
+                       CRYPTO_DIRECT_MAX) < 0 ||
+          memcmp(out, in, CRYPTO_DIRECT_MAX) != 0)
+        {
+          crypto_session_free(cfd, ses);
+          goto out;
+        }
+    }
+
+  crypto_session_free(cfd, ses);
+  worker->result = 0;
+
+out:
+  free(in);
+  free(out);
+  if (cfd >= 0)
+    {
+      close(cfd);
+    }
+
+  return NULL;
+}
+
+static int crypto_direct_workers(int cfd, uint8_t *a, uint8_t *b)
+{
+  struct crypto_worker_s workers[CRYPTO_NWORKERS];
+  pthread_t threads[CRYPTO_NWORKERS];
+  uint8_t *expect[2];
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+  uint8_t digest[32];
+  uint8_t *msg;
+#endif
+  uint32_t ses;
+  int created = 0;
+  int ret = 0;
+  int i;
+
+  /* Reference outputs, computed single-threaded through the bounce
+   * buffer.
+   */
+
+  expect[0] = a;
+  expect[1] = b;
+  for (i = 0; i < 2; i++)
+    {
+      crypto_fill(expect[i] + 1, CRYPTO_DIRECT_MAX, CRYPTO_DATA_SEED);
+      if (crypto_session_new(cfd, i == 0 ? CRYPTO_AES_CBC : CRYPTO_AES_CTR,
+                             g_nist_key256, 32, &ses) < 0)
+        {
+          return -1;
+        }
+
+      ret = crypto_crypt(cfd, ses, COP_ENCRYPT, 0, g_nist_iv,
+                         expect[i] + 1, expect[i] + 1, CRYPTO_DIRECT_MAX);
+      crypto_session_free(cfd, ses);
+      if (ret < 0)
+        {
+          return -1;
+        }
+
+      memmove(expect[i], expect[i] + 1, CRYPTO_DIRECT_MAX);
+    }
+
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+  msg = malloc(CRYPTO_DIRECT_MAX + 1);
+  if (msg == NULL)
+    {
+      return -1;
+    }
+
+  crypto_fill(msg + 1, CRYPTO_DIRECT_MAX, CRYPTO_DATA_SEED);
+  ret = crypto_direct_sha(cfd, msg + 1, CRYPTO_DIRECT_MAX, digest);
+  free(msg);
+  if (ret < 0)
+    {
+      return -1;
+    }
+#endif
+
+  memset(workers, 0, sizeof(workers));
+  for (i = 0; i < CRYPTO_NWORKERS; i++)
+    {
+      workers[i].id = i;
+#ifdef CONFIG_BL616CL_CRYPTO_SHA
+      workers[i].expect = i < 2 ? expect[i] : digest;
+#else
+      workers[i].expect = i < 2 ? expect[i] : NULL;
+      if (i == 2)
+        {
+          workers[i].result = 0;
+          continue;
+        }
+#endif
+
+      ret = pthread_create(&threads[i], NULL, crypto_worker, &workers[i]);
+      if (ret != 0)
+        {
+          printf("CRYPTO_TEST direct FAIL create=%d error=%d\n", i, ret);
+          break;
+        }
+
+      created |= 1 << i;
+    }
+
+  ret = 0;
+  for (i = 0; i < CRYPTO_NWORKERS; i++)
+    {
+      if ((created & (1 << i)) != 0)
+        {
+          pthread_join(threads[i], NULL);
+        }
+
+      if (workers[i].result != 0)
+        {
+          printf("CRYPTO_TEST direct FAIL worker=%d\n", i);
+          ret = -1;
+        }
+    }
+
+  if (ret == 0)
+    {
+      printf("CRYPTO_TEST direct workers PASS threads=%d loops=%d\n",
+             CRYPTO_NWORKERS, CRYPTO_WORKER_LOOPS);
+    }
+
+  return ret;
+}
+
+static int crypto_test_direct(int cfd, uint8_t *buf[])
+{
+  uint8_t *a;
+  uint8_t *b;
+  int ret = -1;
+
+  a = memalign(CRYPTO_LINE_SIZE, CRYPTO_DIRECT_BUF);
+  b = memalign(CRYPTO_LINE_SIZE, CRYPTO_DIRECT_BUF);
+  if (a == NULL || b == NULL)
+    {
+      printf("CRYPTO_TEST direct FAIL memalign\n");
+      goto out;
+    }
+
+  crypto_fill(buf[0], CRYPTO_DIRECT_MAX, CRYPTO_DATA_SEED);
+  if (crypto_direct_lengths(cfd, a, b, buf[0], buf[1]) < 0 ||
+      crypto_direct_workers(cfd, a, b) < 0)
+    {
+      goto out;
+    }
+
+  crypto_direct_perf(cfd, a, b);
+  printf("CRYPTO_TEST RESULT case=direct PASS\n");
+  ret = 0;
+
+out:
+  free(a);
+  free(b);
+  return ret;
+}
+
 static int crypto_run_case(const char *name, int cfd, uint8_t *buf[])
 {
   if (strcmp(name, "cbc") == 0)
@@ -1181,6 +1663,11 @@ static int crypto_run_case(const char *name, int cfd, uint8_t *buf[])
       return crypto_test_edge(cfd, buf);
     }
 
+  if (strcmp(name, "direct") == 0)
+    {
+      return crypto_test_direct(cfd, buf);
+    }
+
   return -EINVAL;
 }
 
@@ -1196,7 +1683,7 @@ int main(int argc, char *argv[])
 #ifdef CONFIG_BL616CL_CRYPTO_SHA
     "sha",
 #endif
-    "session", "edge"
+    "session", "edge", "direct"
   };
 
   uint8_t *buf[CRYPTO_NBUFS];

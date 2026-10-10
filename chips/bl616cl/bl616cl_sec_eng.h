@@ -28,6 +28,7 @@
 #include <nuttx/config.h>
 #include <nuttx/compiler.h>
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -57,8 +58,9 @@ enum bl616cl_sec_engine_e
 };
 
 /* Run the engine once on len bytes at src, writing to dst (NULL for engines
- * that only consume data). len never exceeds the bounce buffer size. Return
- * zero (OK) or a negated errno value.
+ * that only consume data). src and dst are engine-visible: the bounce
+ * buffer, or the caller's buffers on the direct path. Return zero (OK) or
+ * a negated errno value.
  */
 
 typedef CODE int (*bl616cl_sec_eng_run_t)(FAR void *arg,
@@ -126,27 +128,33 @@ void bl616cl_sec_eng_unlock(enum bl616cl_sec_engine_e engine);
  *   Process a buffer of any memory type with one engine. The data is
  *   copied through the engine's non-cacheable bounce buffer in chunks of at
  *   most CONFIG_BL616CL_SEC_ENG_BOUNCE_SIZE bytes, and run() is called once
- *   per chunk with the chunk in the bounce buffer (in place). The caller
- *   holds the engine lock and keeps any chaining state in its engine
- *   descriptor between chunks.
+ *   per chunk with the chunk in the bounce buffer (in place). With
+ *   CONFIG_BL616CL_SEC_ENG_DIRECT, a large request whose buffers the engine
+ *   can use safely is instead run on the caller's buffers, with the data
+ *   cache cleaned and invalidated around it. The caller holds the engine
+ *   lock and keeps any chaining state in its engine descriptor between
+ *   chunks.
  *
  * Input Parameters:
  *   engine - An engine with a bounce buffer (AES or SHA).
  *   src - Input data.
  *   dst - Output buffer of len bytes, or NULL if the engine has no output.
  *   len - Number of bytes; a multiple of the engine block size.
+ *   direct - True if run() may be given the caller's buffers.
  *   run - Engine operation called for each chunk.
  *   arg - Argument passed to run().
  *
  * Returned Value:
  *   Zero (OK) on success; the first error returned by run() otherwise. The
- *   output is incomplete after an error.
+ *   output is incomplete after an error. After a timeout the engine may
+ *   still finish the chunk later and write its output, on the direct path
+ *   into the caller's buffer.
  *
  ****************************************************************************/
 
 int bl616cl_sec_eng_transfer(enum bl616cl_sec_engine_e engine,
                              FAR const uint8_t *src, FAR uint8_t *dst,
-                             size_t len, bl616cl_sec_eng_run_t run,
-                             FAR void *arg);
+                             size_t len, bool direct,
+                             bl616cl_sec_eng_run_t run, FAR void *arg);
 
 #endif

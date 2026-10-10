@@ -212,6 +212,26 @@ config BL616CL_SEC_ENG_BOUNCE_SIZE
 		at a time. Must be a multiple of 128. The engine does not snoop the
 		CPU data cache, so data is copied through this buffer.
 
+config BL616CL_SEC_ENG_DIRECT
+	bool "Run large requests on the caller's buffers"
+	default y
+	---help---
+		Let the engine read and write the caller's buffers directly, with
+		the data cache cleaned and invalidated around the run, instead of
+		copying through the bounce buffer. Used when the request is at
+		least BL616CL_SEC_ENG_DIRECT_MIN bytes, both buffers are in internal
+		RAM, the input is word aligned and the output covers whole 32-byte
+		cache lines. Other requests, flash and PSRAM buffers, and AES-XTS
+		use the bounce buffer.
+
+config BL616CL_SEC_ENG_DIRECT_MIN
+	int "Smallest request run on the caller's buffers"
+	default 256
+	depends on BL616CL_SEC_ENG_DIRECT
+	---help---
+		Below this size the cache maintenance costs more than the copy
+		through the bounce buffer saves.
+
 endif # BL616CL_CRYPTO
 
 config BL616CL_TRNG
