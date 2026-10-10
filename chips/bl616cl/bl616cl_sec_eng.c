@@ -25,6 +25,8 @@
 #include <nuttx/config.h>
 
 #include <assert.h>
+#include <string.h>
+#include <sys/param.h>
 
 #include <nuttx/mutex.h>
 
@@ -33,40 +35,51 @@
 #include "bl616cl_sec_eng.h"
 
 /****************************************************************************
+ * Private Types
+ ****************************************************************************/
+
+struct bl616cl_sec_engine_s
+{
+  mutex_t lock;        /* Serializes the engine and its bounce buffer */
+  FAR uint8_t *bounce; /* Non-cacheable bounce buffer, NULL if none */
+};
+
+/****************************************************************************
  * Private Data
  ****************************************************************************/
 
-static mutex_t g_bl616cl_sec_trng_lock = NXMUTEX_INITIALIZER;
+#ifdef CONFIG_BL616CL_CRYPTO
+static_assert(CONFIG_BL616CL_SEC_ENG_BOUNCE_SIZE % 128 == 0,
+              "the bounce buffer holds whole SHA-512 blocks");
+#endif
 
-/****************************************************************************
- * Private Functions
- ****************************************************************************/
+#ifdef CONFIG_BL616CL_CRYPTO_AES
+static uint8_t g_bl616cl_sec_aes_bounce[CONFIG_BL616CL_SEC_ENG_BOUNCE_SIZE]
+  BL616CL_SEC_ENG_NOCACHE;
+#endif
 
-/****************************************************************************
- * Name: bl616cl_sec_eng_mutex
- *
- * Description:
- *   Return the mutex that serializes one engine.
- *
- * Input Parameters:
- *   engine - The engine.
- *
- * Returned Value:
- *   The engine mutex.
- *
- ****************************************************************************/
-
-static mutex_t *bl616cl_sec_eng_mutex(enum bl616cl_sec_engine_e engine)
+static struct bl616cl_sec_engine_s g_bl616cl_sec_engines[] =
 {
-  switch (engine)
+  [BL616CL_SEC_ENGINE_TRNG] =
     {
-      case BL616CL_SEC_ENGINE_TRNG:
-        return &g_bl616cl_sec_trng_lock;
-    }
+      NXMUTEX_INITIALIZER,
+      NULL
+    },
 
-  DEBUGPANIC();
-  return NULL;
-}
+  [BL616CL_SEC_ENGINE_AES] =
+    {
+      NXMUTEX_INITIALIZER,
+#ifdef CONFIG_BL616CL_CRYPTO_AES
+      g_bl616cl_sec_aes_bounce
+#else
+      NULL
+#endif
+    },
+};
+
+static_assert(sizeof(g_bl616cl_sec_engines) /
+              sizeof(g_bl616cl_sec_engines[0]) == BL616CL_SEC_ENGINE_NUM,
+              "one entry per SEC_ENG engine");
 
 /****************************************************************************
  * Public Functions
@@ -96,7 +109,7 @@ void bl616cl_sec_eng_initialize(void)
  * Name: bl616cl_sec_eng_lock
  *
  * Description:
- *   Take exclusive use of one SEC_ENG engine.
+ *   Take exclusive use of one SEC_ENG engine and of its bounce buffer.
  *
  * Input Parameters:
  *   engine - The engine to lock.
@@ -109,7 +122,8 @@ void bl616cl_sec_eng_initialize(void)
 
 int bl616cl_sec_eng_lock(enum bl616cl_sec_engine_e engine)
 {
-  return nxmutex_lock(bl616cl_sec_eng_mutex(engine));
+  DEBUGASSERT(engine < BL616CL_SEC_ENGINE_NUM);
+  return nxmutex_lock(&g_bl616cl_sec_engines[engine].lock);
 }
 
 /****************************************************************************
@@ -128,5 +142,70 @@ int bl616cl_sec_eng_lock(enum bl616cl_sec_engine_e engine)
 
 void bl616cl_sec_eng_unlock(enum bl616cl_sec_engine_e engine)
 {
-  nxmutex_unlock(bl616cl_sec_eng_mutex(engine));
+  DEBUGASSERT(engine < BL616CL_SEC_ENGINE_NUM);
+  nxmutex_unlock(&g_bl616cl_sec_engines[engine].lock);
 }
+
+#ifdef CONFIG_BL616CL_CRYPTO
+/****************************************************************************
+ * Name: bl616cl_sec_eng_transfer
+ *
+ * Description:
+ *   Process a buffer of any memory type with one engine. The data is
+ *   copied through the engine's non-cacheable bounce buffer in chunks of at
+ *   most CONFIG_BL616CL_SEC_ENG_BOUNCE_SIZE bytes, and run() is called once
+ *   per chunk with the chunk in the bounce buffer (in place). The caller
+ *   holds the engine lock and keeps any chaining state in its engine
+ *   descriptor between chunks.
+ *
+ * Input Parameters:
+ *   engine - An engine with a bounce buffer (AES).
+ *   src - Input data.
+ *   dst - Output buffer of len bytes, or NULL if the engine has no output.
+ *   len - Number of bytes; a multiple of the engine block size.
+ *   run - Engine operation called for each chunk.
+ *   arg - Argument passed to run().
+ *
+ * Returned Value:
+ *   Zero (OK) on success; the first error returned by run() otherwise. The
+ *   output is incomplete after an error.
+ *
+ ****************************************************************************/
+
+int bl616cl_sec_eng_transfer(enum bl616cl_sec_engine_e engine,
+                             FAR const uint8_t *src, FAR uint8_t *dst,
+                             size_t len, bl616cl_sec_eng_run_t run,
+                             FAR void *arg)
+{
+  FAR uint8_t *bounce;
+  size_t chunk;
+  int ret;
+
+  DEBUGASSERT(engine < BL616CL_SEC_ENGINE_NUM);
+  bounce = g_bl616cl_sec_engines[engine].bounce;
+  DEBUGASSERT(bounce != NULL);
+
+  while (len > 0)
+    {
+      chunk = MIN(len, CONFIG_BL616CL_SEC_ENG_BOUNCE_SIZE);
+
+      memcpy(bounce, src, chunk);
+      ret = run(arg, bounce, dst != NULL ? bounce : NULL, chunk);
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      if (dst != NULL)
+        {
+          memcpy(dst, bounce, chunk);
+          dst += chunk;
+        }
+
+      src += chunk;
+      len -= chunk;
+    }
+
+  return OK;
+}
+#endif

@@ -173,6 +173,38 @@ config BL616CL_SEC_ENG
 		Shared SEC_ENG support: the SEC peripheral clock and the engine
 		locks. Selected by the drivers that use the security engine.
 
+config BL616CL_CRYPTO
+	bool "SEC_ENG hardware crypto driver"
+	default y
+	depends on CRYPTO_CRYPTODEV_HARDWARE
+	select BL616CL_SEC_ENG
+	---help---
+		Register the SEC_ENG engines as the hardware driver of the crypto
+		framework (hwcr_init()), used through /dev/crypto and the mbedTLS
+		ALT layer. Requests complete synchronously; the driver polls the
+		engine with a 100 ms limit per chunk.
+
+if BL616CL_CRYPTO
+
+config BL616CL_CRYPTO_AES
+	bool "AES"
+	default y
+	---help---
+		Register AES-CBC with 128, 192 and 256-bit keys under
+		CRYPTO_AES_CBC, CRYPTO_AES_192_CBC and CRYPTO_AES_256_CBC.
+
+config BL616CL_SEC_ENG_BOUNCE_SIZE
+	int "Bounce buffer size per engine"
+	default 1024
+	range 128 65536
+	---help---
+		Size in bytes of the non-cacheable buffer through which each engine
+		reads and writes data, and the largest chunk the engine processes
+		at a time. Must be a multiple of 128. The engine does not snoop the
+		CPU data cache, so data is copied through this buffer.
+
+endif # BL616CL_CRYPTO
+
 config BL616CL_TRNG
 	bool "True random number generator (TRNG)"
 	default n
