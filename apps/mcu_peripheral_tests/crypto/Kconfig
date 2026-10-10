@@ -3,6 +3,7 @@ config BL_MCU_PERIPHERAL_TESTS_CRYPTO
 	default n
 	depends on BL616CL_CRYPTO_AES
 	depends on !DISABLE_PTHREAD
+	depends on DEV_RANDOM
 	---help---
 		Enable the BL616CL SEC_ENG crypto case runner. It drives the AES
 		modes and, with BL616CL_CRYPTO_SHA, the SHA algorithms through

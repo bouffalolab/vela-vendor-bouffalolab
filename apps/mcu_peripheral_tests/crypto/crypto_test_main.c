@@ -402,6 +402,15 @@ static void crypto_guard(uint8_t *buffer, size_t len)
   memset(buffer + len, CRYPTO_CANARY, CRYPTO_GUARD_SIZE);
 }
 
+/* Fill a digest buffer and its guard before a finish, so a finish that
+ * returns 0 without writing the digest is caught.
+ */
+
+static void crypto_digest_reset(uint8_t *digest, size_t len)
+{
+  memset(digest, CRYPTO_CANARY, len + CRYPTO_GUARD_SIZE);
+}
+
 static bool crypto_guard_ok(const uint8_t *buffer, size_t len)
 {
   size_t i;
@@ -814,7 +823,7 @@ static int crypto_check_hash(int cfd, const struct crypto_hash_s *hash,
       return -1;
     }
 
-  crypto_guard(digest, hash->digestlen);
+  crypto_digest_reset(digest, hash->digestlen);
   ret = crypto_hash_op(cfd, ses, 0, NULL, 0, digest, 1);
   if (crypto_expect_digest(hash, "empty", ret, digest,
                            hash->emptyfnv) < 0)
@@ -822,7 +831,7 @@ static int crypto_check_hash(int cfd, const struct crypto_hash_s *hash,
       goto fail;
     }
 
-  crypto_guard(digest, hash->digestlen);
+  crypto_digest_reset(digest, hash->digestlen);
   ret = crypto_hash_op(cfd, ses, COP_FLAG_UPDATE, msg, CRYPTO_HASH_LEN,
                        NULL, 0);
   if (ret == 0)
@@ -835,7 +844,7 @@ static int crypto_check_hash(int cfd, const struct crypto_hash_s *hash,
       goto fail;
     }
 
-  crypto_guard(digest, hash->digestlen);
+  crypto_digest_reset(digest, hash->digestlen);
   for (i = 0; i < CRYPTO_MAX_PIECES && ret == 0; i++)
     {
       ret = crypto_hash_op(cfd, ses, COP_FLAG_UPDATE, msg + off,
@@ -876,7 +885,7 @@ static int crypto_check_hash_kat(int cfd, uint32_t mac,
       return ret;
     }
 
-  crypto_guard(digest, len);
+  crypto_digest_reset(digest, len);
   ret = crypto_hash_op(cfd, ses, COP_FLAG_UPDATE, (const uint8_t *)"abc",
                        3, NULL, 0);
   if (ret == 0)
@@ -1049,7 +1058,7 @@ static int crypto_test_session(int cfd, uint8_t *buf[])
 #ifdef CONFIG_BL616CL_CRYPTO_SHA
   for (i = 0; i < CRYPTO_NHASH_SESSIONS; i++)
     {
-      crypto_guard(digest, hashes[i]->digestlen);
+      crypto_digest_reset(digest, hashes[i]->digestlen);
       ret = crypto_hash_op(cfd, hses[i], 0, NULL, 0, digest,
                            hashes[i]->digestlen);
       ret = crypto_expect_digest(hashes[i], "interleaved", ret, digest,
@@ -1238,6 +1247,7 @@ static int crypto_direct_sha(int cfd, const uint8_t *msg, size_t len,
       return ret;
     }
 
+  memset(digest, CRYPTO_CANARY, 32);
   ret = crypto_hash_op(cfd, ses, COP_FLAG_UPDATE, msg, len, NULL, 0);
   if (ret == 0)
     {
@@ -1309,7 +1319,7 @@ static int crypto_direct_lengths(int cfd, uint8_t *a, uint8_t *b,
                               plain) < 0 ||
           crypto_direct_check(cfd, ses, "inplace", b, b, len, ref,
                               plain) < 0 ||
-          crypto_direct_check(cfd, ses, "word", a + 4, b + 4, len, ref,
+          crypto_direct_check(cfd, ses, "word", a + 4, b, len, ref,
                               plain) < 0 ||
           crypto_direct_check(cfd, ses, "line-offset", a, b + 16, len, ref,
                               plain) < 0)
@@ -1574,7 +1584,7 @@ static int crypto_direct_workers(int cfd, uint8_t *a, uint8_t *b)
       created |= 1 << i;
     }
 
-  ret = 0;
+  ret = i < CRYPTO_NWORKERS ? -1 : 0;
   for (i = 0; i < CRYPTO_NWORKERS; i++)
     {
       if ((created & (1 << i)) != 0)

@@ -31,8 +31,8 @@ CONFIG_BL_MCU_PERIPHERAL_TESTS_CRYPTO=y
 
 不开 `CONFIG_BL616CL_CRYPTO_SHA` 时没有 `sha` case，`session` 只交错 AES。
 
-`nsh-peripherals` 配置已打开。固件中不应同时编入软件 crypto 驱动：CTR 回绕用例按
-128 位进位给出期望值，框架的软件 CTR 只给低 32 位进位，结果会不同。
+`direct` 的并发线程读 `/dev/random`，所以还需要 `CONFIG_DEV_RANDOM`（由
+`CONFIG_BL616CL_TRNG` 提供）。`nsh-peripherals` 配置已打开。
 
 ## 命令
 
@@ -61,10 +61,10 @@ mcu_crypto_test all
 | `cbc` | NIST 向量：`CRYPTO_AES_192_CBC`、`CRYPTO_AES_256_CBC`，以及 `CRYPTO_AES_CBC` 用 256 位密钥；2064 B 大块（跨 bounce 边界，流式分段 1040 + 1024） |
 | `ctr` | 低 32 位回绕进位到下一个字、第二段恰好从回绕点开始；128 位全进位回绕到 0；5000 B 大块，回绕点落在 bounce 分段中间；三者都带非整块尾部 |
 | `xts` | 4096 B 数据单元（2×256 位密钥），流式分段 16 + 1008 + 1040 + 2032；1040 B 数据单元（2×128 位密钥） |
-| `sha` | SHA-224、SHA-384 的 `abc` 摘要；五种 SHA 各在一个 session 上依次算空消息、一次输入 3000 B、分段输入（1 + 200 + 1000 + 1799，第二段让引擎从奇数地址读整块，最后一段跨 bounce 边界），每次 finish 后同一 session 开始新消息；`olen` 故意给小，检查仍写满摘要长度且不越界 |
+| `sha` | SHA-224、SHA-384 的 `abc` 摘要；五种 SHA 各在一个 session 上依次算空消息、一次输入 3000 B、分段输入（1 + 200 + 1000 + 1799，第二段让引擎从奇数地址读整块，最后一段跨 bounce 边界），每次 finish 后同一 session 开始新消息；`olen` 故意给小，检查仍写满摘要长度且不越界；每次 finish 前摘要缓冲先填满固定字节，finish 返回 0 却没写摘要会被发现 |
 | `session` | CBC、CTR、XTS 与 SHA-256、SHA-384 五个 session 同时打开，按段轮流处理，每段都从其他 session 用过引擎后保存的链值或哈希状态续接 |
 | `edge` | 0 长度不写输出；CBC 15 B、XTS 20 B 返回 `EINVAL`；源、目的地址非 4 字节对齐（异地与原地） |
-| `direct` | 驱动直连通路（`CONFIG_BL616CL_SEC_ENG_DIRECT`）的边界：224–288 B（跨默认 256 B 阈值）与 4096 B，源/目的 32 B 对齐、原地、4 B 对齐、目的不按 cache 行对齐、栈缓冲，AES-CBC 结果和 SHA-256 摘要都与字节偏移缓冲（必走 bounce）算出的参考值一致，目的缓冲后的守卫字节不变；CBC、CTR、SHA-256 与 `/dev/random` 读取四个线程并发；最后打印 4096 B CBC 对齐与偏移缓冲各 64 次的耗时，开、关直连的两次构建对比可确认直连生效 |
+| `direct` | 驱动直连通路（`CONFIG_BL616CL_SEC_ENG_DIRECT`）的边界：224–288 B（跨默认 256 B 阈值）与 4096 B，源/目的 32 B 对齐、原地、源只 4 B 对齐（目的 32 B 对齐，仍直连）、目的不按 cache 行对齐、栈缓冲，AES-CBC 结果和 SHA-256 摘要都与字节偏移缓冲（必走 bounce）算出的参考值一致，目的缓冲后的守卫字节不变；CBC、CTR、SHA-256 与 `/dev/random` 读取四个线程并发；最后打印 4096 B CBC 对齐与偏移缓冲各 64 次的耗时，开、关直连的两次构建对比可确认直连生效 |
 
 大块长度按默认 bounce 大小选取。调大 bounce 后用例仍应通过，但不再覆盖跨分段边界。
 `direct` 的长度按默认 `CONFIG_BL616CL_SEC_ENG_DIRECT_MIN`（256）选取；关闭直连时同样应全部通过，此时全部请求走 bounce。
