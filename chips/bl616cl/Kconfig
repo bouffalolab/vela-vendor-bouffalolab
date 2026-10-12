@@ -236,13 +236,18 @@ endif # BL616CL_CRYPTO
 
 config BL616CL_TRNG
 	bool "True random number generator (TRNG)"
-	default n
+	default CRYPTO_MBEDTLS
 	select ARCH_HAVE_RNG
 	select BL616CL_SEC_ENG
+	imply MBEDTLS_ENTROPY_HARDWARE_ALT
 	---help---
 		Enable the BL616CL security engine TRNG. DEV_RANDOM controls the
 		standard /dev/random device. DEV_URANDOM remains independent and
 		uses the same hardware when DEV_URANDOM_ARCH is selected.
+
+		Enabled by default with mbedTLS, which then takes its entropy
+		from /dev/random (MBEDTLS_ENTROPY_HARDWARE_ALT) instead of
+		getrandom(), whatever DEV_URANDOM implementation is selected.
 
 config BL616CL_PERFMON
 	bool "Performance monitor"

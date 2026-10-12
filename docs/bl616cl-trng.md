@@ -124,6 +124,10 @@ getrandom(..., GRND_RANDOM)
 可选 `DEV_URANDOM_ARCH` 时，`devurandom_register()` 用相同 file operations 注册
 `/dev/urandom`；默认 `getrandom(..., 0)` 走该节点。
 
+打开 mbedTLS（`CRYPTO_MBEDTLS`）时 `BL616CL_TRNG` 默认打开，并默认打开
+`MBEDTLS_ENTROPY_HARDWARE_ALT`，mbedTLS 的熵源改为读 `/dev/random`，见
+[BL616CL crypto](bl616cl-crypto.md)。
+
 ## 配置与构建流程
 
 以下命令均在 SDK 根目录执行。`defconfig` 是自动生成文件，配置变更通过生成目录

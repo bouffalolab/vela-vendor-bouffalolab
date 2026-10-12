@@ -115,9 +115,7 @@ openvela 的 mbedTLS ALT（`apps/crypto/mbedtls/source/*_alt.c`）全部经
 不要开的 ALT：
 
 - `MD5`、`CMAC`、`RIPEMD160`、`POLY1305`：没有对应硬件，请求会失败；
-- `ECDSA`、`BIGNUM`：本驱动不支持 PKA；
-- `ENTROPY_HARDWARE`：没有收益。mbedTLS 默认的熵源经 `getrandom()` 读
-  `/dev/urandom`，已经由 TRNG 提供；打开后改读 `/dev/random`，还是同一个 TRNG。
+- `ECDSA`、`BIGNUM`：本驱动不支持 PKA。
 
 **SHA ALT 的 clone 限制**：`mbedtls_sha*_clone()` 在 ALT 里不复制哈希状态，只让两个
 上下文共用同一个内核 session，之后任一方继续 update 或 finish 都会改动另一方。
@@ -129,11 +127,15 @@ TLS 握手和 PSA hash clone 依赖独立副本，在 OpenVela sim 上实测开 
 开销大于硬件节省的时间，ALT 只在大块数据上有收益。是否在某个产品配置开某个 ALT，
 要实测对比。
 
-mbedTLS 的熵源用 `getrandom()`，需要 `/dev/urandom`（`DEV_URANDOM`，有
-`BL616CL_TRNG` 时默认由硬件提供），否则 `mbedselftest` 的 ENTROPY 用例失败。
+**熵源**：打开 mbedTLS（`CRYPTO_MBEDTLS`）时，`BL616CL_TRNG` 默认打开，并默认打开
+`MBEDTLS_ENTROPY_HARDWARE_ALT`。mbedTLS 经 apps 的 `entropy_alt.c` 读
+`/dev/random`（TRNG），不再经 `getrandom()` 读 `/dev/urandom`，所以熵源不受
+`DEV_URANDOM` 选用哪种实现影响（除 `DEV_URANDOM_ARCH` 外都是软件伪随机数）。这个
+ALT 不经过 `/dev/crypto`，不需要打开 crypto 驱动。TRNG 健康检查失败时 `/dev/random`
+读不满，mbedTLS 收到错误，不会用到这次的数据。
 
 当前板级配置：`nsh-peripherals` 打开 AES、SHA1、SHA256、SHA512 四个 ALT 和
-`mbedselftest`；`wifi` 不开 ALT，原因见下。
+`mbedselftest`；`wifi` 不开 AES、SHA ALT，原因见下。两者都按上段默认打开熵源 ALT。
 
 ### Wi-Fi 连接耗时
 
@@ -150,7 +152,8 @@ mbedTLS 的熵源用 `getrandom()`，需要 `/dev/urandom`（`DEV_URANDOM`，有
 
 没有一个 ALT 缩短连接时间。WPA2 每次连接都由口令算 PMK（4096 轮 PBKDF2，共
 8192 次 HMAC-SHA1），SHA1 ALT 下每次 HMAC 都新建并释放 session，连接因此慢约
-1.6 s；SHA256 ALT 让 WPA3 慢约 33 ms。所以 `wifi` 不开 ALT。
+1.6 s；SHA256 ALT 让 WPA3 慢约 33 ms。所以 `wifi` 不开 AES、SHA ALT。默认打开熵源 ALT
+后，`wifi`（不开 crypto 驱动）WPA3 连接 20 次的中位数为 3.340 s，连接时间不受影响。
 
 ## 测试
 

@@ -557,7 +557,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | P06 | PWM | 软件闭环已通过，P1；G4 waiting | `BL616CL_PWM`、`AI_M64L_KIT_PWM`、test hook/app 独立裁剪；首版排除改变 ABI 的 multichannel/pulse/fixed/deadtime | PWM0 CH3+/GPIO22、continuous、整数频率、duty、cpol/dcpol、live update 和 multi-fd 已完成三态构建、裁剪、8/8 实机软件合同和现役回归；frequency/duty/停止电平/更新毛刺待逻辑分析仪 |
 | P07 | ADC | 需要适配，P2 | ADC、channel/pin、poll/DMA 分层 | analog lower-half；校准、量程、连续采样、溢出；外部基准电压 |
 | P08 | DMA0 | 已验证 | `BL616CL_DMA0` 默认关闭；test hook/app 独立；首版依赖 `!DMA_LINK` | 八通道 fixed-ident、1/2/4-byte mem2mem、TC/error 状态机、stop/residual、cache ownership 和并发生命周期；外设 consumer/LLI/cyclic 延后 |
-| P09 | AES/SHA `/dev/crypto` 与 mbedTLS ALT；GMAC、PKA、CRC32 | AES/SHA 已验证；GMAC/PKA 延后；CRC32 不支持 | `BL616CL_CRYPTO`、`_AES`、`_SHA` 分别裁剪；bounce 大小与直连可配；软件驱动关闭；ALT 逐项开 | AES-CBC/CTR/XTS、SHA-1/2 经 `hwcr_init()` 注册；cmocka、`mcu_crypto_test`、`mbedselftest` 在直连开/关两种 KASAN 构建通过；超时恢复实测；CRC32 硬件语义不符；`wifi` 实测 ALT 不缩短连接时间（SHA1 ALT 使 WPA2 慢约 1.6 s），不开。见 [bl616cl-crypto.md](bl616cl-crypto.md) |
+| P09 | AES/SHA `/dev/crypto` 与 mbedTLS ALT；GMAC、PKA、CRC32 | AES/SHA 已验证；GMAC/PKA 延后；CRC32 不支持 | `BL616CL_CRYPTO`、`_AES`、`_SHA` 分别裁剪；bounce 大小与直连可配；软件驱动关闭；ALT 逐项开 | AES-CBC/CTR/XTS、SHA-1/2 经 `hwcr_init()` 注册；cmocka、`mcu_crypto_test`、`mbedselftest` 在直连开/关两种 KASAN 构建通过；超时恢复实测；CRC32 硬件语义不符；`wifi` 实测 ALT 不缩短连接时间（SHA1 ALT 使 WPA2 慢约 1.6 s），AES/SHA ALT 不开；用到 mbedTLS 时默认打开熵源 ALT（读 `/dev/random`）。见 [bl616cl-crypto.md](bl616cl-crypto.md) |
 | P10 | EFUSE/unique ID | 需要适配，P2 | read 与 irreversible program 分离；默认只读 | 明确 NuttX ABI；只读实测、越界/权限；烧写需单独授权和治具 |
 | P11 | SPI flash MTD | 需要适配，P2 | `BL616CL_FLASH_MTD`、partition/fs 独立 | XIP 并发、擦写临界区、cache、边界、掉电恢复；不得覆盖 boot/app/MFG |
 | P12 | I2S、AUADC、AUDAC | 延后 | controller/方向/DMA/channel 分层 | 依赖 DMA/cache、codec/clock/pin；采样率、欠载/溢出、长时音频 |
@@ -639,7 +639,10 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 - 硬件 CRC32 多项式最低位固定为 1、只处理 4 B 整字，不注册 `CRYPTO_CRC32`。
 - `wifi` 逐个开 ALT 各连 20 次：没有 ALT 缩短连接时间；SHA1 ALT 使 WPA2-PSK 中位数
   从 3.25 s 增到 4.89 s（PBKDF2 每次 HMAC 都新建 session），SHA256 ALT 使 WPA3 慢约
-  33 ms，所以 `wifi` 不开 ALT。
+  33 ms，所以 `wifi` 不开 AES、SHA ALT。
+- 用到 mbedTLS 时默认打开 `BL616CL_TRNG` 与 `MBEDTLS_ENTROPY_HARDWARE_ALT`，熵源读
+  `/dev/random`；`wifi` WPA3 连接 20 次中位数 3.340 s，`nsh-peripherals` 的
+  `mbedselftest` 30 个套件全部通过。
 - GMAC（只有 GHASH）、PKA 本期不做。
 
 ### P02 TRNG 实测结论
