@@ -1,0 +1,25 @@
+config BL_WIRELESS_TESTS_PMKSA
+	bool "Wi-Fi PMKSA ioctl test command"
+	default n
+	depends on NETDEV_WIRELESS_IOCTL && BUILTIN
+	---help---
+		Command "pmksa" that issues SIOCGIWPMKSA / SIOCSIWPMKSA with an
+		explicit buffer length, and SIOCSIWENCODEEXT with any key length
+		(wapi psk only takes 8 to 63 characters, so it cannot set a
+		64-digit hex PSK).  Used by tools/bl616cl/pmksa_test.py.
+
+if BL_WIRELESS_TESTS_PMKSA
+
+config BL_WIRELESS_TESTS_PMKSA_PROGNAME
+	string "Program name"
+	default "pmksa"
+
+config BL_WIRELESS_TESTS_PMKSA_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_WIRELESS_TESTS_PMKSA_STACKSIZE
+	int "Task stack size"
+	default 2048
+
+endif
