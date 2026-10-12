@@ -118,9 +118,6 @@ openvela 的 mbedTLS ALT（`apps/crypto/mbedtls/source/*_alt.c`）全部经
 - `ECDSA`、`BIGNUM`：本驱动不支持 PKA；
 - `ENTROPY_HARDWARE`：没有收益。mbedTLS 默认的熵源经 `getrandom()` 读
   `/dev/urandom`，已经由 TRNG 提供；打开后改读 `/dev/random`，还是同一个 TRNG。
-  另外，启用 Wi-Fi 组件时，wl80211 的 NuttX 移植层定义了同名的
-  `mbedtls_hardware_poll()`，链接时会顶替 mbedTLS 自带的实现且不报错；它关中断
-  直接读 TRNG，不经过 `/dev/random` 的锁和健康检查。
 
 **SHA ALT 的 clone 限制**：`mbedtls_sha*_clone()` 在 ALT 里不复制哈希状态，只让两个
 上下文共用同一个内核 session，之后任一方继续 update 或 finish 都会改动另一方。
