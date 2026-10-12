@@ -276,6 +276,7 @@ WEXT disconnect
 
 - Open AP；
 - WPA2-PSK/CCMP；
+- WPA3-SAE：adapter 固定传 PMF capable，AP 的 RSNE 带 SAE 时 wl80211 优先选 SAE，WPA2/WPA3 混合 AP 也走 SAE；
 - 由 `wifi_mgmr` 将频率/信道、SSID、密码/BSSID、PMF 参数转换成 wl80211 connect 参数；
 - 连接完成后由 netdev carrier 状态向 NuttX 网络栈报告链路状态。
 
@@ -603,7 +604,7 @@ macsw 与 wl80211 core 以 `-flto -ffat-lto-objects` 编译，`CONFIG_ALLSYMS` �
 - 断开后 carrier 退出 `RUNNING`，全程无 crash 或重启标记；
 - 同一镜像对 WPA3 AP 连接失败（`wpa3 build sae pkt failed`），原因见 10.2。
 
-两台测试路由器都已改为 WPA3，WPA2 未在当前镜像上复测。
+两台测试路由器都已改为 WPA3。2026-10-12 做 PMKSA 回归（见 5.2）时，`ax86u` 临时切到 WPA2-PSK、WPA2/WPA3 混合和 open，三种模式下连接都成功（混合 AP 走 SAE），之后恢复 WPA3；WPA2 的多轮连接和压力没有复测。
 
 中间镜像：
 
