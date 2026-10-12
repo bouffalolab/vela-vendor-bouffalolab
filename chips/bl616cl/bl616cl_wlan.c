@@ -41,6 +41,7 @@
 #include <nuttx/wdog.h>
 #include <nuttx/wqueue.h>
 #include <nuttx/kthread.h>
+#include <nuttx/spinlock.h>
 
 #if defined(CONFIG_NET_PKT)
 #include <nuttx/net/pkt.h>
@@ -355,11 +356,11 @@ static struct iob_s *wlan_recvframe(struct wlan_priv_s *priv)
   struct iob_s *iob;
   irqstate_t flags;
 
-  flags = up_irq_save();
+  flags = enter_critical_section();
 
   iob = iob_remove_queue(&priv->rxb);
 
-  up_irq_restore(flags);
+  leave_critical_section(flags);
 
   return iob;
 }
@@ -383,10 +384,10 @@ static struct iob_s *wlan_recvframe(struct wlan_priv_s *priv)
 
 static void wlan_rx_slot_free(void *iob)
 {
-  irqstate_t flags = up_irq_save();
+  irqstate_t flags = enter_critical_section();
 
   g_wlan_rx_held--;
-  up_irq_restore(flags);
+  leave_critical_section(flags);
 
   wl80211_mac_rx_free(iob);
 }
@@ -428,9 +429,9 @@ static struct iob_s *wlan_rx_wrap(struct net_driver_s *dev, void *rxhdr,
   iob->io_len    = len - NET_LL_HDRLEN(dev);
   iob->io_pktlen = iob->io_len;
 
-  flags = up_irq_save();
+  flags = enter_critical_section();
   g_wlan_rx_held++;
-  up_irq_restore(flags);
+  leave_critical_section(flags);
 
   return iob;
 }
@@ -693,9 +694,9 @@ static int wlan_rx_done(struct wlan_priv_s *priv,
 
 recv_frame:
 
-  flags = up_irq_save();
+  flags = enter_critical_section();
   ret = iob_tryadd_queue(iob, &priv->rxb);
-  up_irq_restore(flags);
+  leave_critical_section(flags);
 
   if (ret < 0)
     {

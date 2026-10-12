@@ -36,6 +36,7 @@
 #include <nuttx/wqueue.h>
 #include <nuttx/mutex.h>
 #include <nuttx/sched.h>
+#include <nuttx/spinlock.h>
 #include <nuttx/wdog.h>
 #include <nuttx/wireless/wireless.h>
 #include <nuttx/wireless/ieee80211/ieee80211.h>
@@ -1249,7 +1250,7 @@ int bl616cl_wifi_sta_connect(void)
   int ret;
   int retry;
   bool use_pmk;
-  uint32_t flags;
+  irqstate_t flags;
   uint16_t status;
   uint16_t freq = 0;
   uint8_t bssid[18] = {0};
@@ -1271,10 +1272,10 @@ int bl616cl_wifi_sta_connect(void)
    * so a wrong or stale one never outlives a failure.
    */
 
-  flags = up_irq_save();
+  flags = enter_critical_section();
   use_pmk = g_wifi_cfg.pmk_valid;
   g_wifi_cfg.pmk_valid = false;
-  up_irq_restore(flags);
+  leave_critical_section(flags);
 
   snprintf((char *)bssid,
            sizeof(bssid),
@@ -2050,7 +2051,7 @@ int bl616cl_wifi_sta_pmksa(struct iwreq *iwr, bool set)
 
   if (set)
     {
-      uint32_t flag;
+      irqstate_t flag;
 
       for (int i = 0; i < len; i++)
         {
@@ -2061,11 +2062,11 @@ int bl616cl_wifi_sta_pmksa(struct iwreq *iwr, bool set)
             }
         }
 
-      flag = up_irq_save();
+      flag = enter_critical_section();
       memcpy(g_wifi_cfg.pmk, pmk, len);
       g_wifi_cfg.pmk[PWD_MAX_LEN] = 0;
       g_wifi_cfg.pmk_valid = true;
-      up_irq_restore(flag);
+      leave_critical_section(flag);
     }
   else
     {
@@ -2197,9 +2198,9 @@ void bl616_wifi_event_handler(void *arg1, uint32_t arg2)
               bl616cl_wlan_sta_set_linkstatus(true);
             }
 
-          flags = up_irq_save();
+          flags = enter_critical_section();
           g_sta_connected = true;
-          up_irq_restore(flags);
+          leave_critical_section(flags);
 
           wlinfo("[APP] [EVT] CODE_WIFI_ON_CONNECTED\n");
           break;
@@ -2237,9 +2238,9 @@ void bl616_wifi_event_handler(void *arg1, uint32_t arg2)
               bl616cl_wifi_sta_clear_info();
             }
 
-          flags = up_irq_save();
+          flags = enter_critical_section();
           g_sta_connected = false;
-          up_irq_restore(flags);
+          leave_critical_section(flags);
 
 #define wlprint(x, ...) syslog(LOG_INFO, x, ##__VA_ARGS__)
           wlprint("[APP] [EVT] CODE_WIFI_ON_DISCONNECT\n");

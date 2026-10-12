@@ -30,6 +30,7 @@
 
 #include <nuttx/irq.h>
 #include <nuttx/sched.h>
+#include <nuttx/spinlock.h>
 
 #include "riscv_internal.h"
 
@@ -272,14 +273,14 @@ int bl616cl_perfmon_irq_read(struct bl616cl_perfmon_irq_s *irqs,
       nirqs = NR_IRQS;
     }
 
-  flags = up_irq_save();
+  flags = enter_critical_section();
   for (i = 0; i < nirqs; i++)
     {
       irqs[i].count = g_perfmon_irqcount[i];
       irqs[i].cycles = g_perfmon_irqcycles[i];
     }
 
-  up_irq_restore(flags);
+  leave_critical_section(flags);
   return nirqs;
 }
 
@@ -337,10 +338,10 @@ int bl616cl_perfmon_pc_start(uint16_t *hist, uintptr_t base,
       return -EINVAL;
     }
 
-  flags = up_irq_save();
+  flags = enter_critical_section();
   if (g_perfmon_hist != NULL)
     {
-      up_irq_restore(flags);
+      leave_critical_section(flags);
       return -EBUSY;
     }
 
@@ -349,7 +350,7 @@ int bl616cl_perfmon_pc_start(uint16_t *hist, uintptr_t base,
   g_perfmon_shift = shift;
   memset(&g_perfmon_pcstat, 0, sizeof(g_perfmon_pcstat));
   g_perfmon_hist = hist;
-  up_irq_restore(flags);
+  leave_critical_section(flags);
   return OK;
 }
 
@@ -372,9 +373,9 @@ void bl616cl_perfmon_pc_stop(struct bl616cl_perfmon_pcstat_s *stat)
 {
   irqstate_t flags;
 
-  flags = up_irq_save();
+  flags = enter_critical_section();
   g_perfmon_hist = NULL;
   *stat = g_perfmon_pcstat;
-  up_irq_restore(flags);
+  leave_critical_section(flags);
 }
 #endif
