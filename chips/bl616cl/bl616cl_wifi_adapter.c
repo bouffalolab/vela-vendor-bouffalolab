@@ -1813,6 +1813,10 @@ int bl616cl_wifi_sta_scan(struct iwreq *iwr)
           config.bssid_set_flag = 1;
           memcpy(config.bssid, req->bssid.sa_data, MAC_LEN);
         }
+
+      /* Passive scan sends no Probe Request */
+
+      config.passive = (req->scan_type == IW_SCAN_TYPE_PASSIVE);
     }
 
   /* wl80211 stays duration x probe_cnt TUs on each channel; a zero
@@ -1823,8 +1827,6 @@ int bl616cl_wifi_sta_scan(struct iwreq *iwr)
   config.probe_cnt = BL616CL_SCAN_PROBE_CNT;
   config.duration  = BL616CL_SCAN_CHANNEL_TIME * 1000 / TU_DURATION /
                      BL616CL_SCAN_PROBE_CNT;
-
-  /* TODO: passive scan */
 
   wlinfo("Start scan ssid:%s, bssid:%X:%X:%X:%X:%X:%X, channel:%d\n",
          ssid,
