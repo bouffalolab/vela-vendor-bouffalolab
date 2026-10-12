@@ -1182,6 +1182,16 @@ extern const struct llc_snap_short llc_bridge_tunnel_hdr;
 /// Maximum number of channels in a scan request
 #define SCAN_CHANNEL_MAX (MAC_DOMAINCHANNEL_24G_MAX + MAC_DOMAINCHANNEL_5G_MAX)
 
+/// Default active scan time on each channel, in us, when the scan duration is 0.
+/// Probe Requests are spaced by this time divided by the probe count, and at
+/// least 20 ms apart. A requested count may not all be sent before the channel
+/// time ends.
+#define SCAN_ACTIVE_DURATION    110000
+
+/// Default passive scan time on each channel, in us, when the scan duration
+/// is 0 and the channel is passive, NO_IR, or radar.
+#define SCAN_PASSIVE_DURATION   110000
+
 
 /// Array converting a TID to its associated AC
 extern const uint8_t mac_tid2ac[];
@@ -4526,6 +4536,8 @@ void ke_msg_send(void const *param_ptr);
 // macro to function M2H_
 uint32_t inline_hal_machw_time(void);
 bool inline_hal_machw_time_past(uint32_t time);
+/** Return the 48-bit MAC uptime counter as seconds and microseconds. */
+int get_time_SINCE_BOOT(uint32_t *sec, uint32_t *usec);
 uint8_t inline_macsw_mac_tkip_getf(void);
 uint8_t inline_macsw_mac_ccmp_getf(void);
 uint8_t inline_macsw_mac_gcmp_getf(void);
@@ -4536,6 +4548,66 @@ uint8_t export_stats_get_tx_mcs(void);
 uint8_t export_stats_get_rx_mcs(void);
 char* export_stats_get_rx_format(void);
 char* export_stats_get_tx_format(void);
+
+/**
+ * Per-associated-peer 802.11 statistics.
+ *
+ * Counters are reset when a station slot is allocated or explicitly reset.
+ * TX/RX byte lengths exclude the 802.11 FCS. Retry values are the hardware
+ * NUM_MPDU_RETRIES report and are not a complete A-MPDU air-retry count.
+ */
+/** No local role recorded for this peer. */
+#define MACSW_STATION_STATS_ROLE_NONE    0
+/** Peer is the AP associated to the local STA interface. */
+#define MACSW_STATION_STATS_ROLE_STA     1
+/** Peer is a client associated to the local SoftAP interface. */
+#define MACSW_STATION_STATS_ROLE_SOFTAP  2
+
+struct macsw_station_stats {
+    uint64_t tx_bytes;       /**< Original TX MPDU bytes, excluding FCS. */
+    uint64_t rx_bytes;       /**< RX data/management bytes, excluding FCS. */
+    uint64_t rx_beacons;     /**< Number of received Beacon frames. */
+    uint32_t tx_packets;     /**< Original TX MPDUs; software retries excluded. */
+    uint32_t rx_packets;     /**< Received data and management frames. */
+    uint32_t tx_retries;     /**< Hardware NUM_MPDU_RETRIES accumulation. */
+    uint32_t tx_failed;      /**< Final TX confirmations reported as failed. */
+    uint32_t connected_at_sec; /**< Boot second when the slot was allocated. */
+    uint32_t connected_seconds; /**< Filled by the export getters. */
+    uint16_t generation;     /**< Changes on allocation, deletion, or reset. */
+    int8_t signal_dbm;       /**< RSSI from the most recently received frame. */
+    uint8_t valid;           /**< Non-zero while the station slot is active. */
+    uint8_t signal_valid;    /**< Non-zero after at least one RX frame. */
+    uint8_t retries_valid;   /**< Non-zero when tx_retries has a source value. */
+    uint8_t time_valid;      /**< Non-zero when connected_at_sec was recorded. */
+    uint8_t local_role;      /**< MACSW_STATION_STATS_ROLE_*. */
+    uint8_t mac[6];          /**< Peer MAC address. */
+};
+
+/** Store 0 or 1. Does not reset counters, generation, or peer validity. */
+void export_station_stats_set(uint8_t enable);
+/** 1 when per-MPDU updates run, 0 when they are frozen. */
+uint8_t export_station_stats_enabled(void);
+/** Copy the active station-slot statistics into @p out. */
+int export_station_stats_get(uint8_t sta_idx, struct macsw_station_stats *out);
+/**
+ * Copy the active slot whose peer MAC matches @p mac.
+ * @p mac is 6 bytes.
+ */
+int export_station_stats_get_mac(const uint8_t mac[6],
+                                struct macsw_station_stats *out);
+/**
+ * Walk active slots. Pass @p *cursor as 0xff to start. On success @p *cursor
+ * is the slot index and @p out receives that slot.
+ */
+int export_station_stats_next(uint8_t *cursor, struct macsw_station_stats *out);
+/**
+ * Reset one active station slot, or all active slots when @p sta_idx is 0xff.
+ * A single slot is left unchanged unless @p generation still matches.
+ * Peer MAC, local role, and connected time are kept.
+ */
+int export_station_stats_reset(uint8_t sta_idx, uint16_t generation);
+/** Reset counters for the active peer with this MAC. */
+int export_station_stats_reset_mac(const uint8_t mac[6]);
 
 
 int8_t export_hal_desc_get_rssi(void *rx_vec_1, int8_t *rx_rssi);

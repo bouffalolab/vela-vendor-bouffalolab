@@ -13,3 +13,8 @@
 #define CFG_REORD_BUF 12
 
 #define CONFIG_FHOST_RX_BUF_SECTION ".psram_noinit"
+
+/* Only wifi_eth_bridge selects this profile. co_stats.c sets the
+ * link-time station-stats constant to 1 when this macro is defined.
+ */
+#define CONFIG_MACSW_STATION_STATS 1

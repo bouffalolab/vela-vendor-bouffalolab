@@ -2,7 +2,7 @@ component: wl80211
 chip: bl616cl
 profile: vela_bl616cl
 public: e0be2eeba2c8c95c1d1ed76dc82412d1c2cb9dee
-private: 7056a35fba96164ccea5036ce45e0c2e6f555de3
-macsw: d42f413a4e4bb67ce88cc56fbf7b274a7fbe119d
+private: 8aed1c0eaf3dab4e1aa2c6cccd7dc761074c47f2
+macsw: 3f288262a21c367a61536c0f49a812340b9fe005
 toolchain: riscv-none-elf-gcc (GCC) 13.4.0
 objects: fat LTO, -fshort-enums, early LTO debug info only
