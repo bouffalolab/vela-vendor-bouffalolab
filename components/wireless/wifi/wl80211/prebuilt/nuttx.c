@@ -35,14 +35,12 @@
 #include <nuttx/mm/iob.h>
 #include <nuttx/irq.h>
 #include <nuttx/spinlock.h>
-#include "mbedtls/mbedtls_config.h"
 #include <nuttx/net/ip.h>
 #include <nuttx/net/tcp.h>
 #include <nuttx/net/udp.h>
 
 #include "wl80211.h"
 #include "macsw/wl80211_mac.h"
-#include <bflb_sec_trng.h>
 
 /* DEFINES
  **************************************************************************************** */
@@ -847,35 +845,6 @@ int wl80211_lwip_init(void)
 }
 
 /* SYSTEM API IMPLEMENTATIONS */
-
-/**
- * ****************************************************************************************
- * @brief Hardware entropy poll function for mbedTLS
- * @param data       Pointer to user data (not used)
- * @param output     Pointer to output
- * @param len        Length of output
- * @param olen       Pointer to output length
- * @return 0 on success
- * ****************************************************************************************
- */
-#if defined(MBEDTLS_ENTROPY_C)
-#if defined(MBEDTLS_ENTROPY_HARDWARE_ALT)
-int mbedtls_hardware_poll(void *data,
-                          unsigned char *output,
-                          size_t len,
-                          size_t *olen)
-{
-  irqstate_t flags;
-  flags = enter_critical_section();
-  bflb_trng_readlen(output, len);
-  leave_critical_section(flags);
-
-  *olen = len;
-
-  return (0);
-}
-#endif
-#endif /* MBEDTLS_ENTROPY_C */
 
 /**
  ****************************************************************************************
