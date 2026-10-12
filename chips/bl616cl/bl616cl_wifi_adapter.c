@@ -69,7 +69,8 @@
  ****************************************************************************/
 
 #define BL616CL_FW_TASK_NAME           "wifi_fw"
-#define BL616CL_SCAN_DURATION          (100)
+#define BL616CL_SCAN_CHANNEL_TIME      (250) /* Milliseconds */
+#define BL616CL_SCAN_PROBE_CNT         (10)
 #define BL616CL_WLAN_CONNECT_TIMEOUT   (20) /* Seconds */
 #define BL616CL_WLAN_PS_ACTIVETIME     (50) /* Milliseconds */
 #define WIFI_TASK_STACK_SIZE           (6 * 1024)
@@ -1814,11 +1815,16 @@ int bl616cl_wifi_sta_scan(struct iwreq *iwr)
         }
     }
 
-  config.duration = BL616CL_SCAN_DURATION;
+  /* wl80211 stays duration x probe_cnt TUs on each channel; a zero
+   * probe_cnt makes that 0 and falls back to the macsw default.  Round the
+   * probe interval down so the channel time does not exceed the setting.
+   */
+
+  config.probe_cnt = BL616CL_SCAN_PROBE_CNT;
+  config.duration  = BL616CL_SCAN_CHANNEL_TIME * 1000 / TU_DURATION /
+                     BL616CL_SCAN_PROBE_CNT;
 
   /* TODO: passive scan */
-
-  /* TODO: probt cnt */
 
   wlinfo("Start scan ssid:%s, bssid:%X:%X:%X:%X:%X:%X, channel:%d\n",
          ssid,
