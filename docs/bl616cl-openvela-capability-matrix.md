@@ -641,7 +641,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
   从 3.25 s 增到 4.89 s（PBKDF2 每次 HMAC 都新建 session），SHA256 ALT 使 WPA3 慢约
   33 ms，所以 `wifi` 不开 AES、SHA ALT。
 - 用到 mbedTLS 时默认打开 `BL616CL_TRNG` 与 `MBEDTLS_ENTROPY_HARDWARE_ALT`，熵源读
-  `/dev/random`；`wifi` WPA3 连接 20 次中位数 3.340 s，`nsh-peripherals` 的
+  `/dev/random`；`wifi` WPA3 连接时间不受影响，`nsh-peripherals` 的
   `mbedselftest` 30 个套件全部通过。
 - GMAC（只有 GHASH）、PKA 本期不做。
 

@@ -155,6 +155,9 @@ ALT 不经过 `/dev/crypto`，不需要打开 crypto 驱动。TRNG 健康检查�
 1.6 s；SHA256 ALT 让 WPA3 慢约 33 ms。所以 `wifi` 不开 AES、SHA ALT。默认打开熵源 ALT
 后，`wifi`（不开 crypto 驱动）WPA3 连接 20 次的中位数为 3.340 s，连接时间不受影响。
 
+以上数据在 macsw 扫描时每个信道默认停留 220 ms 时测得。该默认值改为 110 ms 后，连接
+前的扫描少用约 1.4 s，同一 AP 的 WPA3 连接中位数为 1.906 s；表中各项没有用新值重测。
+
 ## 测试
 
 `nsh-peripherals` 打开了以下测试：
