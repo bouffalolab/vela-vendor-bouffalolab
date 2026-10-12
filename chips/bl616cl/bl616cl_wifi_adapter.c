@@ -517,9 +517,9 @@ static int format_scan_result_to_wapi(struct iwreq *req)
   /* More compact arrangement */
 
   event_buff_len =
-    result_cnt * (offsetof(struct iw_event, u) * 4 + sizeof(struct sockaddr) +
+    result_cnt * (offsetof(struct iw_event, u) * 5 + sizeof(struct sockaddr) +
                   sizeof(struct iw_freq) + sizeof(struct iw_quality) +
-                  sizeof(struct iw_point) + IW_ESSID_MAX_SIZE);
+                  sizeof(struct iw_point) * 2 + IW_ESSID_MAX_SIZE);
 
   if (req->u.data.length == 0 || req->u.data.length < event_buff_len)
     {
@@ -581,6 +581,21 @@ static int format_scan_result_to_wapi(struct iwreq *req)
       iwe->cmd = IWEVQUAL;
       iwe->u.qual.level = scan->rssi;
       iwe->u.qual.updated = IW_QUAL_DBM;
+
+      /* Encrypted or not, as wifi_mgmr tells open by an empty key_mgmt.
+       * WEP has no key_mgmt either and shows as open: wl80211 does not keep
+       * the privacy bit.
+       */
+
+      iwe = (struct iw_event *)((uintptr_t)iwe + iwe->len);
+      DEBUGASSERT(((uintptr_t)iwe & 0x3) == 0);
+      iwe->len = offsetof(struct iw_event, u) + sizeof(struct iw_point);
+      iwe->cmd = SIOCGIWENCODE;
+      iwe->u.data.pointer = NULL;
+      iwe->u.data.length = 0;
+      iwe->u.data.flags = scan->key_mgmt != 0 ?
+                          IW_ENCODE_ENABLED | IW_ENCODE_NOKEY :
+                          IW_ENCODE_DISABLED;
 
       iwe = (struct iw_event *)((uintptr_t)iwe + iwe->len);
       DEBUGASSERT(((uintptr_t)iwe & 0x3) == 0);

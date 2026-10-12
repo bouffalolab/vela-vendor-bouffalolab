@@ -270,7 +270,7 @@ WEXT disconnect
   -> netdev_carrier_off()
 ```
 
-扫描结果在 adapter 中转换为 NuttX/WAPI 所需的 SSID、BSSID、信道、RSSI、认证和 cipher 信息。`1829e1e` 补齐了 BL616CL 的 WEXT scan result 路径和相关 NuttX RTOS 辅助接口。
+扫描结果在 adapter 中转换为 NuttX/WAPI 所需的 BSSID、信道、RSSI、SSID 和 `SIOCGIWENCODE` 加密标志（加密为 `IW_ENCODE_ENABLED | IW_ENCODE_NOKEY`，即 `wapi scan` 的 `0800`；open 为 `IW_ENCODE_DISABLED`，即 `8000`）。wl80211 不保留 privacy 位，WEP AP 显示为 open；WEXT 没有表示 WPA2/WPA3 的字段，扫描结果不带 AKM。`1829e1e` 补齐了 BL616CL 的 WEXT scan result 路径和相关 NuttX RTOS 辅助接口。
 
 连接流程支持：
 
