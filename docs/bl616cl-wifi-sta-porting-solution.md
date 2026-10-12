@@ -279,6 +279,13 @@ WEXT disconnect
 - 由 `wifi_mgmr` 将频率/信道、SSID、密码/BSSID、PMF 参数转换成 wl80211 connect 参数；
 - 连接完成后由 netdev carrier 状态向 NuttX 网络栈报告链路状态。
 
+`SIOCSIWPMKSA` / `SIOCGIWPMKSA` 的 PMK 都是 64 位 hex，长度不对或 set 的内容不是 hex 时返回 `-EINVAL`：
+
+- set 保存的 PMK 只给下一次连接尝试用：这次连接用它代替口令，省掉 4096 轮 PBKDF2（设备上约 0.3 s），无论成败随即作废；连接期间 set 的 PMK 在断开时作废。没有单独的清除接口。
+- AP 支持 SAE 时 STA 用 SAE（WPA2/WPA3 混合 AP 也是），SAE 不能用 PMK，这次连接认证失败，应用改用口令重连。路由器从 WPA2 改成 WPA3 后，缓存的 PMK 会这样失败一次。
+- get 返回当前连接用的 PMK：64 位 hex 密钥原样返回，口令则返回 PBKDF2-SHA1(口令, SSID)。只有 PSK 连接有这样的 PMK：未连接返回 `-ENOTCONN`，open、SAE 连接返回 `-ENOSYS`。wl80211 报告的 security 对 WPA2 和 WPA3 都是 RSN，adapter 从本次关联请求的 RSNE 读取实际 AKM。应用只缓存 get 成功返回的 PMK。
+- 测试命令 `pmksa`（`BL_WIRELESS_TESTS_PMKSA`）和 `tools/bl616cl/pmksa_test.py` 覆盖以上流程，AP 的 WPA2、WPA3-SAE、混合、open 四种模式各跑一遍。
+
 ### 5.3 数据面
 
 数据面采用直接 NuttX `net_driver_s` 集成，不再额外引入 lwIP netif：

@@ -73,6 +73,7 @@
 #define BL616CL_SCAN_PROBE_CNT         (10)
 #define BL616CL_WLAN_CONNECT_TIMEOUT   (20) /* Seconds */
 #define BL616CL_WLAN_PS_ACTIVETIME     (50) /* Milliseconds */
+#define BL616CL_PMK_ITERATIONS         (4096) /* PBKDF2 rounds, 802.11i PSK */
 #define WIFI_TASK_STACK_SIZE           (6 * 1024)
 
 /****************************************************************************
@@ -710,6 +711,53 @@ static inline void bl616cl_wifi_sta_set_lowrate_connect(bool lowrate_connect)
 }
 
 /****************************************************************************
+ * Name: bl616cl_wifi_sta_uses_psk
+ *
+ * Description:
+ *   Check whether the current connection uses a PSK AKM, the only kind
+ *   whose PMK comes from the key.  The security wl80211 reports is a
+ *   WPA_PROTO_* bitmask, RSN for both WPA2 and WPA3, so read the AKM from
+ *   the RSNE or WPA IE of our association request: it lists only the AKM
+ *   in use.
+ *
+ * Input Parameters:
+ *   security - wifi_mgmr_connect_ind_stat_info_t.security of the
+ *              connection.
+ *
+ * Returned Value:
+ *   true for PSK and PSK-SHA256; false for open, WEP, SAE and others.
+ *
+ ****************************************************************************/
+
+static bool bl616cl_wifi_sta_uses_psk(uint8_t security)
+{
+  wifi_wpa_ie_t ie;
+  uint8_t *assoc_ie;
+  uint16_t assoc_ie_len;
+
+  /* Open and WEP report 0 and leave the association IE of an older
+   * connection behind.
+   */
+
+  if (security == 0)
+    {
+      return false;
+    }
+
+  /* Parse the first element only; more IEs may follow it */
+
+  wl80211_supplicant_get_assoc_ie(&assoc_ie, &assoc_ie_len);
+  if (assoc_ie == NULL || assoc_ie_len < 2 ||
+      assoc_ie[1] + 2 > assoc_ie_len ||
+      wpa_parse_wpa_ie_wrapper(assoc_ie, assoc_ie[1] + 2, &ie) != 0)
+    {
+      return false;
+    }
+
+  return (ie.key_mgmt & (WPA_KEY_MGMT_PSK | WPA_KEY_MGMT_PSK_SHA256)) != 0;
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -1200,6 +1248,8 @@ int bl616cl_wifi_sta_connect(void)
 {
   int ret;
   int retry;
+  bool use_pmk;
+  uint32_t flags;
   uint16_t status;
   uint16_t freq = 0;
   uint8_t bssid[18] = {0};
@@ -1216,6 +1266,15 @@ int bl616cl_wifi_sta_connect(void)
       adapter_wifi_lock(false);
       return OK;
     }
+
+  /* A PMK from SIOCSIWPMKSA serves this attempt only, whatever its result,
+   * so a wrong or stale one never outlives a failure.
+   */
+
+  flags = up_irq_save();
+  use_pmk = g_wifi_cfg.pmk_valid;
+  g_wifi_cfg.pmk_valid = false;
+  up_irq_restore(flags);
 
   snprintf((char *)bssid,
            sizeof(bssid),
@@ -1282,8 +1341,8 @@ int bl616cl_wifi_sta_connect(void)
         memset(&params, 0, sizeof(params));
         memcpy(params.ssid, g_wifi_cfg.ssid, g_wifi_cfg.ssid_len);
         memcpy(params.key,
-               g_wifi_cfg.pmk_valid ? g_wifi_cfg.pmk : g_wifi_cfg.pwd,
-               g_wifi_cfg.pmk_valid ? MGMR_KEY_LEN : g_wifi_cfg.pwd_len);
+               use_pmk ? g_wifi_cfg.pmk : g_wifi_cfg.pwd,
+               use_pmk ? MGMR_KEY_LEN : g_wifi_cfg.pwd_len);
         memcpy(params.bssid_str, bssid_str, sizeof(bssid_str));
         params.freq1 = freq;
         params.pmf_cfg = 1;
@@ -1950,9 +2009,19 @@ int bl616cl_wifi_sta_powersave(struct iwreq *iwr, bool set)
  * Name: bl616cl_wifi_sta_pmksa
  *
  * Description:
- *   Set/Get PMKSA cache.  Setting stores the given PMK.  Getting derives
- *   the PMK from the saved password and SSID with PBKDF2-SHA1 and returns
- *   it as a hex string; only WPA-PSK and WPA2-PSK connections support it.
+ *   Set/Get the PMK as 64 hex digits.
+ *
+ *   Set stores a PMK for the next connection attempt only: the attempt
+ *   uses it in place of the passphrase, skipping the key derivation, and
+ *   drops it whatever the result.  A PMK set while connected is dropped
+ *   at the disconnect.  An AP that supports SAE gets SAE, which cannot
+ *   use a PMK, so that attempt fails and the caller connects again with
+ *   the passphrase.
+ *
+ *   Get returns the PMK of the current connection, from the key that
+ *   connection used: a 64-digit hex key is the PMK itself, a passphrase
+ *   gives PBKDF2-SHA1(passphrase, SSID).  Only PSK connections have such
+ *   a PMK, so callers cache only what get returns.
  *
  * Input Parameters:
  *   iwr - The argument of the ioctl cmd
@@ -1960,9 +2029,9 @@ int bl616cl_wifi_sta_powersave(struct iwreq *iwr, bool set)
  *
  * Returned Value:
  *   Zero (OK) on success; a negated errno value on failure.
- *   -EINVAL if the PMK length is not PWD_MAX_LEN; -EIO if no password is
- *   set or the key derivation fails; -ENOSYS if the security mode is not
- *   supported.
+ *   -EINVAL if the length is not PWD_MAX_LEN or a set PMK is not hex;
+ *   -ENOTCONN if get finds no connection; -ENOSYS if the connection does
+ *   not use PSK; -EIO if the key derivation fails.
  *
  ****************************************************************************/
 
@@ -1981,7 +2050,18 @@ int bl616cl_wifi_sta_pmksa(struct iwreq *iwr, bool set)
 
   if (set)
     {
-      uint32_t flag = up_irq_save();
+      uint32_t flag;
+
+      for (int i = 0; i < len; i++)
+        {
+          if (is_ascii_hex_char(pmk[i]) < 0)
+            {
+              wlerr("ERROR: PMK is not hex string\n");
+              return -EINVAL;
+            }
+        }
+
+      flag = up_irq_save();
       memcpy(g_wifi_cfg.pmk, pmk, len);
       g_wifi_cfg.pmk[PWD_MAX_LEN] = 0;
       g_wifi_cfg.pmk_valid = true;
@@ -1989,45 +2069,43 @@ int bl616cl_wifi_sta_pmksa(struct iwreq *iwr, bool set)
     }
   else
     {
-      /* Check if password exists */
+      wifi_mgmr_connect_ind_stat_info_t conn_info;
 
-      if (g_wifi_cfg.pwd_len > 0)
+      /* The call does not terminate an empty SSID or key */
+
+      memset(&conn_info, 0, sizeof(conn_info));
+      if (wifi_mgmr_sta_connect_ind_stat_get(&conn_info) < 0)
         {
-          /* Only support WPA2-PSK and WPA-PSK */
-
-          wifi_mgmr_connect_ind_stat_info_t conn_info;
-          wifi_mgmr_sta_connect_ind_stat_get(&conn_info);
-          if (conn_info.security == WIFI_EVENT_BEACON_IND_AUTH_WPA_PSK ||
-              conn_info.security == WIFI_EVENT_BEACON_IND_AUTH_WPA2_PSK ||
-              conn_info.security == WIFI_EVENT_BEACON_IND_AUTH_WPA_WPA2_PSK)
-
-            {
-              ret = pbkdf2_sha1(g_wifi_cfg.pwd,
-                                g_wifi_cfg.ssid,
-                                g_wifi_cfg.ssid_len,
-                                4096,
-                                result,
-                                32);
-              if (ret != 0)
-                {
-                  wlerr("ERROR: Failed to get PMKSA cache\n");
-                  return -EIO;
-                }
-
-              bin2hex(result, 32, (char *)pmk, PWD_MAX_LEN);
-            }
-          else
-            {
-              wlerr("ERROR: Unsupported security mode %d\n",
-                    conn_info.security);
-              return -ENOSYS;
-            }
+          return -ENOTCONN;
         }
-      else
+
+      if (!bl616cl_wifi_sta_uses_psk(conn_info.security))
         {
-          wlerr("ERROR: Password is not set\n");
+          wlerr("ERROR: Connection does not use PSK\n");
+          return -ENOSYS;
+        }
+
+      /* Same rule as the supplicant: 64 hex digits are the PMK itself */
+
+      if (strlen(conn_info.passphr) == PWD_MAX_LEN)
+        {
+          memcpy(pmk, conn_info.passphr, PWD_MAX_LEN);
+          return OK;
+        }
+
+      ret = pbkdf2_sha1(conn_info.passphr,
+                        conn_info.ssid,
+                        strlen(conn_info.ssid),
+                        BL616CL_PMK_ITERATIONS,
+                        result,
+                        sizeof(result));
+      if (ret != 0)
+        {
+          wlerr("ERROR: Failed to derive PMK\n");
           return -EIO;
         }
+
+      bin2hex(result, sizeof(result), (char *)pmk, PWD_MAX_LEN);
     }
 
   return OK;

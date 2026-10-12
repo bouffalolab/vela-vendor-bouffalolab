@@ -3,9 +3,13 @@
 """PMKSA ioctl test for the BL616CL Wi-Fi STA driver.
 
 Design under test (SIOCSIWPMKSA / SIOCGIWPMKSA, PMK as 64 hex digits):
-  set  stores a PMK; the next connection uses it and skips deriving the
-       PMK from the passphrase.
-  get  returns the PMK of the current connection.
+  set  stores a PMK for the next connection attempt only; the attempt
+       uses it and skips deriving the PMK from the passphrase.
+  get  returns the PMK of the current connection; only PSK connections
+       have one.
+The DUT joins an AP that supports SAE with SAE, which cannot use a PMK:
+such an attempt fails and the application connects again with the
+passphrase.
 
 The image needs CONFIG_BL_WIRELESS_TESTS_PMKSA (command "pmksa"): copy
 configs/wifi to configs/tmp-* and add the option.  The caller sets up the
@@ -351,64 +355,86 @@ def w8(d, pmk, wrong):
     return [must_fail_not_connected(d.get()[0])]
 
 
-# --- WPA3-SAE only --------------------------------------------------------
+# --- PMK is one-shot even when the attempt fails early -------------------
 
-@case("S1", ("sae",), "SAE connection: get must not return a PSK PMK")
-def s1(d, pmk, wrong):
+@case("W9", ("wpa2",), "a PMK does not outlive an attempt that fails "
+      "before associating")
+def w9(d, pmk, wrong):
+    d.set(wrong)
+    d.key("z" * 64)
+    ok, sec = d.connect()
+    if ok:
+        return [("FAIL", "connected with a non-hex 64-character key")]
+    d.psk()
+    ok, sec = d.connect()
+    return [("PASS", f"passphrase connects ({sec:.1f} s)") if ok else
+            ("FAIL", f"passphrase connect failed ({sec:.1f} s): the wrong "
+             f"PMK survived the early failure")]
+
+
+# --- WPA3-SAE only, and WPA2/WPA3 transition (the DUT picks SAE) ----------
+
+def sae_get_fails(d, pmk):
     d.psk()
     ok, sec = d.connect()
     if not ok:
-        return [("FAIL", f"SAE connect failed ({sec:.1f} s)")]
+        return [("FAIL", f"connect failed ({sec:.1f} s)")]
     ret, got, _ = d.get()
     if ret == 0:
         return [("FAIL", f"get returned {short(got)} "
                  f"({'= PBKDF2 PMK' if got == pmk else 'unknown'}); "
                  f"SAE does not use it")]
-    st = "PASS" if ret == -ENOSYS else "NOTE"
-    return [(st, f"get {errname(ret)}")]
+    return [("PASS" if ret == -ENOSYS else "NOTE", f"get {errname(ret)}")]
 
 
-@case("S2", ("sae",), "SAE AP with set PMK and passphrase")
-def s2(d, pmk, wrong):
+def sae_pmk_then_passphrase(d, pmk, with_passphrase):
+    """A set PMK fails on SAE; the application retries with the passphrase."""
+    if with_passphrase:
+        d.psk()
+    d.set(pmk)
+    ok, sec = d.connect()
+    res = [("NOTE", f"connect with set PMK {'ok' if ok else 'failed'} "
+            f"({sec:.1f} s)")]
+    if ok:
+        return res
     d.psk()
-    d.set(pmk)
     ok, sec = d.connect()
-    return [("NOTE", f"connect {'ok' if ok else 'failed'} ({sec:.1f} s)")]
+    res.append(("PASS", f"retry with the passphrase connects ({sec:.1f} s)")
+               if ok else
+               ("FAIL", f"retry with the passphrase failed ({sec:.1f} s)"))
+    return res
 
 
-@case("S3", ("sae",), "SAE AP with set PMK only")
+@case("S1", ("sae",), "SAE connection: get must not return a PMK")
+def s1(d, pmk, wrong):
+    return sae_get_fails(d, pmk)
+
+
+@case("S2", ("sae",), "SAE AP, set PMK and passphrase, then passphrase")
+def s2(d, pmk, wrong):
+    return sae_pmk_then_passphrase(d, pmk, True)
+
+
+@case("S3", ("sae",), "SAE AP, set PMK only, then passphrase")
 def s3(d, pmk, wrong):
-    d.set(pmk)
-    ok, sec = d.connect()
-    return [("NOTE", f"connect {'ok' if ok else 'failed'} ({sec:.1f} s)")]
+    return sae_pmk_then_passphrase(d, pmk, False)
 
 
-# --- WPA2/WPA3 transition -------------------------------------------------
-
-def mixed(d, pmk, setup):
-    setup()
-    ok, sec = d.connect()
-    if not ok:
-        return [("NOTE", f"connect failed ({sec:.1f} s)")]
-    ret, got, _ = d.get()
-    what = ("= PBKDF2 PMK" if got == pmk else short(got)) if ret == 0 \
-        else errname(ret)
-    return [("NOTE", f"connect ok ({sec:.1f} s); get {what}")]
-
-
-@case("M1", ("mixed",), "transition AP, passphrase")
+@case("M1", ("mixed",), "transition AP: DUT uses SAE, get must not "
+      "return a PMK")
 def m1(d, pmk, wrong):
-    return mixed(d, pmk, lambda: d.psk())
+    return sae_get_fails(d, pmk)
 
 
-@case("M2", ("mixed",), "transition AP, set PMK only")
+@case("M2", ("mixed",), "transition AP, set PMK only, then passphrase")
 def m2(d, pmk, wrong):
-    return mixed(d, pmk, lambda: d.set(pmk))
+    return sae_pmk_then_passphrase(d, pmk, False)
 
 
-@case("M3", ("mixed",), "transition AP, set PMK and passphrase")
+@case("M3", ("mixed",), "transition AP, set PMK and passphrase, then "
+      "passphrase")
 def m3(d, pmk, wrong):
-    return mixed(d, pmk, lambda: (d.psk(), d.set(pmk)))
+    return sae_pmk_then_passphrase(d, pmk, True)
 
 
 # --- Open -----------------------------------------------------------------
@@ -429,6 +455,20 @@ def o2(d, pmk, wrong):
     d.set(pmk)
     ok, sec = d.connect()
     return [("NOTE", f"connect {'ok' if ok else 'failed'} ({sec:.1f} s)")]
+
+
+# --- Scan ----------------------------------------------------------------
+
+@case("E1", ("wpa2", "sae", "mixed", "open"), "scan reports encryption")
+def e1(d, pmk, wrong):
+    want = "8000" if d.mode == "open" else "0800"
+    out = d.con.cmd("wapi scan wlan0", 30)
+    rows = [ln.split("\t") for ln in out.splitlines() if ln.count("\t") == 4]
+    got = [r[3] for r in rows if r[4].strip() == d.ssid]
+    if not got:
+        return [("FAIL", f"{d.ssid} not in the scan result")]
+    return [("PASS" if got[0] == want else "FAIL",
+             f"encode {got[0]}, want {want}")]
 
 
 def main():
@@ -457,6 +497,7 @@ def main():
     results = open(args.out / "results.txt", "a")
     con = Console(args.port, log, [passphrase])
     d = Dut(con, args.ssid, passphrase)
+    d.mode = args.mode
     d.wait_prompt()
 
     for cid, _, title, fn in todo:
