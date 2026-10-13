@@ -8,8 +8,8 @@ PSRAM 作为 NuttX default heap 的第二个 region 使用，普通 `malloc()` �
 ## 构建与运行
 
 ```sh
-vendor/bouffalolab/vela build ai-m64l-32s-kit/nsh-peripherals -j14
-vendor/bouffalolab/vela flash ai-m64l-32s-kit/nsh-peripherals --port /dev/ttyUSB2
+vendor/bouffalolab/vela build ai-m64p-32s-kit/nsh-peripherals -j14
+vendor/bouffalolab/vela flash ai-m64p-32s-kit/nsh-peripherals --port /dev/ttyUSB2
 ```
 
 串口为 2000000 baud；进入 NSH 后执行 `mcu_psram_test`，最终应输出 `PSRAM PASS`。
@@ -34,7 +34,7 @@ NSH 可能先返回提示符，再输出异步 app 的结果，验收应等待�
 ## 范围与限制
 
 驱动按 ID 识别 4/8/16 MiB，32 MiB 超出当前 PMP 窗口，明确拒绝。
-当前实机验证为 Ai-M64L-32S-Kit 的无出厂 trim、4 MiB 模组；其他容量只有代码支持。
+当前实机验证为 Ai-M64P-32S-Kit 的无出厂 trim、4 MiB 模组；其他容量只有代码支持。
 启动校准在 heap 注册前改写 PSRAM 前 4 MiB，不支持保留 PSRAM 内容的启动方式。
 本次不支持 PSRAM 静态代码/数据段、低功耗保存恢复，也不声称完成温压角落或长时稳定性认证。
 控制器源时钟为 WIFIPLL 320 MHz，控制器内部分频不能忽略，不将其称为外部总线频率。

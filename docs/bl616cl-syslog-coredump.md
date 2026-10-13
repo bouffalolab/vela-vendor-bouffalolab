@@ -111,9 +111,9 @@ IRQ 或 RISC-V exception 才进入系统 panic。
 
 ```sh
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 完成判据：
@@ -128,9 +128,9 @@ vendor/bouffalolab/vela build \
 
 ```sh
 grep -E 'CONFIG_(COREDUMP|BOARD_COREDUMP|BOARD_MEMORY_RANGE|SYSLOG_COLOR|BL_OS_FEATURE_TESTS_SYSLOG)' \
-  cmake_out/ai-m64l-32s-kit_nsh/.config
+  cmake_out/ai-m64p-32s-kit_nsh/.config
 prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf-nm \
-  cmake_out/ai-m64l-32s-kit_nsh/final_nuttx | \
+  cmake_out/ai-m64p-32s-kit_nsh/final_nuttx | \
   grep -E 'coredump|syslog_coredump_test'
 ```
 
@@ -144,13 +144,13 @@ clean configure 复现同一负测配置：
 
 ```sh
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --enable BL_OS_FEATURE_TESTS_SYSLOG_COREDUMP
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 运行负测前冻结该次 `final_nuttx`、`.config`、`nuttx.raw.bin`、`nuttx.bin` 和
@@ -161,13 +161,13 @@ vendor/bouffalolab/vela build \
 
 ```sh
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --disable BL_OS_FEATURE_TESTS_SYSLOG_COREDUMP
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 ## 固件运行测试

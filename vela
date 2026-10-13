@@ -135,9 +135,9 @@ COMMANDS = {
     "build": Command(
         name="build",
         desc="Configure and build a board",
-        example="ai-m64l-32s-kit/nsh",
+        example="ai-m64p-32s-kit/nsh",
         detail="Configure a board with CMake, then compile it with Ninja.",
-        args_help="Board target, e.g. ai-m64l-32s-kit/nsh (see vela build --list)",
+        args_help="Board target, e.g. ai-m64p-32s-kit/nsh (see vela build --list)",
         flags=(
             Flag("--jobs", "Parallel jobs", short="-j", takes_value=True,
                  value_name="N", default=default_jobs()),
@@ -149,10 +149,10 @@ COMMANDS = {
     "menuconfig": Command(
         name="menuconfig",
         desc="Open the Kconfig menu, write back to defconfig",
-        example="ai-m64l-32s-kit/nsh",
+        example="ai-m64p-32s-kit/nsh",
         detail="Open the Kconfig menu for a board. When the configuration "
                "changes, it is written back to the board's defconfig.",
-        args_help="Board target, e.g. ai-m64l-32s-kit/nsh (see vela menuconfig --list)",
+        args_help="Board target, e.g. ai-m64p-32s-kit/nsh (see vela menuconfig --list)",
         flags=(
             Flag("--no-savedefconfig", "Exit without writing back to the board defconfig"),
             Flag("--list", "List available board configs and exit"),
@@ -161,19 +161,19 @@ COMMANDS = {
     "savedefconfig": Command(
         name="savedefconfig",
         desc="Write current .config back to the board defconfig",
-        example="ai-m64l-32s-kit/nsh",
+        example="ai-m64p-32s-kit/nsh",
         detail="Expand the build directory's .config and save it as the "
                "board's minimal defconfig.",
-        args_help="Board target, e.g. ai-m64l-32s-kit/nsh (see vela savedefconfig --list)",
+        args_help="Board target, e.g. ai-m64p-32s-kit/nsh (see vela savedefconfig --list)",
         flags=(Flag("--list", "List available board configs and exit"),),
     ),
     "clean": Command(
         name="clean",
         desc="Remove a board's build output (or --all)",
-        example="ai-m64l-32s-kit/nsh",
+        example="ai-m64p-32s-kit/nsh",
         detail="Remove a board's cmake_out directory, or every output "
                "directory with --all.",
-        args_help="Board target, e.g. ai-m64l-32s-kit/nsh (see vela clean --list)",
+        args_help="Board target, e.g. ai-m64p-32s-kit/nsh (see vela clean --list)",
         flags=(
             Flag("--all", "Remove every build output directory under cmake_out"),
             Flag("--list", "List available board configs and exit"),

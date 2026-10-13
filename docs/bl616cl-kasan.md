@@ -171,18 +171,18 @@ source build/envsetup.sh
 
 ```sh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --disable TESTING_KASAN \
   --disable MM_KASAN
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 关闭态完成判据：clean build 成功；`.config` 不含已启用的 `MM_KASAN*`；没有
@@ -193,7 +193,7 @@ KASAN runtime 或插桩符号。
 
 ```sh
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --enable MM_KASAN \
   --enable MM_KASAN_GENERIC \
   --enable MM_KASAN_INSTRUMENT_ALL \
@@ -206,12 +206,12 @@ prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
   --disable MM_KASAN_DISABLE_READ_PANIC \
   --disable MM_KASAN_DISABLE_WRITE_PANIC \
   --disable TESTING_KASAN
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 ### 3. 构建临时测试固件
@@ -220,34 +220,34 @@ vendor/bouffalolab/vela build \
 
 ```sh
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --enable TESTING_KASAN
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 测试结束后必须恢复正式产品并再次 clean build：
 
 ```sh
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --disable TESTING_KASAN
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 ## 静态制品核查
 
 ```sh
-OUT=cmake_out/ai-m64l-32s-kit_nsh
+OUT=cmake_out/ai-m64p-32s-kit_nsh
 TOOL=prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf
 
 grep -E '^CONFIG_MM_KASAN|^# CONFIG_MM_KASAN|^CONFIG_TESTING_KASAN|^# CONFIG_TESTING_KASAN' \
@@ -275,7 +275,7 @@ sha256sum "$OUT/nuttx.bin"
 正式产品额外执行裁剪门禁：
 
 ```sh
-OUT=cmake_out/ai-m64l-32s-kit_nsh
+OUT=cmake_out/ai-m64p-32s-kit_nsh
 test ! -e "$OUT/apps/testing/mm/kasantest/libapps_kasantest.a"
 ! strings "$OUT/final_nuttx" | grep -E 'KASANTEST|kasantest'
 ```
@@ -293,7 +293,7 @@ test ! -e "$OUT/apps/testing/mm/kasantest/libapps_kasantest.a"
 
 ## USB2 单 fd 运行流程
 
-Ai-M64L-32S-Kit 打开串口时会因 USB-UART modem line 瞬时变化而重启。完整负测、
+Ai-M64P-32S-Kit 打开串口时会因 USB-UART modem line 瞬时变化而重启。完整负测、
 warm reset 和回归使用同一个 `/dev/ttyUSB2` fd：
 
 宿主侧验收流程如下：

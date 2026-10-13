@@ -20,10 +20,10 @@ set -euo pipefail
 TOOLS=$(cd "$(dirname "$0")" && pwd -P)
 VENDOR=$(cd "$TOOLS/../../.." && pwd -P)
 ROOT=$(cd "$VENDOR/../.." && pwd -P)
-CONFIGS=$VENDOR/boards/bl616cl/ai-m64l-32s-kit/configs
+CONFIGS=$VENDOR/boards/bl616cl/ai-m64p-32s-kit/configs
 SRC=${2:-wifi}
 CFG=tmp-perf
-BUILD=$ROOT/cmake_out/ai-m64l-32s-kit_$CFG
+BUILD=$ROOT/cmake_out/ai-m64p-32s-kit_$CFG
 OUT=$(realpath -m "$1")
 
 cleanup()
@@ -39,7 +39,7 @@ printf 'CONFIG_BL616CL_PERFMON=y\nCONFIG_BL_PERF_TOOLS_PERFMON=y\n' \
   >> "$CONFIGS/$CFG/defconfig"
 
 mkdir -p "$OUT"
-if ! "$VENDOR/vela" build "ai-m64l-32s-kit/$CFG" > "$OUT/build.log" 2>&1; then
+if ! "$VENDOR/vela" build "ai-m64p-32s-kit/$CFG" > "$OUT/build.log" 2>&1; then
   echo "build FAILED, see $OUT/build.log"
   exit 1
 fi

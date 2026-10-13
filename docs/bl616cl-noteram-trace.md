@@ -111,9 +111,9 @@ RISC-V MTIMER，并由 `up_perf_convert()` 转为秒和纳秒。时间链已有
 
 ```sh
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 完成判据：
@@ -131,11 +131,11 @@ vendor/bouffalolab/vela build \
 
 ```sh
 prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf-ar t \
-  cmake_out/ai-m64l-32s-kit_nsh/drivers/libdrivers.a | grep note
+  cmake_out/ai-m64p-32s-kit_nsh/drivers/libdrivers.a | grep note
 prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf-ar t \
-  cmake_out/ai-m64l-32s-kit_nsh/apps/system/trace/libapps_trace.a
+  cmake_out/ai-m64p-32s-kit_nsh/apps/system/trace/libapps_trace.a
 prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf-nm \
-  cmake_out/ai-m64l-32s-kit_nsh/final_nuttx | \
+  cmake_out/ai-m64p-32s-kit_nsh/final_nuttx | \
   grep -E 'g_ramnote_buffer|noteram_register|notectl_register|sched_note_irqhandler|trace_main'
 ```
 
@@ -237,13 +237,13 @@ buffer 不变。已有 8,172 B 数据时再次普通 `start` 后立即 `stop`，
 
 ```sh
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --enable BL_OS_FEATURE_TESTS_NOTERAM
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 固件运行命令：

@@ -42,7 +42,7 @@ OpenVela `I2C_TRANSFER()` 接受消息数组并要求整组传输原子。公共
 
 ```text
 board_late_initialize()
-  -> ai_m64l_kit_i2c_initialize()
+  -> ai_m64p_kit_i2c_initialize()
   -> bl616cl_i2cbus_initialize(bus, scl, sda)
   -> i2c_register(bus, lower)
   -> /dev/i2c0 或 /dev/i2c1
@@ -60,7 +60,7 @@ I2CIOC_TRANSFER
 代码归属：
 
 - `chips/bl616cl/bl616cl_i2c.c`：实例资源、消息翻译、mutex、错误窗口和测试 hook；
-- `boards/bl616cl/ai-m64l-32s-kit/src/ai_m64l_kit_i2c.c`：pin owner 和节点注册；
+- `boards/bl616cl/ai-m64p-32s-kit/src/ai_m64p_kit_i2c.c`：pin owner 和节点注册；
 - `cmake/bl616cl_lhal.cmake`：仅在实例开启时编入同步仓的 `bflb_i2c.c`；
 - `apps/mcu_peripheral_tests/i2c/`：独立 `libapps_mcu_i2c_test.a` 和一个测试 main；
 - `drivers/`：保持未修改。
@@ -77,14 +77,14 @@ I2CIOC_TRANSFER
 |---|---|---|
 | `BL616CL_I2C` | chip 总开关，选择 OpenVela I2C polling master | 无实例时 chip/LHAL 对象不进入 archive |
 | `BL616CL_I2C0/1` | 控制器实例 | 只生成对应实例私有数据和符号 |
-| `AI_M64L_KIT_I2C` | board I2C 资源总开关 | 不执行 board 注册 |
-| `AI_M64L_KIT_I2C0/1` | board 实例、pin 和 `/dev/i2cN` | 未选择实例不占 pin、不注册节点 |
+| `AI_M64P_KIT_I2C` | board I2C 资源总开关 | 不执行 board 注册 |
+| `AI_M64P_KIT_I2C0/1` | board 实例、pin 和 `/dev/i2cN` | 未选择实例不占 pin、不注册节点 |
 | `BL616CL_I2C_TEST` | chip fake 注入接口 | 正式产品无测试替换入口 |
 | `BL_MCU_PERIPHERAL_TESTS_I2C` | 测试 app | 无测试 archive、命令和字符串 |
 
 板级默认关闭 I2C：
 
-- I2C0 默认 GPIO4=SCL、GPIO5=SDA。当前 Ai-M64L-32S-Kit 模组上这两脚与
+- I2C0 默认 GPIO4=SCL、GPIO5=SDA。当前 Ai-M64P-32S-Kit 模组上这两脚与
   32.768 kHz/DC-DC 资源相关；未确认模组变体前不能作为可用 I2C0 pin。
 - I2C1 默认 GPIO12=SCL、GPIO13=SDA。开启后这两脚从 GPIO lower-half 表移除，
   不生成 `/dev/gpio12`、`/dev/gpio13`，避免双 owner。
@@ -118,9 +118,9 @@ arbitration 或 frame errno 分类。
 
 ```bash
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j6
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j6
 
 # 将目标依次替换为：
 # nsh
@@ -151,13 +151,13 @@ dual       3bb8c27210cebf56e02ab1053e45b01d42e0b19f6b00efbf35f452069b72b7bb
 ```
 
 no-instance 的 `libarch.a` 无 `bl616cl_i2c.c.o`，`libboard.a` 无
-`ai_m64l_kit_i2c.c.o`，`libbl_lhal.a` 无 `bflb_i2c.c.o`，测试 archive 不存在。
+`ai_m64p_kit_i2c.c.o`，`libbl_lhal.a` 无 `bflb_i2c.c.o`，测试 archive 不存在。
 三个实例配置的 map 均把对象归入上述四个独立 archive；单实例 `nm` 只出现自身
 实例私有符号。
 
 ## I2C1-only 软件实测
 
-运行环境：Ai-M64L-32S-Kit，CH340 `1a86:7523`，`/dev/ttyUSB2`，2,000,000 baud。
+运行环境：Ai-M64P-32S-Kit，CH340 `1a86:7523`，`/dev/ttyUSB2`，2,000,000 baud。
 I2C1-only 固件烧录时 host/device SHA256 均为
 `cbed36c91f46631dbe693341bc5dfd31e4d9875908cc35788222c681a54e52fe`，读取校验
 长度为 515824 B。复位后出现 `NuttShell (NSH)` 和 `nsh>`，`/dev/i2c1` 存在。

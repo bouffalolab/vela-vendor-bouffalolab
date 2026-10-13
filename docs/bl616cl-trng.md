@@ -2,7 +2,7 @@
 
 本文说明 BL616CL 如何把安全引擎 TRNG 接入 OpenVela 标准 `/dev/random`，并给出
 配置裁剪、构建检查、标准 API、USB2 运行和现役外设回归的完整流程。运行环境为
-Ai-M64L-32S-Kit、`/dev/ttyUSB2`、2,000,000 baud。
+Ai-M64P-32S-Kit、`/dev/ttyUSB2`、2,000,000 baud。
 
 ## 背景
 
@@ -137,18 +137,18 @@ getrandom(..., GRND_RANDOM)
 
 ```sh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --disable BL_MCU_PERIPHERAL_TESTS_TRNG \
   --disable BL616CL_TRNG
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 完成判据：clean build 成功；生成配置无 `BL616CL_TRNG/DEV_RANDOM`；构建树和
@@ -158,17 +158,17 @@ ELF 无 `bl616cl_rng.o`、`devrandom_register`、TRNG file operations 或测试�
 
 ```sh
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --enable BL616CL_TRNG \
   --enable DEV_RANDOM \
   --disable DEV_URANDOM \
   --enable BL_MCU_PERIPHERAL_TESTS_TRNG
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 完成判据：生成 `libapps_mcu_trng_test.a`；ELF 同时包含
@@ -180,12 +180,12 @@ vendor/bouffalolab/vela build \
 
 ```sh
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --disable DEV_RANDOM \
   --enable DEV_URANDOM \
   --enable DEV_URANDOM_ARCH \
   --enable BL_MCU_PERIPHERAL_TESTS_TRNG
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -j14
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -j14
 ```
 
 完成判据：ELF 有 `devurandom_register`、无 `devrandom_register`；`/dev/random`
@@ -195,17 +195,17 @@ cmake --build cmake_out/ai-m64l-32s-kit_nsh -j14
 
 ```sh
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --enable BL616CL_TRNG \
   --enable DEV_RANDOM \
   --disable DEV_URANDOM \
   --disable BL_MCU_PERIPHERAL_TESTS_TRNG
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 完成判据：生成配置与本文正式配置一致；测试 archive、命令和字符串消失；
@@ -214,7 +214,7 @@ vendor/bouffalolab/vela build \
 ## 静态制品核查
 
 ```sh
-OUT=cmake_out/ai-m64l-32s-kit_nsh
+OUT=cmake_out/ai-m64p-32s-kit_nsh
 TOOL=prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf
 
 grep -E 'CONFIG_(BL616CL_TRNG|DEV_RANDOM|DEV_URANDOM|BL_MCU_PERIPHERAL_TESTS_TRNG)' \

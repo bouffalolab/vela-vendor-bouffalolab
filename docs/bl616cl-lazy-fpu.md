@@ -3,7 +3,7 @@
 本文说明 BL616CL 如何启用 OpenVela RISC-V lazy FPU context，修复启用前发现的
 user context 越界和异步 signal FPU 状态覆盖问题，并给出可重复的上下文布局、双任务
 隔离、异步 signal、coredump、正式裁剪和外设回归流程。运行环境为
-Ai-M64L-32S-Kit、`/dev/ttyUSB2`、2,000,000 baud。
+Ai-M64P-32S-Kit、`/dev/ttyUSB2`、2,000,000 baud。
 
 ## 背景
 
@@ -138,8 +138,8 @@ CONFIG_BL_OS_FEATURE_TESTS_SYSLOG_COREDUMP=y
 
 ```sh
 source build/envsetup.sh
-OUT=cmake_out/ai-m64l-32s-kit_nsh
-TARGET=bl616cl/ai-m64l-32s-kit/configs/nsh
+OUT=cmake_out/ai-m64p-32s-kit_nsh
+TARGET=bl616cl/ai-m64p-32s-kit/configs/nsh
 TWEAK=prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak
 ```
 
@@ -195,7 +195,7 @@ vendor/bouffalolab/vela build "$TARGET" -j14
 ## 静态制品核查
 
 ```sh
-OUT=cmake_out/ai-m64l-32s-kit_nsh
+OUT=cmake_out/ai-m64p-32s-kit_nsh
 TOOL=prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf
 
 grep -E 'CONFIG_ARCH_(HAVE_)?LAZYFPU|BL_OS_FEATURE_TESTS_(LAZY_FPU|SYSLOG_COREDUMP)' \
@@ -222,7 +222,7 @@ sha256sum "$OUT/final_nuttx" "$OUT/nuttx.bin" "$OUT/nuttx.whole.bin"
 
 ## USB2 单 fd 测试流程
 
-Ai-M64L-32S-Kit 打开 USB-UART 时会因 modem line 瞬时变化而重启。运行验证必须
+Ai-M64P-32S-Kit 打开 USB-UART 时会因 modem line 瞬时变化而重启。运行验证必须
 在一个 fd 中完成，流程如下：
 
 1. 以 2,000,000 baud、8N1、raw mode、无流控且无 `HUPCL` 打开 USB2 一次。

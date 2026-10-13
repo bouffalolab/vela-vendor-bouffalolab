@@ -8,7 +8,7 @@
 
 ## 布局构成
 
-`boards/bl616cl/ai-m64l-32s-kit/scripts/ld.script` 的 `.text` 段：
+`boards/bl616cl/ai-m64p-32s-kit/scripts/ld.script` 的 `.text` 段：
 
 ```text
 .text ALIGN(LOADADDR(.data) + SIZEOF(.data), 32K) :
@@ -70,7 +70,7 @@ bl616cl layout: 105/105 Wi-Fi hot entries placed at 0x80008000, 35.8 KiB (I-cach
 ### 1. 构建并看检查结果
 
 ```sh
-vendor/bouffalolab/vela build ai-m64l-32s-kit/wifi
+vendor/bouffalolab/vela build ai-m64p-32s-kit/wifi
 ```
 
 记下 `bl616cl layout:` 行。有缺失项时，到新版源码中找它们的去向：改名的换成
@@ -96,7 +96,7 @@ python3 vendor/bouffalolab/tools/bl616cl/perf/wifi_bench.py <out>/prof \
 ```sh
 python3 vendor/bouffalolab/tools/bl616cl/perf/perfmon_report.py \
   --map <out>/img/nuttx.map --elf <out>/img/final_nuttx --hot wifi \
-  --ld-script vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/scripts/ld.script \
+  --ld-script vendor/bouffalolab/boards/bl616cl/ai-m64p-32s-kit/scripts/ld.script \
   <out>/prof/*.perfmon
 ```
 

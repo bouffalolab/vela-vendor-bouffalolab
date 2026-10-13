@@ -48,7 +48,7 @@ polling 子集；IRQ/DMA 等保留为独立后续项，不把“尚未适配”�
 ```text
 board_late_initialize()
   -> bl616cl_board_initialize()
-  -> ai_m64l_kit_spi_initialize()
+  -> ai_m64p_kit_spi_initialize()
   -> pin owner + GPIO CS inactive level
   -> bl616cl_spi_configure_pins()
   -> bl616cl_spibus_initialize(0, board_ops, board_arg)
@@ -68,7 +68,7 @@ SPIIOC_TRANSFER
 
 - `chips/bl616cl/bl616cl_spi.c`：实例、clock、配置、exchange、mutex、recovery 和
   test diagnostic，编入 `libarch.a`；
-- `boards/bl616cl/ai-m64l-32s-kit/src/ai_m64l_kit_spi.c`：SPI0 pin、target、GPIO CS
+- `boards/bl616cl/ai-m64p-32s-kit/src/ai_m64p_kit_spi.c`：SPI0 pin、target、GPIO CS
   和 `/dev/spi0` 注册，编入 `libboard.a`；
 - `cmake/bl616cl_lhal.cmake`：有任一实例时编入同步仓 `bflb_spi.c`，生成
   `libbl_lhal.a`；
@@ -82,9 +82,9 @@ SPIIOC_TRANSFER
 |---|---|---|
 | `BL616CL_SPI` | chip 总开关，选择 OpenVela SPI/exchange/bit-order 能力 | 无实例时不编 chip/LHAL SPI 对象 |
 | `BL616CL_SPI0/1` | 独立 controller 实例 | 只生成所选实例私有状态 |
-| `AI_M64L_KIT_SPI` | board SPI 总开关 | 不接管 pin、不注册节点 |
-| `AI_M64L_KIT_SPI0` | SPI0 pin、target、GPIO CS 和 `/dev/spi0` | 关闭后无 board SPI 对象/节点 |
-| `AI_M64L_KIT_SPI0_TARGET1` | 第二个 GPIO CS target | 关闭后无 target 1 数据和 pin owner |
+| `AI_M64P_KIT_SPI` | board SPI 总开关 | 不接管 pin、不注册节点 |
+| `AI_M64P_KIT_SPI0` | SPI0 pin、target、GPIO CS 和 `/dev/spi0` | 关闭后无 board SPI 对象/节点 |
+| `AI_M64P_KIT_SPI0_TARGET1` | 第二个 GPIO CS target | 关闭后无 target 1 数据和 pin owner |
 | `BL616CL_SPI_TEST` | chip fake transport/diagnostic | 正式产品无注入接口 |
 | `BL_MCU_PERIPHERAL_TESTS_SPI` | 测试命令 | 无测试 archive、命令和字符串 |
 
@@ -97,7 +97,7 @@ swap 清零，只用端口级 MOSI/MISO swap 选择数据方向：MISO 在 signa
 取值与原生 SDK 一致，逻辑分析仪确认 MOSI 数据从 GPIO19 输出、GPIO18 为输入；
 signal 3 作 MISO 的交换组合尚未实测。
 
-SPI1 只有 chip 开关，没有 Ai-M64L board 开关。这保证未知 pin 不会被软件占用，
+SPI1 只有 chip 开关，没有 Ai-M64P board 开关。这保证未知 pin 不会被软件占用，
 同时允许独立构建和 fake 验证 lower-half。
 
 ## 频率、错误与恢复合同
@@ -129,9 +129,9 @@ FIFO 和 CS 故障注入，不能宣称完整 controller recovery 已通过。
 
 ```bash
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/<config>
+  bl616cl/ai-m64p-32s-kit/configs/<config>
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/<config> -j14
+  bl616cl/ai-m64p-32s-kit/configs/<config> -j14
 ```
 
 2026-08-30 fresh build 数据：
@@ -152,7 +152,7 @@ vendor/bouffalolab/vela build \
 
 ## USB2 软件实测
 
-运行环境：Ai-M64L-32S-Kit、CH340 `1a86:7523`、`/dev/ttyUSB2`、2 Mbps。
+运行环境：Ai-M64P-32S-Kit、CH340 `1a86:7523`、`/dev/ttyUSB2`、2 Mbps。
 `nsh` 固件 SHA256 为
 `b252dad6312ac3c0a1bb0317ff67f73c9b5ae1878fafc07283e325664f1366ba`；单实例执行
 `fake dual` 返回 `FAIL overlap=0` 和退出码 1，随后 alive 命令退出码为 0，全程没有

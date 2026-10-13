@@ -80,11 +80,11 @@ OpenVela DMA client
 
 ```bash
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh-peripherals -j14
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 | 配置 | 结果 | 归档/符号门禁 |
@@ -98,7 +98,7 @@ critmonitor shadow、cpuload 未使用变量和无 MFG 输入提示，没有 DMA
 
 ## 实板功能验证
 
-Ai-M64L-32S-Kit 使用 `/dev/ttyUSB2`、2000000 baud。测试固件 `nuttx.bin` SHA256：
+Ai-M64P-32S-Kit 使用 `/dev/ttyUSB2`、2000000 baud。测试固件 `nuttx.bin` SHA256：
 
 ```text
 0d8eee354d532d3b6ca531ff786b18c927a548076a342b85eb15510637fcb3cf

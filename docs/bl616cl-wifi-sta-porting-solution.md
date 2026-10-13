@@ -219,9 +219,9 @@ components/wireless/wifi/
 更新预编译包：
 
 ```bash
-./vela build ai-m64l-32s-kit/wifi              # 源码模式；三个源码仓不能有未提交改动
+./vela build ai-m64p-32s-kit/wifi              # 源码模式；三个源码仓不能有未提交改动
 vendor/bouffalolab/tools/bl616cl/export_wifi_prebuilt.sh
-./vela build ai-m64l-32s-kit/wifi --use-lib macsw,wl80211
+./vela build ai-m64p-32s-kit/wifi --use-lib macsw,wl80211
 ```
 
 脚本检查源码仓状态，把两个 core 构建到最新，再导出库、头文件、host port 源码和 `VERSION`。导出后用 `--use-lib` 重建，与源码模式的 `nuttx.bin` 比较：两者应只差镜像内的构建时间。
@@ -331,7 +331,7 @@ TX/RX 的关键原则是：
 
 ## 6. Shared RAM、cache 和 linker
 
-BL616CL linker 在 `boards/bl616cl/ai-m64l-32s-kit/scripts/ld.script` 中定义 `ram_wifi`：Wi-Fi 硬件只能经 nocache 别名访问 WRAM，`ram_wifi` 就是这段 WRAM 减去 BLE EM。`.wifibss` 按实际大小放在 `ram_wifi` 顶部，堆（cached 别名）一直延伸到 `.wifibss` 起点：
+BL616CL linker 在 `boards/bl616cl/ai-m64p-32s-kit/scripts/ld.script` 中定义 `ram_wifi`：Wi-Fi 硬件只能经 nocache 别名访问 WRAM，`ram_wifi` 就是这段 WRAM 减去 BLE EM。`.wifibss` 按实际大小放在 `ram_wifi` 顶部，堆（cached 别名）一直延伸到 `.wifibss` 起点：
 
 ```text
 ram_wifi ORIGIN = 0x20ff8000（物理 WRAM 起点）
@@ -469,7 +469,7 @@ BL616CL rfparam 流程没有天线增益、发射功率和 country 相关接口�
 
 ### 10.1 最简 `nsh`
 
-`boards/bl616cl/ai-m64l-32s-kit/configs/nsh/defconfig` 恢复为 Wi-Fi 接入前的最简配置。它不应包含：
+`boards/bl616cl/ai-m64p-32s-kit/configs/nsh/defconfig` 恢复为 Wi-Fi 接入前的最简配置。它不应包含：
 
 - `CONFIG_BL_COMPONENT_MACSW`；
 - `CONFIG_BL_COMPONENT_WL80211`；
@@ -482,7 +482,7 @@ BL616CL rfparam 流程没有天线增益、发射功率和 country 相关接口�
 
 ### 10.2 独立 `wifi`
 
-`boards/bl616cl/ai-m64l-32s-kit/configs/wifi/defconfig` 承载完整 STA 目标，包括：
+`boards/bl616cl/ai-m64p-32s-kit/configs/wifi/defconfig` 承载完整 STA 目标，包括：
 
 - `CONFIG_BL_COMPONENT_MACSW=y`；
 - `CONFIG_BL_COMPONENT_WL80211=y`；
@@ -532,11 +532,11 @@ WPA3-SAE 必须有 `/dev/urandom`。supplicant 的 `crypto_ec_point_mul()` 用 m
 ```bash
 # 最简 NSH
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 
 # Wi-Fi STA
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/wifi -j14
+  bl616cl/ai-m64p-32s-kit/configs/wifi -j14
 ```
 
 macsw 与 wl80211 core 以 `-flto -ffat-lto-objects` 编译，`CONFIG_ALLSYMS` 又使最终固件链接四次（`nuttx`、`first_link`、`second_link`、`final_nuttx`），每次都会重做 LTRANS。`components/wireless/wifi/CMakeLists.txt` 在启用 macsw 或 wl80211 时给链接加 `-flto=auto`，让各 LTRANS 分区并行，单次链接由约 7.8 s 降到约 3.9 s，生成固件不变；`nsh` 不受影响。

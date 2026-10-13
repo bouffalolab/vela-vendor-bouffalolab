@@ -43,14 +43,14 @@ vendor/bouffalolab/vela clean nsh-peripherals
 vendor/bouffalolab/vela build nsh-peripherals -j14
 ```
 
-`nsh-peripherals` 显式开启 `CONFIG_AI_M64L_KIT_UART1=y`、
+`nsh-peripherals` 显式开启 `CONFIG_AI_M64P_KIT_UART1=y`、
 `CONFIG_SERIAL_TERMIOS=y` 和 `CONFIG_UART1_RXBUFSIZE=1024`。1024 字节 RX ring
 用于吸收 UART0 console 长输出调度期间的 UART1 无流控突发，不改变 UART1 TX ring
 默认值，并开启 `CONFIG_BL_MCU_PERIPHERAL_TESTS_UART=y`。
 
 ## 实物准备与总流程
 
-1. 确认测试板为 Ai-M64L-32S-Kit，运行控制台为 `/dev/ttyUSB2`、2000000 baud。
+1. 确认测试板为 Ai-M64P-32S-Kit，运行控制台为 `/dev/ttyUSB2`、2000000 baud。
 2. 确认 UART0 console 仍使用板级默认 GPIO34 TX、GPIO35 RX。
 3. 用导线短接 GPIO14（UART1 TX）和 GPIO15（UART1 RX）。
 4. 启动 `nsh` 固件，在 USB2 NSH 中确认 `/dev/ttyS1` 存在。
@@ -227,16 +227,16 @@ console 隔离结论。
 NM=prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf-nm
 AR=prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf-ar
 
-$NM -a cmake_out/ai-m64l-32s-kit_nsh/final_nuttx
-$NM -a cmake_out/ai-m64l-32s-kit_nsh-uart/final_nuttx
-$NM -a cmake_out/ai-m64l-32s-kit_nsh/final_nuttx
-$AR t cmake_out/ai-m64l-32s-kit_nsh-uart/arch/libarch.a
-$AR t cmake_out/ai-m64l-32s-kit_nsh-uart/boards/libboard.a
-$AR t cmake_out/ai-m64l-32s-kit_nsh/apps/vendor/bouffalolab/apps/mcu_peripheral_tests/uart/libapps_mcu_uart_test.a
+$NM -a cmake_out/ai-m64p-32s-kit_nsh/final_nuttx
+$NM -a cmake_out/ai-m64p-32s-kit_nsh-uart/final_nuttx
+$NM -a cmake_out/ai-m64p-32s-kit_nsh/final_nuttx
+$AR t cmake_out/ai-m64p-32s-kit_nsh-uart/arch/libarch.a
+$AR t cmake_out/ai-m64p-32s-kit_nsh-uart/boards/libboard.a
+$AR t cmake_out/ai-m64p-32s-kit_nsh/apps/vendor/bouffalolab/apps/mcu_peripheral_tests/uart/libapps_mcu_uart_test.a
 ```
 
 判定：off 无 `bl616cl_uart1_register`、`g_uart1port`、
-`ai_m64l_kit_uart_initialize`、`mcu_uart_test_main`；product 含前三个 UART1
+`ai_m64p_kit_uart_initialize`、`mcu_uart_test_main`；product 含前三个 UART1
 lower/board 符号、不含 test main；test 四个符号均存在。UART lower 对象位于
 `libarch.a`，board 注册对象位于 `libboard.a`，测试 app 位于独立
 `libapps_mcu_uart_test.a`。
@@ -263,7 +263,7 @@ GPIO14/15 是 board 固定映射，因此不再提供任意 UART1 pin Kconfig；
 
 ## 本轮实测数据
 
-日期：2026-09-01。设备为 Ai-M64L-32S-Kit，UART0 console 为 `/dev/ttyUSB2`、
+日期：2026-09-01。设备为 Ai-M64P-32S-Kit，UART0 console 为 `/dev/ttyUSB2`、
 2000000 baud，UART1 使用 GPIO14 TX 与 GPIO15 RX 实际短接。源码基线 vendor commit
 为 `5419ec51e0af`，UART 改动在任务 worktree 中验证。
 
@@ -285,11 +285,11 @@ GPIO14/15 是 board 固定映射，因此不再提供任意 UART1 pin Kconfig；
 
 - `nsh`：无 UART1 lower、board 注册和 UART test 符号。
 - `nsh-uart`（历史，已删除）：存在 `bl616cl_uart1_register`、`g_uart1port`、
-  `ai_m64l_kit_uart_initialize`；无 `mcu_uart_test_main`。
+  `ai_m64p_kit_uart_initialize`；无 `mcu_uart_test_main`。
 - `nsh`：存在上述 UART1 符号和 `mcu_uart_test_main`；生成独立
   `libapps_mcu_uart_test.a`。
 - `bl616cl_serial.c.o`/`bl616cl_lowputc.c.o` 位于 `libarch.a`；
-  `ai_m64l_kit_uart.c.o` 位于 `libboard.a`。
+  `ai_m64p_kit_uart.c.o` 位于 `libboard.a`。
 
 负构建实测均按预期失败并命中指定错误：UART0 物理 pin、UART0 signal slot、UART1
 console、flow control、I2C1 owner、SPI0 owner。临时配置和构建目录均已清理。

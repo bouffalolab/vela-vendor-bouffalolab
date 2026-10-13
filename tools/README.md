@@ -11,7 +11,7 @@
   中同步 FlashCube 工具树；对应 FlashCube commit
   `11d409a9ff451ba3d8658d4ed4e6f3b9da587193`，包含全部平台工具、芯片配置、
   GUI、文档和调试工具，不跟踪上游 `*.bin`、`*.ini` 烧录产物。
-- `bl616cl/postprocess_bl616cl.sh`：Ai-M64L-32S-Kit 的 CMake postbuild
+- `bl616cl/postprocess_bl616cl.sh`：Ai-M64P-32S-Kit 的 CMake postbuild
   wrapper；在临时目录生成处理后的 app 和 4 MiB whole image。
 - `bl616cl/perf/`：Wi-Fi 性能与热函数布局工具。`layout_check.py` 在 Wi-Fi
   镜像链接后检查 `ld.script` 热函数列表；`perf_build.sh` 生成带 `perfmon` 的

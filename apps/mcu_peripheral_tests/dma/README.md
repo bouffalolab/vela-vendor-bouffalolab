@@ -24,19 +24,19 @@ error 注入和外设 DMA consumer 不属于本轮能力。
 
 ```bash
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals
+  bl616cl/ai-m64p-32s-kit/configs/nsh-peripherals
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh-peripherals -j14
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 裁剪检查结果：
@@ -233,7 +233,7 @@ callback=1 put-returned=1 reused=0x60fc9e8c ret=0
 
 ## 最终实测汇总
 
-Ai-M64L-32S-Kit 使用 `/dev/ttyUSB2`、2000000 baud。测试固件
+Ai-M64P-32S-Kit 使用 `/dev/ttyUSB2`、2000000 baud。测试固件
 `nuttx.bin` SHA256 为
 `0d8eee354d532d3b6ca531ff786b18c927a548076a342b85eb15510637fcb3cf`，烧录后设备端
 回读与 host 一致。标准复位后出现 `NuttShell (NSH) NuttX-3.6.1`。

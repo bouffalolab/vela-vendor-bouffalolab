@@ -20,7 +20,7 @@ OpenVela 公共 SPI ABI 一致且可验证的闭环：
 - byte order 没有独立公共配置入口。
 
 因此测试不得把这些项目写成已支持。SPI1 lower-half 可独立编译和执行 fake 测试，
-但 Ai-M64L-32S-Kit 的 SPI1 四线 pin 和模组引出尚未冻结，不注册 `/dev/spi1`，
+但 Ai-M64P-32S-Kit 的 SPI1 四线 pin 和模组引出尚未冻结，不注册 `/dev/spi1`，
 也不得把 bus 1 fake PASS 解释为 SPI1 实物总线通过。
 
 SPI0 当前板级映射如下：
@@ -44,7 +44,7 @@ SPI0 当前板级映射如下：
 CONFIG_BL616CL_SPI=y
 CONFIG_BL616CL_SPI0=y              # SPI0 测试配置
 CONFIG_BL616CL_SPI1=y              # SPI1/dual 测试配置
-CONFIG_AI_M64L_KIT_SPI=y           # 只注册所选的 SPI0 board 节点
+CONFIG_AI_M64P_KIT_SPI=y           # 只注册所选的 SPI0 board 节点
 CONFIG_BL_MCU_PERIPHERAL_TESTS_SPI=y
 CONFIG_BL_MCU_PERIPHERAL_TESTS_SPI_PROGNAME="mcu_spi_test"
 CONFIG_BL_MCU_PERIPHERAL_TESTS_SPI_ITERATIONS=32
@@ -57,9 +57,9 @@ CONFIG_BL_MCU_PERIPHERAL_TESTS_SPI_ITERATIONS=32
 
 ```bash
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals
+  bl616cl/ai-m64p-32s-kit/configs/nsh-peripherals
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-peripherals -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh-peripherals -j14
 ```
 
 ```text
@@ -103,16 +103,16 @@ nsh   e252b9dfa4782c221166af959073c60c145f2121395421c1ccc499d732e3b48d
 裁剪检查使用 `ar t` 确认对象归属，使用 RISC-V `nm` 检查最终 ELF：
 
 ```bash
-ar t cmake_out/ai-m64l-32s-kit_nsh/arch/libarch.a \
+ar t cmake_out/ai-m64p-32s-kit_nsh/arch/libarch.a \
   | grep -Fx bl616cl_spi.c.o
-ar t cmake_out/ai-m64l-32s-kit_nsh/boards/libboard.a \
-  | grep -Fx ai_m64l_kit_spi.c.o
-ar t cmake_out/ai-m64l-32s-kit_nsh/apps/vendor/bouffalolab/libbl_lhal.a \
+ar t cmake_out/ai-m64p-32s-kit_nsh/boards/libboard.a \
+  | grep -Fx ai_m64p_kit_spi.c.o
+ar t cmake_out/ai-m64p-32s-kit_nsh/apps/vendor/bouffalolab/libbl_lhal.a \
   | grep -Fx bflb_spi.c.o
-ar t cmake_out/ai-m64l-32s-kit_nsh/apps/vendor/bouffalolab/apps/mcu_peripheral_tests/spi/libapps_mcu_spi_test.a \
+ar t cmake_out/ai-m64p-32s-kit_nsh/apps/vendor/bouffalolab/apps/mcu_peripheral_tests/spi/libapps_mcu_spi_test.a \
   | grep -Fx spi_test_main.c.o
 prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf-nm \
-  cmake_out/ai-m64l-32s-kit_nsh/final_nuttx \
+  cmake_out/ai-m64p-32s-kit_nsh/final_nuttx \
   | grep -E 'g_bl616cl_spi[01]|mcu_spi_test_main'
 ```
 
@@ -283,7 +283,7 @@ mutex；该负测用于确认缺少另一个实例时的清理边界。
 
 ## 2026-08-30 USB2 软件实测
 
-环境：Ai-M64L-32S-Kit、CH340 `1a86:7523`、`/dev/ttyUSB2`、2,000,000 baud。
+环境：Ai-M64P-32S-Kit、CH340 `1a86:7523`、`/dev/ttyUSB2`、2,000,000 baud。
 先烧录 `nsh`，固件 SHA256 为
 `b252dad6312ac3c0a1bb0317ff67f73c9b5ae1878fafc07283e325664f1366ba`，验证单实例
 失败清理：

@@ -9,8 +9,8 @@
 
 - `vendor/bouffalolab`: `eed440156e1f`（含 A07 cache 与 P08 DMA0）
 - `nuttx`: `8db268e69cb`（组织 fork 已承接 PWM final-close 修复）
-- 板卡：Ai-M64L-32S-Kit
-- 配置：`bl616cl/ai-m64l-32s-kit/configs/nsh`
+- 板卡：Ai-M64P-32S-Kit
+- 配置：`bl616cl/ai-m64p-32s-kit/configs/nsh`
 
 ## 判定口径
 
@@ -66,7 +66,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 - 配置：`CONFIG_FRAME_POINTER=y`、`CONFIG_SCHED_BACKTRACE=y`、
   `CONFIG_SYSTEM_DUMPSTACK=y`。
 - 构建：`vendor/bouffalolab/vela build
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14`，构建目标 `1190/1190` 成功。
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14`，构建目标 `1190/1190` 成功。
 - 编译证据：`compile_commands.json` 和 `build.ninja` 均含
   `-fno-omit-frame-pointer`；关闭态基线含 `-fomit-frame-pointer`。
 - 制品：`final_nuttx` 为 666,948 字节，`text/data/bss` 为
@@ -554,7 +554,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | P03 | RTC/Alarm | 已验证；upper-half ioctl 已补全 | `BL616CL_RTC`、`BL616CL_RTC_ALARM`；ioctl 测试 app 独立关闭；RC32K/DIG32K 二选一 | 48 位 HBN RTC lower-half 与 `/dev/rtc0`；UTC/亚秒、absolute/relative Alarm、取消/替换/re-arm、回绕、warm reset、unlink 和裁剪已验证；九个标准 ioctl 的 NULL/ID/ENOSYS 合同已在 debug/release fake lower 实测 |
 | P04 | I2C0/I2C1 master | 软件闭环已通过，P1；实物 blocked | 每实例选项、SCL/SDA pin、频率 | polling lower-half、裁剪和无 target 负向路径已验证；正向 target、波形、I2C0 pin 仍待资源 |
 | P05 | SPI0/SPI1 master | 软件闭环已通过，P1；实物 blocked | 每实例选项、pin、mode、CS policy | polling lower-half、裁剪和 fake 合同已验证；SPI0 环回及 SPI1 pin/target 仍待资源 |
-| P06 | PWM | 软件闭环已通过，P1；G4 waiting | `BL616CL_PWM`、`AI_M64L_KIT_PWM`、test hook/app 独立裁剪；首版排除改变 ABI 的 multichannel/pulse/fixed/deadtime | PWM0 CH3+/GPIO22、continuous、整数频率、duty、cpol/dcpol、live update 和 multi-fd 已完成三态构建、裁剪、8/8 实机软件合同和现役回归；frequency/duty/停止电平/更新毛刺待逻辑分析仪 |
+| P06 | PWM | 软件闭环已通过，P1；G4 waiting | `BL616CL_PWM`、`AI_M64P_KIT_PWM`、test hook/app 独立裁剪；首版排除改变 ABI 的 multichannel/pulse/fixed/deadtime | PWM0 CH3+/GPIO22、continuous、整数频率、duty、cpol/dcpol、live update 和 multi-fd 已完成三态构建、裁剪、8/8 实机软件合同和现役回归；frequency/duty/停止电平/更新毛刺待逻辑分析仪 |
 | P07 | ADC | 需要适配，P2 | ADC、channel/pin、poll/DMA 分层 | analog lower-half；校准、量程、连续采样、溢出；外部基准电压 |
 | P08 | DMA0 | 已验证 | `BL616CL_DMA0` 默认关闭；test hook/app 独立；首版依赖 `!DMA_LINK` | 八通道 fixed-ident、1/2/4-byte mem2mem、TC/error 状态机、stop/residual、cache ownership 和并发生命周期；外设 consumer/LLI/cyclic 延后 |
 | P09 | AES/SHA `/dev/crypto` 与 mbedTLS ALT；GMAC、PKA、CRC32 | AES/SHA 已验证；GMAC/PKA 延后；CRC32 不支持 | `BL616CL_CRYPTO`、`_AES`、`_SHA` 分别裁剪；bounce 大小与直连可配；软件驱动关闭；ALT 逐项开 | AES-CBC/CTR/XTS、SHA-1/2 经 `hwcr_init()` 注册；cmocka、`mcu_crypto_test`、`mbedselftest` 在直连开/关两种 KASAN 构建通过；超时恢复实测；CRC32 硬件语义不符；`wifi` 实测 ALT 不缩短连接时间（SHA1 ALT 使 WPA2 慢约 1.6 s），AES/SHA ALT 不开；用到 mbedTLS 时默认打开熵源 ALT（读 `/dev/random`）。见 [bl616cl-crypto.md](bl616cl-crypto.md) |

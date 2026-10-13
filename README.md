@@ -4,7 +4,7 @@ Bouffalo Lab 维护的 openvela 适配层，是 BL Vela SDK 中的 `vendor/bouff
 芯片移植、板级、驱动 wrapper、无线组件、测试应用和宿主工具。本仓不能单独构建，
 需要用 repo manifest 拉取整个 SDK（openvela 基座 + 本仓 + 驱动等仓）。
 
-当前支持芯片 BL616CL（RISC-V E907），开发板为安信可 Ai-M64L-32S-Kit。
+当前支持芯片 BL616CL（RISC-V E907），开发板为安信可 Ai-M64P-32S-Kit。
 
 ## 获取代码
 
@@ -32,18 +32,18 @@ git -C vendor/bouffalolab lfs pull bouffalo
 CMake + Ninja（本仓不提供 `Make.defs`/`Makefile`）。
 
 ```bash
-./vela build ai-m64l-32s-kit/wifi              # configure + 编译
-./vela flash ai-m64l-32s-kit/wifi --port /dev/ttyUSB0
-./vela menuconfig ai-m64l-32s-kit/wifi         # 配置有变化时回写板级 defconfig
-./vela clean ai-m64l-32s-kit/wifi              # 删除 cmake_out/ai-m64l-32s-kit_wifi
+./vela build ai-m64p-32s-kit/wifi              # configure + 编译
+./vela flash ai-m64p-32s-kit/wifi --port /dev/ttyUSB0
+./vela menuconfig ai-m64p-32s-kit/wifi         # 配置有变化时回写板级 defconfig
+./vela clean ai-m64p-32s-kit/wifi              # 删除 cmake_out/ai-m64p-32s-kit_wifi
 ./vela build --list                            # 列出可用的板级配置
 ```
 
 目标写到 `configs/<name>` 一层；`vendor/bouffalolab/boards/` 前缀可省略，无歧义时
-chip 和 `configs/` 层也可省略（`bl616cl/ai-m64l-32s-kit/configs/nsh`、
-`ai-m64l-32s-kit/nsh`、`nsh` 等价）。默认并行度为逻辑核数的一半，可用 `-j N` 覆盖。
+chip 和 `configs/` 层也可省略（`bl616cl/ai-m64p-32s-kit/configs/nsh`、
+`ai-m64p-32s-kit/nsh`、`nsh` 等价）。默认并行度为逻辑核数的一半，可用 `-j N` 覆盖。
 
-Ai-M64L-32S-Kit 的配置：
+Ai-M64P-32S-Kit 的配置：
 
 | 配置 | 内容 |
 |---|---|
@@ -65,7 +65,7 @@ Ai-M64L-32S-Kit 的配置：
 烧录只调用 FlashCube，不编译：
 
 ```bash
-./vela flash ai-m64l-32s-kit/nsh --port /dev/ttyUSB0           # 按 flash_prog_cfg.ini 分区烧录
+./vela flash ai-m64p-32s-kit/nsh --port /dev/ttyUSB0           # 按 flash_prog_cfg.ini 分区烧录
 ./vela flash --config <ini> --port /dev/ttyUSB0                 # 指定 FlashCube 配置
 ./vela flash --image <bin> --addr 0x0 --port /dev/ttyUSB0       # 单个 bin 写到指定地址
 ```
@@ -73,7 +73,7 @@ Ai-M64L-32S-Kit 的配置：
 默认波特率 2000000，可用 `--baudrate` 覆盖；烧录后通过板载 DTR/RTS 自动复位运行。
 `--image` 按地址原样写入，不检查镜像内容。
 
-控制台为 UART0，2000000 bps。Ai-M64L-32S-Kit 的 DTR/RTS 接在 boot/chipen 上，打开
+控制台为 UART0，2000000 bps。Ai-M64P-32S-Kit 的 DTR/RTS 接在 boot/chipen 上，打开
 串口会让模组重启一次；picocom 要加 `--lower-rts`，否则模组保持在复位状态。
 
 shell 补全：`./vela completion install`，或 `./vela completion <bash|zsh|fish>` 打印脚本。
@@ -83,7 +83,7 @@ shell 补全：`./vela completion install`，或 `./vela completion <bash|zsh|fi
 | 目录 | 作用 | 接入构建的方式 |
 |---|---|---|
 | `chips/` | 芯片移植（custom chip，当前 `bl616cl`） | 按 defconfig 的 `CONFIG_ARCH_CHIP_CUSTOM_DIR` 纳入 |
-| `boards/` | 板级（`bl616cl/ai-m64l-32s-kit`，`bl616cl/common` 为共用启动代码） | 按 defconfig 的 `CONFIG_ARCH_BOARD_CUSTOM_DIR` 纳入 |
+| `boards/` | 板级（`bl616cl/ai-m64p-32s-kit`，`bl616cl/common` 为共用启动代码） | 按 defconfig 的 `CONFIG_ARCH_BOARD_CUSTOM_DIR` 纳入 |
 | `drivers/` | Bouffalo SDK `drivers/` 的只读镜像（lhal、soc、rfparam、预编译 phyrf），独立仓 | `cmake/bl616cl_lhal.cmake`、`bl616cl_std.cmake` 显式选择源码 |
 | `components/` | 中间件，当前为 `wireless/`（`wifi`、`ble`、`rfparam`） | 自动发现 |
 | `apps/` | 测试与示例 app：`mcu_peripheral_tests`、`os_feature_tests`、`perf_tools`、`wireless_tests` | 自动发现 |
@@ -120,7 +120,7 @@ shell 补全：`./vela completion install`，或 `./vela completion <bash|zsh|fi
 
 ## 现状
 
-已在 Ai-M64L-32S-Kit 实板验证：启动与 boot2 镜像、UART、GPIO、Timer/oneshot、WDT、
+已在 Ai-M64P-32S-Kit 实板验证：启动与 boot2 镜像、UART、GPIO、Timer/oneshot、WDT、
 RTC、TRNG、DMA0、cache、Wi-Fi STA、BLE，以及 coredump、KASAN、UBSAN、stack canary、
 Note RAM trace、perfmon 等调试能力。I2C、SPI、PWM 已通过软件验证，实物验证待补；
 PSRAM 第二 heap、PM/低功耗、SPI flash MTD、ADC、加解密引擎尚未适配。

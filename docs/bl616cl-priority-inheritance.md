@@ -78,7 +78,7 @@ wl80211 的 `rtos_semaphore_*`、DMA 完成通知、Wi-Fi 扫描和连接等待�
 
 ## 实板结果
 
-`ostest` 配置，Ai-M64L-32S-Kit：
+`ostest` 配置，Ai-M64P-32S-Kit：
 
 ```text
 PRIO_INHERIT_TEST default PASS boosted=110/110 restored=101/101 handoff_us=88 mid_done_first=no/no

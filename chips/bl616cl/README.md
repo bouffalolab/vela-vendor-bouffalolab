@@ -56,7 +56,7 @@ CORET 的 `MTIME` 地址采用 `offsetof(CORET_Type, MTIME)`；当前工具链�
 MTimer 的目标频率属于时钟配置，定义在 `bl616cl_clockconfig.h`。
 
 统一外设配置和 QFN48 引脚分配见
-[板级说明](../../boards/bl616cl/ai-m64l-32s-kit/README.md)。
+[板级说明](../../boards/bl616cl/ai-m64p-32s-kit/README.md)。
 
 ## IRQ 编号边界
 

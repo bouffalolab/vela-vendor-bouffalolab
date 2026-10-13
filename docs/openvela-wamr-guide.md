@@ -592,7 +592,7 @@ make[1]: *** [Makefile:441：nuttx] 错误 22
 
 ### 6.1 现状 📖
 
-- `vendor/bouffalolab/boards/bl616cl/ai-m64l-32s-kit/configs/` 下的 `nsh`/`nsh-peripherals`/`ostest`/`wifi` 都没有 Wasm/WAMR 选项；
+- `vendor/bouffalolab/boards/bl616cl/ai-m64p-32s-kit/configs/` 下的 `nsh`/`nsh-peripherals`/`ostest`/`wifi` 都没有 Wasm/WAMR 选项；
 - `chips/bl616cl`、`boards/bl616cl` 内没有 wasm 相关代码；
 - 本 SDK 的 manifest 也没有拉取 openvela 的 Vela Wasm Framework 与 Bouffalo wasm SDK 2.0。
 
@@ -611,7 +611,7 @@ make[1]: *** [Makefile:441：nuttx] 错误 22
 
 ```bash
 source build/envsetup.sh
-./vela menuconfig ai-m64l-32s-kit/nsh-peripherals
+./vela menuconfig ai-m64p-32s-kit/nsh-peripherals
 # Application Configuration → Interpreters → Webassembly Micro Runtime
 #   [*] Webassembly Micro Runtime
 #   [*] Webassembly iwasm task
@@ -624,14 +624,14 @@ source build/envsetup.sh
 # Application Configuration → Examples
 #   [*] "Hello, WebAssembly!" example  （可选，验证框架）
 
-./vela build ai-m64l-32s-kit/nsh-peripherals -j14
+./vela build ai-m64p-32s-kit/nsh-peripherals -j14
 ```
 
 注意事项：
 
 - `vela menuconfig` 退出时会**自动回写板级 defconfig**；实验性改动要么不提交、用完恢复，要么单独提交并经过评审。
 - 改动 `BL616CL_EM_*` 等链接脚本相关 CONFIG 后必须 `vela clean`（增量构建会静默沿用旧内存布局）。
-- 模块产物在 `cmake_out/ai-m64l-32s-kit_nsh-peripherals/wasm/`；设备侧需要可访问这些文件（ROMFS 只读、编译期生成；实验可先走 `/data` 分区或用 `INSTALL_NAME` 打进 romfs）。
+- 模块产物在 `cmake_out/ai-m64p-32s-kit_nsh-peripherals/wasm/`；设备侧需要可访问这些文件（ROMFS 只读、编译期生成；实验可先走 `/data` 分区或用 `INSTALL_NAME` 打进 romfs）。
 - 烧录/串口操作按仓库技能（`vela flash` + `bl-module-reset`），不要手写 DTR/RTS 时序。
 
 ### 6.4 第一步的验收清单（建议）

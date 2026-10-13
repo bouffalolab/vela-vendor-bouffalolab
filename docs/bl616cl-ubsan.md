@@ -2,7 +2,7 @@
 
 本文说明 BL616CL 如何使用 OpenVela UBSAN runtime，对指定目标进行局部插桩，
 并给出可重复的合法计算、有符号加法溢出、越界移位、正式产品裁剪和外设回归
-流程。运行环境为 Ai-M64L-32S-Kit、`/dev/ttyUSB2`、2,000,000 baud。
+流程。运行环境为 Ai-M64P-32S-Kit、`/dev/ttyUSB2`、2,000,000 baud。
 
 ## 背景
 
@@ -136,18 +136,18 @@ CONFIG_BL_OS_FEATURE_TESTS_UBSAN
 
 ```sh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --disable BL_OS_FEATURE_TESTS_UBSAN \
   --disable MM_UBSAN
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 完成判据：clean build 退出码为 0；`.config` 中 UBSAN runtime 和测试 app 均
@@ -157,32 +157,32 @@ vendor/bouffalolab/vela build \
 
 ```sh
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --enable MM_UBSAN \
   --disable MM_UBSAN_ALL \
   --disable MM_UBSAN_TRAP_ON_ERROR \
   --disable MM_UBSAN_DUMMY \
   --enable BL_OS_FEATURE_TESTS_UBSAN
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 ### 3. 恢复正式产品并 clean build
 
 ```sh
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --disable BL_OS_FEATURE_TESTS_UBSAN
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 ## 静态制品核查
@@ -190,7 +190,7 @@ vendor/bouffalolab/vela build \
 ### 测试固件
 
 ```sh
-OUT=cmake_out/ai-m64l-32s-kit_nsh
+OUT=cmake_out/ai-m64p-32s-kit_nsh
 TOOL=prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf
 
 grep -E 'CONFIG_(MM_UBSAN|BL_OS_FEATURE_TESTS_UBSAN)' "$OUT/.config"
@@ -210,7 +210,7 @@ handler 且没有未定义 UBSAN 符号。
 ### 正式产品
 
 ```sh
-OUT=cmake_out/ai-m64l-32s-kit_nsh
+OUT=cmake_out/ai-m64p-32s-kit_nsh
 TOOL=prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf
 
 test ! -e "$OUT/apps/vendor/bouffalolab/apps/os_feature_tests/ubsan/libapps_ubsan_test.a"
@@ -227,7 +227,7 @@ test ! -e "$OUT/apps/vendor/bouffalolab/apps/os_feature_tests/ubsan/libapps_ubsa
 
 ## USB2 单 fd 运行流程
 
-Ai-M64L-32S-Kit 打开 USB-UART 时会因 modem line 瞬时变化而重启。测试使用仓库
+Ai-M64P-32S-Kit 打开 USB-UART 时会因 modem line 瞬时变化而重启。测试使用仓库
 runner，在同一个 fd 内完成启动、命令和全部回归：
 
 测试固件：

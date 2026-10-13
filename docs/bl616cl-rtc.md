@@ -95,12 +95,12 @@ attach 均不编译。若从 Alarm-on 配置切换到完整 Alarm-off 裁剪态�
 
 ```bash
 vendor/bouffalolab/vela menuconfig \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+  bl616cl/ai-m64p-32s-kit/configs/nsh
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 defconfig 是自动生成文件；切换配置后通过 `savedefconfig` 保存，不直接编辑。从
@@ -349,7 +349,7 @@ ioctl 的固定结果 77，还必须逐项匹配预期 lower 方法、调用顺�
 ```bash
 # debug：构建后按板卡流程烧录，再复位确认 NSH
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-debug -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh-rtc-ioctl-debug -j14
 python3 vendor/bouffalolab/.agents/skills/bl-module-reset/scripts/bl_module_reset.py \
   --port /dev/ttyUSB2 --baudrate 2000000 \
   --expect "NuttShell (NSH)" --expect "nsh>"
@@ -516,14 +516,14 @@ RV32 release/debug 使用独立测试配置，先 clean 再 build：
 
 ```bash
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-release
+  bl616cl/ai-m64p-32s-kit/configs/nsh-rtc-ioctl-release
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-release -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh-rtc-ioctl-release -j14
 
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-debug
+  bl616cl/ai-m64p-32s-kit/configs/nsh-rtc-ioctl-debug
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh-rtc-ioctl-debug -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh-rtc-ioctl-debug -j14
 ```
 
 烧录完成后的运行流程如下；所有串口命令复用同一个 fd，每一步等待 `nsh>` 后再

@@ -94,7 +94,7 @@ OUT 设置开漏、IN 设置上拉；写 0 后等待 5ms，读值必须为 0；�
 ## 实测数据
 
 - 既有回归：GPIO-001/002/003 PASS；GPIO-004、005 各收到 20 次中断并 PASS。
-- 2026-08-28，Ai-M64L-32S-Kit，`/dev/ttyUSB2` @ 2 Mbps：GPIO-edge 64 次恢复循环 PASS，返回 `nsh>`。
+- 2026-08-28，Ai-M64P-32S-Kit，`/dev/ttyUSB2` @ 2 Mbps：GPIO-edge 64 次恢复循环 PASS，返回 `nsh>`。
 - GPIO-007/008 的电压、电流和波形质量需使用外部仪器记录。
 
 ## 固件运行关键证据
@@ -118,5 +118,5 @@ nsh> mcu_gpio_test -c edge --out /dev/gpio12 -n 64 -r
 nsh>
 ```
 
-以上 001~005 和 edge 已在 Ai-M64L-32S-Kit `/dev/ttyUSB2` @ 2Mbps 闭环。board、007、008、010
+以上 001~005 和 edge 已在 Ai-M64P-32S-Kit `/dev/ttyUSB2` @ 2Mbps 闭环。board、007、008、010
 当前没有同等层级的实板原始数据，因此只记录流程和判据，不标记为已实测 PASS。

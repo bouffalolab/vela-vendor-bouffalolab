@@ -58,7 +58,7 @@ class Console:
         termios.tcsetattr(self.fd, termios.TCSANOW, a)
         termios.tcflush(self.fd, termios.TCIFLUSH)
 
-        # DTR=1, RTS=0 releases reset on the Ai-M64L-32S kit.
+        # DTR=1, RTS=0 releases reset on the Ai-M64P-32S kit.
 
         for flag, on in ((termios.TIOCM_DTR, True),
                          (termios.TIOCM_RTS, False)):

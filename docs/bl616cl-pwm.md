@@ -47,7 +47,7 @@ board 固定选择 PWM0 CH3 正向输出 GPIO22，并注册 `/dev/pwm0`。
 ```text
 board_late_initialize()
   -> bl616cl_board_initialize()
-  -> ai_m64l_kit_pwm_initialize()
+  -> ai_m64p_kit_pwm_initialize()
   -> bl616cl_pwm_initialize(3, 22)
   -> pwm_register("/dev/pwm0", lower)
 
@@ -60,7 +60,7 @@ open / SET / START / STOP / close
 
 - `chips/bl616cl/bl616cl_pwm.c`：OpenVela lower、频率求解、错误转换和 test diagnostic，
   编入 `libarch.a`；
-- `boards/bl616cl/ai-m64l-32s-kit/src/ai_m64l_kit_pwm.c`：固定 CH3+/GPIO22 和
+- `boards/bl616cl/ai-m64p-32s-kit/src/ai_m64p_kit_pwm.c`：固定 CH3+/GPIO22 和
   `/dev/pwm0` 注册，编入 `libboard.a`；
 - `cmake/bl616cl_lhal.cmake`：按 PWM Kconfig 选择现有 LHAL PWM/clock 依赖，
   编入 `libbl_lhal.a`；
@@ -72,7 +72,7 @@ open / SET / START / STOP / close
 | 选项 | 作用 | 关闭效果 |
 |---|---|---|
 | `BL616CL_PWM` | chip lower 总开关，并启用通用 PWM upper-half | 无 lower 和 PWM LHAL 对象 |
-| `AI_M64L_KIT_PWM` | board CH3+/GPIO22 和 `/dev/pwm0` | 不接管 GPIO22，不注册节点 |
+| `AI_M64P_KIT_PWM` | board CH3+/GPIO22 和 `/dev/pwm0` | 不接管 GPIO22，不注册节点 |
 | `BL616CL_PWM_TEST` | timeout fault 与诊断 API | 产品无 test symbol |
 | `BL_MCU_PERIPHERAL_TESTS_PWM` | `mcu_pwm_test` 单一测试 main | 无测试 archive、命令和字符串 |
 
@@ -148,9 +148,9 @@ upper 同步清除 `started`。否则 reopen 后 `PWMIOC_START` 会因旧状态�
 
 ```bash
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/<config>
+  bl616cl/ai-m64p-32s-kit/configs/<config>
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/<config> -j14
+  bl616cl/ai-m64p-32s-kit/configs/<config> -j14
 ```
 
 验收必须同时回读 `.config`、Ninja source、archive、map、ELF symbol 和 NSH `help`：

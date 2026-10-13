@@ -66,12 +66,12 @@ CONFIG_BL616CL_RTC_CLOCK_DIG32K=y
 
 ```bash
 vendor/bouffalolab/vela menuconfig \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+  bl616cl/ai-m64p-32s-kit/configs/nsh
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 从 RTC-on 切到完整关闭态时，除关闭 `CONFIG_BL616CL_RTC` 外，还要在
@@ -92,7 +92,7 @@ vendor/bouffalolab/vela build \
 在 SDK 根目录执行以下命令检查当前构建产物：
 
 ```bash
-OUT=cmake_out/ai-m64l-32s-kit_nsh
+OUT=cmake_out/ai-m64p-32s-kit_nsh
 TOOL=prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf
 "${TOOL}-ar" t "$OUT/arch/libarch.a" | grep bl616cl_rtc
 "${TOOL}-ar" t "$OUT/apps/vendor/bouffalolab/libbl_std.a" | grep bl616cl_rtc

@@ -83,9 +83,9 @@ early init 和 section load 等早期 C 函数也能使用 stack protector。
 
 ```sh
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 完成判据：
@@ -101,11 +101,11 @@ vendor/bouffalolab/vela build \
 
 ```sh
 grep -o -- '-fstack-protector-all' \
-  cmake_out/ai-m64l-32s-kit_nsh/compile_commands.json | wc -l
+  cmake_out/ai-m64p-32s-kit_nsh/compile_commands.json | wc -l
 grep -c '"command"' \
-  cmake_out/ai-m64l-32s-kit_nsh/compile_commands.json
+  cmake_out/ai-m64p-32s-kit_nsh/compile_commands.json
 prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf-nm \
-  -S cmake_out/ai-m64l-32s-kit_nsh/final_nuttx | \
+  -S cmake_out/ai-m64p-32s-kit_nsh/final_nuttx | \
   grep -E '__stack_chk_(guard|fail)|stack_canary_test'
 ```
 
@@ -119,26 +119,26 @@ clean configure 使用相同测试配置：
 
 ```sh
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --enable BL_OS_FEATURE_TESTS_STACK_CANARY
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 负测完成后必须恢复正式配置：
 
 ```sh
 prebuilts/build-tools/linux-x86_64/bin/kconfig-tweak \
-  --file cmake_out/ai-m64l-32s-kit_nsh/.config \
+  --file cmake_out/ai-m64p-32s-kit_nsh/.config \
   --disable BL_OS_FEATURE_TESTS_STACK_CANARY
-cmake --build cmake_out/ai-m64l-32s-kit_nsh -t savedefconfig
+cmake --build cmake_out/ai-m64p-32s-kit_nsh -t savedefconfig
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 完成判据：最终 defconfig 只保留 `CONFIG_STACK_CANARIES=y`，不保留测试 app
@@ -188,7 +188,7 @@ jal   __stack_chk_fail
 picocom --baud 2000000 --lower-rts /dev/ttyUSB2
 ```
 
-串口打开会使 Ai-M64L-32S-Kit 重启一次。保持同一会话直到负测和负测后的基本
+串口打开会使 Ai-M64P-32S-Kit 重启一次。保持同一会话直到负测和负测后的基本
 检查完成，看到 `NuttShell (NSH)` 和 `nsh>` 后继续。
 
 ### 2. 验证正常路径

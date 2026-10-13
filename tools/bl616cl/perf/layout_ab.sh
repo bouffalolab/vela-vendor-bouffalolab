@@ -32,7 +32,7 @@ done
 TOOLS=$(cd "$(dirname "$0")" && pwd -P)
 VENDOR=$(cd "$TOOLS/../../.." && pwd -P)
 ROOT=$(cd "$VENDOR/../.." && pwd -P)
-BOARD=$VENDOR/boards/bl616cl/ai-m64l-32s-kit
+BOARD=$VENDOR/boards/bl616cl/ai-m64p-32s-kit
 LD=$BOARD/scripts/ld.script
 CFG=tmp-layout-ab
 OUT=$(realpath -m "$1")
@@ -45,17 +45,17 @@ cp "$LD" "$OUT/ld.script.orig"
 cleanup()
 {
   cp "$OUT/ld.script.orig" "$LD"
-  rm -rf "$BOARD/configs/$CFG" "$ROOT/cmake_out/ai-m64l-32s-kit_$CFG"
+  rm -rf "$BOARD/configs/$CFG" "$ROOT/cmake_out/ai-m64p-32s-kit_$CFG"
 }
 trap cleanup EXIT
 
-rm -rf "$BOARD/configs/$CFG" "$ROOT/cmake_out/ai-m64l-32s-kit_$CFG"
+rm -rf "$BOARD/configs/$CFG" "$ROOT/cmake_out/ai-m64p-32s-kit_$CFG"
 cp -r "$BOARD/configs/wifi" "$BOARD/configs/$CFG"
 if [ $PERFMON = 1 ]; then
   printf 'CONFIG_BL616CL_PERFMON=y\nCONFIG_BL_PERF_TOOLS_PERFMON=y\n' \
     >> "$BOARD/configs/$CFG/defconfig"
 fi
-BUILD=$ROOT/cmake_out/ai-m64l-32s-kit_$CFG
+BUILD=$ROOT/cmake_out/ai-m64p-32s-kit_$CFG
 
 VARIANTS=
 for kind in hot base; do
@@ -75,7 +75,7 @@ for kind in hot base; do
       /__bl616cl_wifi_hot_start/ && kind == "base" { skip = 1 }
     ' "$OUT/ld.script.orig" > "$LD"
 
-    if "$VENDOR/vela" build "ai-m64l-32s-kit/$CFG" > "$OUT/build-$v.log" 2>&1; then
+    if "$VENDOR/vela" build "ai-m64p-32s-kit/$CFG" > "$OUT/build-$v.log" 2>&1; then
       img=$OUT/img-$v
       mkdir -p "$img"
       cp "$BUILD"/{nuttx.bin,partition.bin,final_nuttx,nuttx.map} "$img/"

@@ -3,7 +3,7 @@
 本文说明 BL616CL 如何把安全引擎 SEC_ENG 的 AES、SHA 接入 OpenVela crypto 框架，
 对用户态提供标准 `/dev/crypto`，并让 mbedTLS 经 ALT 层使用硬件。内容包括支持的
 算法、配置、数据通路、mbedTLS ALT 的限制和实测结果。运行环境为
-Ai-M64L-32S-Kit、`nsh-peripherals` 配置。
+Ai-M64P-32S-Kit、`nsh-peripherals` 配置。
 
 ## 支持范围
 

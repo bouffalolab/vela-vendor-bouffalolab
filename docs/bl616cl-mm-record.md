@@ -79,9 +79,9 @@ sequence 读数是“下一次分配号”。动作前后分别读到 `S0`、`S1
 
 ```sh
 vendor/bouffalolab/vela clean \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 完成判据：构建退出码为 0，生成 `final_nuttx`、`nuttx.bin` 和
@@ -92,7 +92,7 @@ vendor/bouffalolab/vela build \
 
 ```sh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 默认开启语义使用 `nsh`；pool 扩容使用
@@ -107,7 +107,7 @@ vendor/bouffalolab/vela build \
 picocom --baud 2000000 --lower-rts /dev/ttyUSB2
 ```
 
-串口打开会使 Ai-M64L-32S-Kit 重启一次。保持同一会话直到全部测试完成，看到
+串口打开会使 Ai-M64P-32S-Kit 重启一次。保持同一会话直到全部测试完成，看到
 `NuttShell (NSH)` 和 `nsh>` 后开始后续步骤。
 
 完成判据：启动过程无 assert/panic，NSH 能连续响应 `echo alive`。

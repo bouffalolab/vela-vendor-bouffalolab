@@ -16,7 +16,7 @@ ADC trigger、fixed-point frequency 和 PWM DMA 不属于本轮声明。
 ```text
 CONFIG_PWM=y
 CONFIG_BL616CL_PWM=y
-CONFIG_AI_M64L_KIT_PWM=y
+CONFIG_AI_M64P_KIT_PWM=y
 ```
 
 测试配置再启用：

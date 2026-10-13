@@ -5,8 +5,8 @@
 #
 # Usage: export_wifi_prebuilt.sh [build-dir]
 #
-# build-dir defaults to cmake_out/ai-m64l-32s-kit_wifi and must come from
-# "vela build ai-m64l-32s-kit/wifi" without --use-lib. The libraries keep the
+# build-dir defaults to cmake_out/ai-m64p-32s-kit_wifi and must come from
+# "vela build ai-m64p-32s-kit/wifi" without --use-lib. The libraries keep the
 # fat LTO objects of that build and, like the native SDK libraries, only the
 # early LTO debug info. Rebuild with "--use-lib macsw,wl80211" afterwards and
 # compare the images.
@@ -22,7 +22,7 @@ WIFI_DIR=$VENDOR_DIR/components/wireless/wifi
 MACSW_SRC=$WIFI_DIR/macsw/macsw
 WL80211_PUBLIC=$WIFI_DIR/wl80211/wl80211
 WL80211_PRIVATE=$WL80211_PUBLIC/src
-BUILD_DIR=${1:-$SDK_ROOT/cmake_out/ai-m64l-32s-kit_wifi}
+BUILD_DIR=${1:-$SDK_ROOT/cmake_out/ai-m64p-32s-kit_wifi}
 WL80211_BUILD=$BUILD_DIR/wl80211-$CHIP
 STAGE=
 

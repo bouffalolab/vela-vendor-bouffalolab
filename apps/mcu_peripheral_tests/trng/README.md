@@ -137,9 +137,9 @@ mcu_trng_test all
 `mcu_trng_test all` 严格按 `lengths -> api -> stats -> concurrent` 执行。任一子项
 失败时最终返回失败；全部完成时输出 `case=all PASS`。
 
-## Ai-M64L-32S-Kit 实测数据
+## Ai-M64P-32S-Kit 实测数据
 
-环境：BL616CL Ai-M64L-32S-Kit，`/dev/ttyUSB2`，2,000,000 baud。
+环境：BL616CL Ai-M64P-32S-Kit，`/dev/ttyUSB2`，2,000,000 baud。
 
 ### `/dev/random` 测试固件
 

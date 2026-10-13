@@ -5,7 +5,7 @@ set -euo pipefail
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$script_dir/../../.." && pwd)
-compile_db=${1:-"$root/cmake_out/ai-m64l-32s-kit_nsh/compile_commands.json"}
+compile_db=${1:-"$root/cmake_out/ai-m64p-32s-kit_nsh/compile_commands.json"}
 header="$root/vendor/bouffalolab/chips/bl616cl/bl616cl_lhal.h"
 chip_dir="$root/vendor/bouffalolab/chips/bl616cl"
 

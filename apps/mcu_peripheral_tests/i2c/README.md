@@ -25,7 +25,7 @@ BL616CL LHAL 是同步 polling master，文档频率范围为 305 Hz 至 400 kHz
 
 DMA、10-bit 地址、三段以上 repeated-start、`NOSTART` continuation、总线复位不在本 P0 app 中伪装为已支持能力；相应参数会被拒绝或留给后续测试。
 
-2026-08-30 已在 Ai-M64L-32S-Kit 的 I2C1-only 固件上完成 clean build、烧录、
+2026-08-30 已在 Ai-M64P-32S-Kit 的 I2C1-only 固件上完成 clean build、烧录、
 启动和全部单总线 fake case。实物总线仍缺外接 target、上拉和逻辑分析仪，`hw`
 case 只记录完整执行流程和判据，不标记为已实测 PASS。I2C0 默认 GPIO4/5 会与
 当前模组的 32.768 kHz/DC-DC 资源冲突，I2C0-only 和 dual 也不标记为运行通过。
@@ -44,16 +44,16 @@ CONFIG_BL_MCU_PERIPHERAL_TESTS_I2C_ITERATIONS=32
 完整 EEPROM 命令超过 NSH 默认 64 字节行长。启用本测试 app 的验证配置同时使用
 `CONFIG_NSH_LINELEN=256`，否则命令会在解析前被控制台截断；这不是 I2C 数据长度配置。
 
-板级 `AI_M64L_KIT_I2C` 总开关默认关闭；打开总开关后，I2C0 实例默认开启并使用
+板级 `AI_M64P_KIT_I2C` 总开关默认关闭；打开总开关后，I2C0 实例默认开启并使用
 GPIO4/5，I2C1 实例默认关闭且配置为 GPIO12/13。该 Kconfig 默认值只描述通用板级
 候选 pin，不表示当前模组可直接使用 GPIO4/5；当前模组必须关闭 I2C0、显式打开
 I2C1，或在确认模组资源后另选无冲突 pin。配置和编译使用 SDK 标准入口：
 
 ```bash
 vendor/bouffalolab/vela menuconfig \
-  bl616cl/ai-m64l-32s-kit/configs/nsh
+  bl616cl/ai-m64p-32s-kit/configs/nsh
 vendor/bouffalolab/vela build \
-  bl616cl/ai-m64l-32s-kit/configs/nsh -j14
+  bl616cl/ai-m64p-32s-kit/configs/nsh -j14
 ```
 
 `/dev/ttyUSB2` 只用于烧录、复位和 NSH 日志。I2C 波形必须由独立逻辑分析仪测量；USB2 不是 I2C 分析仪。
@@ -295,7 +295,7 @@ mcu_i2c_test hw dual --bus 0 --addr 0x50 --offset 0 \
 每次实测至少记录以下内容，不把烧录步骤当成运行证据：
 
 ```text
-board=ai-m64l-32s-kit chip=bl616cl console=/dev/ttyUSB2 baud=2000000
+board=ai-m64p-32s-kit chip=bl616cl console=/dev/ttyUSB2 baud=2000000
 case=hw combined command="..."
 target=AT24C32 addr=0x50 pullup=4.7kOhm pins=SCL4/SDA5
 software=PASS/FAIL ret=<value> first=<byte> last=<byte>

@@ -95,7 +95,7 @@ controller 线程在每次 BLE 中断后运行链路层调度，阻塞在自己�
 ## `ble` 配置
 
 ```bash
-./vela build ai-m64l-32s-kit/ble -j14
+./vela build ai-m64p-32s-kit/ble -j14
 ```
 
 在 `nsh` 的基础上打开 `BL_COMPONENT_BLE`、`BL616CL_EM_16K`、zblue
@@ -180,7 +180,7 @@ Address Resolution 特征（2 个属性），布局就对不上了。`BT_GAP_AUT
 
 ## 实板结果
 
-2026-10-01，Ai-M64L-32S-Kit（本端，`ble` 配置）对 BL616 miot_test（对端，
+2026-10-01，Ai-M64P-32S-Kit（本端，`ble` 配置）对 BL616 miot_test（对端，
 zblue 2.x，NuttX-3.6.1），屏蔽箱内，RSSI -11～-18 dBm。脚本经常驻串口集线器
 同时操作两端，吞吐每个方向 600 s，每分钟采样一次，重连周期 4 s。
 

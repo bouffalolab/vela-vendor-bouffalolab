@@ -380,7 +380,7 @@ config BL616CL_SPI1
 	bool "SPI1 controller"
 	default n
 	---help---
-		Build the independent SPI1 lower-half. The Ai-M64L-32S-Kit SPI1
+		Build the independent SPI1 lower-half. The Ai-M64P-32S-Kit SPI1
 		four-wire pin mapping is not yet verified, so board registration is
 		intentionally unavailable.
 
