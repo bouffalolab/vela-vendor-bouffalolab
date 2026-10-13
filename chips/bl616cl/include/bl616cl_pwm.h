@@ -56,6 +56,7 @@ struct bl616cl_pwm_test_diag_s
   uint32_t start_calls;
   uint32_t stop_calls;
   uint32_t shutdown_calls;
+  uint32_t solve_calls;
   uint32_t source_frequency;
   uint32_t actual_frequency;
   uint32_t error_count;
@@ -82,7 +83,8 @@ struct bl616cl_pwm_test_diag_s
  * Name: bl616cl_pwm_test_reset
  *
  * Description:
- *   Clear the test fault, call counters and last error.
+ *   Clear the test fault, call counters, last error and the cached
+ *   divider/period solution.
  *
  * Input Parameters:
  *   None

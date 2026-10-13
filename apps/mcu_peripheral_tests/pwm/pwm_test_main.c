@@ -621,6 +621,30 @@ out:
   return ret;
 }
 
+/* The divider search is slow, so the lower half must reuse its result while
+ * the frequency stays the same and search again only when it changes.
+ */
+
+static int expect_solve_calls(const char *case_id, uint32_t expected)
+{
+  struct bl616cl_pwm_test_diag_s diag;
+
+  if (get_diag(&diag) < 0)
+    {
+      return -EIO;
+    }
+
+  if (diag.solve_calls != expected)
+    {
+      printf("  FAIL: %s searched the divider %lu times, expected %lu\n",
+             case_id, (unsigned long)diag.solve_calls,
+             (unsigned long)expected);
+      return -EIO;
+    }
+
+  return 0;
+}
+
 static int run_case_003(const struct app_config_s *cfg)
 {
   static const struct pwm_point_s points[] = {
@@ -634,7 +658,8 @@ static int run_case_003(const struct app_config_s *cfg)
   printf("[PWM-003] Frequency, duty and register readback\n");
   bl616cl_pwm_test_reset();
   if (run_points(cfg, points, sizeof(points) / sizeof(points[0]),
-                 "PWM-003") < 0)
+                 "PWM-003") < 0 ||
+      expect_solve_calls("PWM-003", 3) < 0)
     {
       return -EIO;
     }
@@ -657,7 +682,8 @@ static int run_case_004(const struct app_config_s *cfg)
   printf("[PWM-004] Duty boundaries and live update\n");
   bl616cl_pwm_test_reset();
   if (run_points(cfg, points, sizeof(points) / sizeof(points[0]),
-                 "PWM-004") < 0)
+                 "PWM-004") < 0 ||
+      expect_solve_calls("PWM-004", 1) < 0)
     {
       return -EIO;
     }

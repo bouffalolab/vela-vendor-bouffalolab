@@ -120,6 +120,8 @@ mcu_pwm_test -c 008
 5. 由 `source/(divider*period)` 重算频率，软件误差必须不超过 1%；由
    `(high-low)/period` 重算 duty，量化误差必须不超过一个 counter tick。
 6. 每点保持 `-w` 秒供外部仪器记录，全部结束后 STOP、close。
+7. test-only 诊断的求解次数必须为 3：只有频率改变（100Hz、1kHz、10kHz）时才重新
+   求解，同频率只改 duty 时沿用上次结果。
 
 完成判据：寄存器回读满足求解和量化合同；G4 还要求仪器频率误差不超过 1%、占空比
 误差不超过 2 个百分点。
@@ -138,6 +140,7 @@ mcu_pwm_test -c 008
 4. 中间档位的 `high-low` 必须符合 period 量化结果。
 5. ABI 最大 duty 的 high 必须为 `period-1`，不得声明恒定 100% 高电平。
 6. 再更新回 25%，证明最大边界后仍能恢复；最后 STOP、close。
+7. 六次 SET 频率相同，test-only 诊断的求解次数必须为 1。
 
 完成判据：所有 threshold 边界成立，更新后硬件与请求一致且最终无资源残留。
 
@@ -278,5 +281,6 @@ CPOL/DCPOL 四组合       running polarity=待测  STOP level=待测  close lev
 超过一个 PWM 周期的异常脉冲。已测项目满足阈值；10kHz 点和 CPOL/DCPOL 电平补齐前，
 G4 波形验收仍未完成。
 
-每次 SET 在 `nsh-peripherals`（开启 KASAN）上约耗时 1 s，`-w N` 时每点实际持续约
-N+1 s，用仪器分段时按实际边沿切分，不要按 `-w` 推算。
+上述采集所用镜像上，`-w N` 时每点实际持续约 N+1 s。之后的镜像上复测，改频率的 SET
+在 `nsh-peripherals`（开启 KASAN）上约 0.35 s，只改 duty 不再求解；早先多出的耗时
+原因未查明。用仪器分段时按实际边沿切分，不要按 `-w` 推算。

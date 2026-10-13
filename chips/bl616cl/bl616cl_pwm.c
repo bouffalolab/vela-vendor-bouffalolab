@@ -98,6 +98,9 @@ struct bl616cl_pwm_lowerhalf_s
   struct bflb_device_s *gpio;
   uint32_t source_frequency;
   uint32_t actual_frequency;
+  uint32_t solved_source;
+  uint32_t solved_frequency;
+  struct bl616cl_pwm_solution_s solved;
   uint16_t divider;
   uint16_t period;
   uint16_t threshold_low;
@@ -117,6 +120,7 @@ struct bl616cl_pwm_lowerhalf_s
   uint32_t start_calls;
   uint32_t stop_calls;
   uint32_t shutdown_calls;
+  uint32_t solve_calls;
   uint32_t error_count;
   int last_error;
 #endif
@@ -847,8 +851,9 @@ static int bl616cl_pwm_shutdown(struct pwm_lowerhalf_s *lower)
  * Name: bl616cl_pwm_start
  *
  * Description:
- *   Implement the pwm_ops_s start method. Compute the divider and period,
- *   then either update the running period and threshold in place (same
+ *   Implement the pwm_ops_s start method. Compute the divider and period
+ *   (reused from the previous call for the same frequency), then either
+ *   update the running period and threshold in place (same
  *   divider) or re-initialize and start the block. The registers are read
  *   back to verify the result.
  *
@@ -886,12 +891,32 @@ static int bl616cl_pwm_start(struct pwm_lowerhalf_s *lower,
 
   priv->source_frequency =
     bflb_clk_get_system_clock(BFLB_SYSTEM_PBCLK);
-  ret = bl616cl_pwm_solve(priv->source_frequency, info->frequency,
-                          &solution);
-  if (ret < 0)
+
+  /* The search walks every divider, so reuse the last result when only the
+   * duty or polarity changes.
+   */
+
+  if (priv->solved_frequency == info->frequency &&
+      priv->solved_source == priv->source_frequency)
     {
-      bl616cl_pwm_record_error(priv, ret);
-      return ret;
+      solution = priv->solved;
+    }
+  else
+    {
+#ifdef CONFIG_BL616CL_PWM_TEST
+      priv->solve_calls++;
+#endif
+      ret = bl616cl_pwm_solve(priv->source_frequency, info->frequency,
+                              &solution);
+      if (ret < 0)
+        {
+          bl616cl_pwm_record_error(priv, ret);
+          return ret;
+        }
+
+      priv->solved = solution;
+      priv->solved_source = priv->source_frequency;
+      priv->solved_frequency = info->frequency;
     }
 
   ret = bl616cl_pwm_acquire(priv);
@@ -1075,7 +1100,8 @@ struct pwm_lowerhalf_s *bl616cl_pwm_initialize(uint8_t channel,
  * Name: bl616cl_pwm_test_reset
  *
  * Description:
- *   Clear the test fault, call counters and last error.
+ *   Clear the test fault, call counters, last error and the cached
+ *   divider/period solution.
  *
  * Input Parameters:
  *   None
@@ -1092,6 +1118,8 @@ void bl616cl_pwm_test_reset(void)
   g_bl616cl_pwm.start_calls = 0;
   g_bl616cl_pwm.stop_calls = 0;
   g_bl616cl_pwm.shutdown_calls = 0;
+  g_bl616cl_pwm.solve_calls = 0;
+  g_bl616cl_pwm.solved_frequency = 0;
   g_bl616cl_pwm.error_count = 0;
   g_bl616cl_pwm.last_error = OK;
 }
@@ -1168,6 +1196,7 @@ int bl616cl_pwm_test_get_diag(struct bl616cl_pwm_test_diag_s *diag)
   diag->start_calls = g_bl616cl_pwm.start_calls;
   diag->stop_calls = g_bl616cl_pwm.stop_calls;
   diag->shutdown_calls = g_bl616cl_pwm.shutdown_calls;
+  diag->solve_calls = g_bl616cl_pwm.solve_calls;
   diag->source_frequency = g_bl616cl_pwm.source_frequency;
   diag->actual_frequency = g_bl616cl_pwm.actual_frequency;
   diag->error_count = g_bl616cl_pwm.error_count;

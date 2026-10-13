@@ -100,9 +100,11 @@ divider 遍历 1..65535；每个 divider 只比较理想 period 附近且落在 
 用 64-bit 有理误差比较选择最优组合。配置后必须读取实际 divider/period 并据此计算
 actual frequency，不能用请求值或仅缓存配置冒充寄存器证据。
 
-穷举有明显耗时：开启 KASAN 的 `nsh-peripherals` 上每次 SET 约 1 s，
-`mcu_pwm_test -c 003 -w 0` 的五个点共用 4.0 s，`-w N` 时每点实际持续约 N+1 s。
-只有 period 小于 2 时才提前结束，低频请求会遍历全部 65535 个 divider。
+穷举有明显耗时：只有 period 小于 2 时才提前结束，低频请求会遍历全部 65535 个
+divider。PBCLK 为 160 MHz 时，一次完整遍历在开启 KASAN 的 `nsh-peripherals` 上约
+0.35 s，关闭 KASAN、UBSAN 和 stack canary 后约 0.17 s。lower 记住上一次求解时的
+PBCLK、frequency 和结果，两者都没变（只改 duty 或 polarity）时直接沿用，不再求解；
+test-only 诊断的 `solve_calls` 记录实际求解次数。
 
 `duty` 是 `ub16_t`：
 
