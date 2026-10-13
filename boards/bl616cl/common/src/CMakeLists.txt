@@ -25,3 +25,6 @@ if(CONFIG_BOARDCTL_RESET OR CONFIG_BOARDCTL_RESET_CAUSE)
 endif()
 
 target_sources(board PRIVATE ${SRCS})
+
+# bl616cl_bringup.c reads the efuse chip information through LHAL.
+target_compile_definitions(board PRIVATE BL616CL)

@@ -28,6 +28,8 @@
 
 #include <sys/types.h>
 
+#include "bflb_efuse.h"
+
 #ifdef CONFIG_BL_COMPONENT_WL80211
 #include "bl616cl_wlan.h"
 #endif
@@ -66,6 +68,35 @@
 #include "bl616cl_board_common.h"
 
 /****************************************************************************
+ * Private Functions
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: bl616cl_chipinfo_report
+ *
+ * Description:
+ *   Log the package, on-package flash and PSRAM, and chip version recorded
+ *   in efuse, so the console identifies the module variant.
+ *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+static void bl616cl_chipinfo_report(void)
+{
+  bflb_efuse_device_info_type info;
+
+  bflb_efuse_get_device_info(&info);
+  syslog(LOG_INFO, "BL616CL: package %s flash %s psram %s version %u\n",
+         info.package_name, info.flash_info_name, info.psram_info_name,
+         info.version);
+}
+
+/****************************************************************************
  * Public Functions
  ****************************************************************************/
 
@@ -74,7 +105,8 @@
  *
  * Description:
  *   Perform common BL616CL board initialization after nx_start() has entered
- *   the NuttX initialization path.
+ *   the NuttX initialization path, starting with logging the efuse chip
+ *   information.
  *
  * Input Parameters:
  *   None.
@@ -88,6 +120,8 @@
 int bl616cl_bringup(void)
 {
   int ret;
+
+  bl616cl_chipinfo_report();
 
 #ifdef CONFIG_BOARDCTL_RESET_CAUSE
   bl616cl_reset_reason_initialize();
