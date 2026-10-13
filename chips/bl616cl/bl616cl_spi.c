@@ -1275,9 +1275,9 @@ int bl616cl_spibus_uninitialize(struct spi_dev_s *dev)
  * Name: bl616cl_spi_configure_pins
  *
  * Description:
- *   Select which pins carry MISO and MOSI by programming the GLB SPI signal
- *   swap for the port. Each pin must be a valid SPI data pin (pin number
- *   modulo 4 is 2 or 3), and MISO and MOSI must not share the same function.
+ *   Select which pins carry MISO and MOSI by programming the port's MOSI/MISO
+ *   swap. Each pin must be a valid SPI data pin (pin number modulo 4 is 2 or
+ *   3), and MISO and MOSI must use different signals.
  *
  * Input Parameters:
  *   port - SPI port number (0 or 1).
@@ -1294,42 +1294,39 @@ int bl616cl_spi_configure_pins(int port, uint8_t miso_pin,
                                uint8_t mosi_pin)
 {
   struct bl616cl_spi_priv_s *priv = bl616cl_spi_priv(port);
-  uint8_t miso_group;
-  uint8_t mosi_group;
-  uint8_t swap;
+  BL_Fun_Type swap;
+  uint8_t group;
   int ret;
 
   if (priv == NULL || miso_pin > 36 || mosi_pin > 36 ||
       (miso_pin % 4 != 2 && miso_pin % 4 != 3) ||
-      (mosi_pin % 4 != 2 && mosi_pin % 4 != 3))
+      (mosi_pin % 4 != 2 && mosi_pin % 4 != 3) ||
+      miso_pin % 4 == mosi_pin % 4)
     {
       return -EINVAL;
     }
 
-  miso_group = miso_pin / 12;
-  mosi_group = mosi_pin / 12;
-  if (miso_group == mosi_group && miso_pin % 4 == mosi_pin % 4)
-    {
-      return -EINVAL;
-    }
+  /* The per-group signal swap also moves SS and SCLK onto the data pins
+   * (BL616CL PIN_MUX table), so keep it clear for every group of the port.
+   * The port-wide MOSI/MISO swap alone selects the data order; MISO on
+   * signal 2 is the unswapped layout used by the Bouffalo SDK boards.
+   */
 
   nxmutex_lock(&g_bl616cl_spi_init_lock);
-  ret = port == 0 ? GLB_Swap_MCU_SPI_0_MOSI_With_MISO(DISABLE) :
-                    GLB_Swap_MCU_SPI_1_MOSI_With_MISO(DISABLE);
-  if (ret != SUCCESS)
+  ret = SUCCESS;
+  for (group = GLB_SPI_SIG_SWAP_GRP_GPIO0_GPIO11;
+       ret == SUCCESS && group <= GLB_SPI_SIG_SWAP_GRP_GPIO36_GPIO45;
+       group++)
     {
-      nxmutex_unlock(&g_bl616cl_spi_init_lock);
-      return -EIO;
+      ret = port == 0 ? GLB_SPI0_Sig_Swap_Set(group, 0) :
+                        GLB_SPI1_Sig_Swap_Set(group, 0);
     }
 
-  swap = miso_pin % 4 == 3;
-  ret = port == 0 ? GLB_SPI0_Sig_Swap_Set(miso_group, swap) :
-                    GLB_SPI1_Sig_Swap_Set(miso_group, swap);
-  if (ret == SUCCESS && mosi_group != miso_group)
+  swap = miso_pin % 4 == 3 ? ENABLE : DISABLE;
+  if (ret == SUCCESS)
     {
-      swap = mosi_pin % 4 == 2;
-      ret = port == 0 ? GLB_SPI0_Sig_Swap_Set(mosi_group, swap) :
-                        GLB_SPI1_Sig_Swap_Set(mosi_group, swap);
+      ret = port == 0 ? GLB_Swap_MCU_SPI_0_MOSI_With_MISO(swap) :
+                        GLB_Swap_MCU_SPI_1_MOSI_With_MISO(swap);
     }
 
   nxmutex_unlock(&g_bl616cl_spi_init_lock);

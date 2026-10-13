@@ -88,10 +88,13 @@ SPIIOC_TRANSFER
 | `BL616CL_SPI_TEST` | chip fake transport/diagnostic | 正式产品无注入接口 |
 | `BL_MCU_PERIPHERAL_TESTS_SPI` | 测试命令 | 无测试 archive、命令和字符串 |
 
-SPI0 默认 GPIO12=CS、GPIO13=CLK、GPIO18=MISO、GPIO19=MOSI。board Kconfig
-禁止与 I2C1 同时启用；编译期还检查 signal 编号、pin 唯一性、保留 pin 和第二 CS
-冲突。pinmux 配置会先清全局 MISO/MOSI swap，再按每个 GPIO group 的 signal 2/3
-选择设置局部 swap，避免 Kconfig 接受的替代组合被路由到错误信号。
+SPI0 默认 GPIO12=CS、GPIO13=CLK、GPIO18=MISO、GPIO19=MOSI。编译期检查
+signal 编号、pin 唯一性、保留 pin、第二 CS，以及与 I2C、UART1、PWM 的 pin
+重叠。按 BL616CL PIN_MUX 表，每 12 个 GPIO 一组的 signal swap 会把 SS/SCLK 与
+两个数据 signal 对调，而不是只对调 MISO/MOSI；因此 pinmux 配置把该端口所有分组的
+swap 清零，只用端口级 MOSI/MISO swap 选择数据方向：MISO 在 signal 2 时不交换，
+在 signal 3 时交换。MISO/MOSI 两脚必须分别落在 signal 2 和 3。默认 pin 的寄存器
+取值与原生 SDK 一致；signal 3 作 MISO 的组合和实际数据方向尚待逻辑分析仪确认。
 
 SPI1 只有 chip 开关，没有 Ai-M64L board 开关。这保证未知 pin 不会被软件占用，
 同时允许独立构建和 fake 验证 lower-half。
