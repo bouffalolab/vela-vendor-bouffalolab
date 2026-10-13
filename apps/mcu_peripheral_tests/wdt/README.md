@@ -41,6 +41,11 @@ upper-half 仍可能被用户替换 handler 而不停止 monitor，因此本轮�
 | `nsh` | y | y | n | 1224/1224 |
 | `nsh-wdt`（历史，已删除） | y | n | BY_WDOG | 1224/1224 |
 
+现役统一配置 `nsh-peripherals` 同时启用 capture 和 BY_WDOG automonitor。2026-10-13
+在该配置上实测 WDT-002、003、004 PASS，WDT-005 复位后 `SYS_RWDT` PASS。WDT-005
+必须在开机后第一个运行：WDT-002~004 会由用户 START/STOP 接管看门狗，之后
+automonitor 不再运行，WDT-005 会报 `automonitor not active`。
+
 在 SDK 根目录执行：
 
 ```bash
