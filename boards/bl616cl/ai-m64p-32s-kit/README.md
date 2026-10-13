@@ -2,9 +2,9 @@
 
 ## 统一外设测试配置
 
-`configs/nsh-peripherals` 用于在同一固件中回归 DMA、I2C、PSRAM、PWM、SPI、
-Timer、UART 和 WDT。该配置保留 GPIO lower-half，但关闭与 SPI0 引脚冲突的
-GPIO 示例和测试命令。NSH 命令行最长 127 个字符、最多 16 个参数，并开启命令历史和
+`configs/nsh-peripherals` 用于在同一固件中回归 DMA、GPIO、I2C、PSRAM、PWM、SPI、
+Timer、UART 和 WDT。GPIO 测试使用不与其他外设冲突的 GPIO23/20 回环，不编译
+`gpio` 示例。NSH 命令行最长 127 个字符、最多 16 个参数，并开启命令历史和
 Tab 补全，各测试 README 中写全参数的命令可以直接输入。
 
 后续新增外设驱动及测试统一加入此配置，不为单个外设新增 defconfig。
@@ -21,8 +21,8 @@ QFN48 封装提供 GPIO0 到 GPIO36。板级固定或保留资源如下：
 | I2C1 | SCL 4、SDA 5 | 外接 3.3 V 目标和上拉电阻 |
 | SPI0 | CS 12、CLK 13、MISO 18、MOSI 19 | 测试时 MISO 与 MOSI 外接环回 |
 | PWM0 channel 3 | 22 | 正向输出，可接逻辑分析仪或示波器 |
-| GPIO 安全节点 | GPIO23 output、GPIO20 input | 不占用上述外设引脚；不构成默认回环对 |
-| 板载 LED | 红 14、绿 15、蓝 16、暖白 28、冷白 27 | 高电平点亮（Ai-M64P-32S-Kit V1.0 原理图） |
+| GPIO 回环 | GPIO23 output、GPIO20 input | `mcu_gpio_test` 默认回环，测试时外接跳线 |
+| 板载 LED | 红 14、绿 15、蓝 16、暖白 28、冷白 27 | 高电平点亮（Ai-M64P-32S-Kit V1.0 原理图）；蓝灯注册为 `/dev/gpio16` |
 
 I2C1 的板级通用默认仍为 GPIO12/13；`nsh-peripherals` 显式覆盖为 GPIO4/5，
 以保留 SPI0 的既有四线分配，且不影响只启用 I2C1 的配置。I2C controller 的
@@ -42,6 +42,5 @@ TIMER1 同时是普通 timer lower-half 和 one-shot lower-half 的硬件资源�
 - PWM：GPIO22 接测量设备。
 - WDT：会触发复位的用例必须单独执行并根据 reset cause 验证，不能与其余
   并发测试混跑。
-- GPIO：统一配置只注册 `/dev/gpio23` 和 `/dev/gpio20`，不编译
-  `mcu_gpio_test` 或 `gpio` 示例。需要 GPIO12 到 GPIO20 回环时使用独立 GPIO
-  测试配置，不得同时启用 SPI0。
+- GPIO：GPIO23 与 GPIO20 短接；统一配置只注册 `/dev/gpio16`（板载蓝灯）、
+  `/dev/gpio20` 和 `/dev/gpio23`。

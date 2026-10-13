@@ -6,7 +6,8 @@
 ## 背景
 
 GPIO 测试既要覆盖正常电平、上下拉和边沿中断，也要验证错误 ioctl 不会污染设备状态。
-默认回环使用 `/dev/gpio12`（输出）和 `/dev/gpio20`（输入），需用跳线连接两脚。
+默认回环使用 `/dev/gpio23`（输出）和 `/dev/gpio20`（输入），需用跳线连接两脚。这两脚不与
+`nsh-peripherals` 的其他外设冲突，该测试编入 `nsh-peripherals` 和 `ostest`。
 
 ## 方案与用例
 
@@ -21,22 +22,22 @@ GPIO 测试既要覆盖正常电平、上下拉和边沿中断，也要验证错
 | GPIO-008 | 快速翻转波形 | 示波器检查边沿、过冲、振铃 |
 | GPIO-010 | 启动状态记录 | 输出 pintype 和 value |
 | GPIO-edge | 异常请求与恢复 | 错误码正确且后续读写恢复 |
-| board | 板载 LED/按键 | 空闲按键为 1，LED 操作完成 |
+| board | 板载 LED，给出按键时含按键 | LED 操作完成；给出按键时空闲值为 1 |
 | pair | 依次执行 001、003、004、005、002 | 全部 PASS |
 | all | 010、board、pair；跳过仪器用例 | 全部执行项 PASS |
 
 ## 命令与流程
 
 ```text
-mcu_gpio_test -c 001 --out /dev/gpio12 --in /dev/gpio20 -n 20 -p 100000
-mcu_gpio_test -c 002 --out /dev/gpio12 --in /dev/gpio20
+mcu_gpio_test -c 001 --out /dev/gpio23 --in /dev/gpio20 -n 20 -p 100000
+mcu_gpio_test -c 002 --out /dev/gpio23 --in /dev/gpio20
 mcu_gpio_test -c 003 --in /dev/gpio20
-mcu_gpio_test -c 004 --out /dev/gpio12 --in /dev/gpio20 -n 20
-mcu_gpio_test -c 005 --out /dev/gpio12 --in /dev/gpio20 -n 20
-mcu_gpio_test -c 007 --out /dev/gpio12 -H 5000
-mcu_gpio_test -c 008 --out /dev/gpio12 -p 100000 -n 20
+mcu_gpio_test -c 004 --out /dev/gpio23 --in /dev/gpio20 -n 20
+mcu_gpio_test -c 005 --out /dev/gpio23 --in /dev/gpio20 -n 20
+mcu_gpio_test -c 007 --out /dev/gpio23 -H 5000
+mcu_gpio_test -c 008 --out /dev/gpio23 -p 100000 -n 20
 mcu_gpio_test -c 010
-mcu_gpio_test -c edge --out /dev/gpio12 -n 64 -r
+mcu_gpio_test -c edge --out /dev/gpio23 -n 64 -r
 ```
 
 每个用例依次打开设备、设置 pintype、执行读写或信号等待并关闭设备；`-r` 恢复原 pintype。
@@ -45,11 +46,14 @@ GPIO-edge 先验证未知 ioctl=`ENOTTY`、非法 pintype=`EINVAL` 且状态不�
 
 ### board
 
-1. 打开 KEY0 `/dev/gpio8`、KEY1 `/dev/gpio9`、LED `/dev/gpio18`。
-2. 将 LED 配成推挽输出，执行 3 次 active-low blink。
-3. 将两个按键配置为输入，连续稳定采样；两者空闲值必须为 1。
-4. 默认跳过人工按键中断；加 `--interactive` 时依次等待按下/释放并验证下降沿、上升沿。
-5. LED 改为开漏 active-low，保持 300ms，再释放；最后输出 PASS。
+Ai-M64P-32S-Kit 只有 EN、BOOT 两个按键，没有用户按键；LED 默认用高电平点亮的板载蓝灯
+`/dev/gpio16`。
+
+1. 打开 LED；用 `--key0`、`--key1` 给出按键时（两者须同时给出）一并打开。
+2. 将 LED 配成推挽输出，执行 3 次 active-high blink。
+3. 没有按键时跳过以下两步，直接输出 PASS。
+4. 将两个按键配置为输入，连续稳定采样；两者空闲值必须为 1。
+5. 默认跳过人工按键中断；加 `--interactive` 时依次等待按下/释放并验证下降沿、上升沿。
 
 ### GPIO-001
 
@@ -81,10 +85,10 @@ OUT 设置开漏、IN 设置上拉；写 0 后等待 5ms，读值必须为 0；�
 ### GPIO-007 / GPIO-008 / GPIO-010
 
 007 将 OUT 置高保持 `hold_ms`，只提供稳定测量窗口；外部仪器记录电压/电流。008 每轮写高、等待半周期、
-写低、再等待半周期，示波器记录边沿和振铃。010 依次打开 5 个配置 GPIO，只读 pintype/value 并打印 RECORD，
+写低、再等待半周期，示波器记录边沿和振铃。010 依次打开已配置的 GPIO（按键未给出时跳过），只读 pintype/value 并打印 RECORD，
 不改变硬件状态。
 
-完成判据：007/008 的软件流程无 ioctl 失败，且外部测量已记录；010 的五个 GPIO 均打印 RECORD。
+完成判据：007/008 的软件流程无 ioctl 失败，且外部测量已记录；010 的每个已配置 GPIO 均打印 RECORD。
 
 ### pair / all
 
@@ -118,5 +122,28 @@ nsh> mcu_gpio_test -c edge --out /dev/gpio12 -n 64 -r
 nsh>
 ```
 
-以上 001~005 和 edge 已在 Ai-M64P-32S-Kit `/dev/ttyUSB2` @ 2Mbps 闭环。board、007、008、010
-当前没有同等层级的实板原始数据，因此只记录流程和判据，不标记为已实测 PASS。
+以上 001~005 和 edge 已在 Ai-M64P-32S-Kit `/dev/ttyUSB2` @ 2Mbps 闭环（当时回环为
+GPIO12→GPIO20）。
+
+2026-10-13 默认回环改为 GPIO23→GPIO20 后，在 `nsh-peripherals` 上短接两脚复测：
+
+```text
+nsh> mcu_gpio_test -c all -A 0
+KEY0=none KEY1=none LED=/dev/gpio16 OUT=/dev/gpio23 IN=/dev/gpio20
+[GPIO-010] RECORD /dev/gpio16 pintype=GPIO_OUTPUT_PIN value=0
+[GPIO-010] RECORD /dev/gpio23 pintype=GPIO_OUTPUT_PIN value=0
+[GPIO-010] RECORD /dev/gpio20 pintype=GPIO_INPUT_PIN value=0
+[GPIO-board] SKIP key checks; use --key0 and --key1
+[GPIO-board] PASS board GPIO checks completed
+[GPIO-001] PASS input followed push-pull output
+[GPIO-003] PASS input pull-up/down checks completed
+[GPIO-004] PASS 20 interrupts received
+[GPIO-005] PASS 20 interrupts received
+[GPIO-002] PASS open-drain low/release checks completed
+nsh> mcu_gpio_test -c edge -n 64 -r -A 0
+[GPIO-edge] PASS rejected invalid operations and recovered for 64 cycles
+```
+
+逻辑分析仪（1 MHz 采样）确认 board 用例中 GPIO16 输出 3 个高电平脉冲，每个约 100 ms、
+周期约 200 ms；`-c 008 -p 20000 -n 3` 在所选 GPIO 上输出 3 个脉冲。007 的电压、电流
+和 008 的边沿质量仍需示波器等仪器记录。

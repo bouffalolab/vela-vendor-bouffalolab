@@ -28,11 +28,9 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define DEFAULT_KEY0_DEVPATH   "/dev/gpio8"
-#define DEFAULT_KEY1_DEVPATH   "/dev/gpio9"
-#define DEFAULT_LED_DEVPATH    "/dev/gpio18"
-#define DEFAULT_OUT_DEVPATH    "/dev/gpio31"
-#define DEFAULT_IN_DEVPATH     "/dev/gpio32"
+#define DEFAULT_LED_DEVPATH    "/dev/gpio16"
+#define DEFAULT_OUT_DEVPATH    "/dev/gpio23"
+#define DEFAULT_IN_DEVPATH     "/dev/gpio20"
 
 #define DEFAULT_PERIOD_US      (100000)
 #define DEFAULT_COUNT          (20)
@@ -110,7 +108,7 @@ static int gpio_set_type(struct gpio_handle_s *gpio,
 static int gpio_write_value(struct gpio_handle_s *gpio, bool value);
 static int gpio_read_value(struct gpio_handle_s *gpio, bool *value);
 static int stable_read(struct gpio_handle_s *gpio, bool *value);
-static int led_set_active_low(struct gpio_handle_s *led, bool on);
+static int led_set(struct gpio_handle_s *led, bool on);
 static int led_blink(struct gpio_handle_s *led, unsigned int count);
 static int wait_for_key_state(struct gpio_handle_s *key, bool expected,
                               uint32_t timeout_ms, const char *prompt);
@@ -176,11 +174,11 @@ static void print_usage(const char *progname)
   printf("  -c <id>        board, pair, edge, 001, 002, 003, 004, 005, "
          "007, 008, 010, all\n");
   printf("                 default: all\n");
-  printf("  --key0 <dev>   KEY0 GPIO path (default: %s)\n",
-         DEFAULT_KEY0_DEVPATH);
-  printf("  --key1 <dev>   KEY1 GPIO path (default: %s)\n",
-         DEFAULT_KEY1_DEVPATH);
-  printf("  --led <dev>    LED GPIO path, active-low (default: %s)\n",
+  printf("  --key0 <dev>   KEY0 GPIO path, use with --key1 "
+         "(default: none)\n");
+  printf("  --key1 <dev>   KEY1 GPIO path, use with --key0 "
+         "(default: none)\n");
+  printf("  --led <dev>    LED GPIO path, active-high (default: %s)\n",
          DEFAULT_LED_DEVPATH);
   printf("  --out <dev>    Pair output GPIO path (default: %s)\n",
          DEFAULT_OUT_DEVPATH);
@@ -285,8 +283,8 @@ static int parse_u32_arg(const char *name, const char *arg,
 static void init_default_config(struct app_config_s *cfg)
 {
   cfg->case_id = CASE_ALL;
-  cfg->key0_path = DEFAULT_KEY0_DEVPATH;
-  cfg->key1_path = DEFAULT_KEY1_DEVPATH;
+  cfg->key0_path = NULL;
+  cfg->key1_path = NULL;
   cfg->led_path = DEFAULT_LED_DEVPATH;
   cfg->out_path = DEFAULT_OUT_DEVPATH;
   cfg->in_path = DEFAULT_IN_DEVPATH;
@@ -768,11 +766,10 @@ static int stable_read(struct gpio_handle_s *gpio, bool *value)
 }
 
 /****************************************************************************
- * Name: led_set_active_low
+ * Name: led_set
  *
  * Description:
- *   Drive an active-low LED, writing the inverted level so that "on"
- *   produces a low output.
+ *   Drive an active-high LED.
  *
  * Input Parameters:
  *   led - Opened LED GPIO handle.
@@ -783,9 +780,9 @@ static int stable_read(struct gpio_handle_s *gpio, bool *value)
  *
  ****************************************************************************/
 
-static int led_set_active_low(struct gpio_handle_s *led, bool on)
+static int led_set(struct gpio_handle_s *led, bool on)
 {
-  return gpio_write_value(led, on ? false : true);
+  return gpio_write_value(led, on);
 }
 
 /****************************************************************************
@@ -817,7 +814,7 @@ static int led_blink(struct gpio_handle_s *led, unsigned int count)
 
   for (i = 0; i < count; i++)
     {
-      ret = led_set_active_low(led, true);
+      ret = led_set(led, true);
       if (ret < 0)
         {
           return ret;
@@ -825,7 +822,7 @@ static int led_blink(struct gpio_handle_s *led, unsigned int count)
 
       usleep(LED_BLINK_US);
 
-      ret = led_set_active_low(led, false);
+      ret = led_set(led, false);
       if (ret < 0)
         {
           return ret;
@@ -937,9 +934,9 @@ static bool case_uses_pair(const struct app_config_s *cfg)
  * Name: validate_config_paths
  *
  * Description:
- *   Validate the configured device paths: the out/in pair must differ for
- *   pair cases, and the recorded paths must all be unique for the record
- *   cases (all/010).
+ *   Validate the configured device paths: the keys are given together or
+ *   not at all, the out/in pair must differ for pair cases, and the
+ *   recorded paths must all be unique for the record cases (all/010).
  *
  * Input Parameters:
  *   cfg - Active configuration.
@@ -971,6 +968,12 @@ static int validate_config_paths(const struct app_config_s *cfg)
 
   size_t i;
   int ret;
+
+  if ((cfg->key0_path == NULL) != (cfg->key1_path == NULL))
+    {
+      printf("ERROR: --key0 and --key1 must be given together\n");
+      return -EINVAL;
+    }
 
   if (case_uses_pair(cfg) && path_equal(cfg->out_path, cfg->in_path))
     {
@@ -1249,9 +1252,9 @@ out:
  * Name: run_board_case
  *
  * Description:
- *   Board self-check: blink the LED push-pull, verify both keys read high
- *   when idle, optionally run interactive key interrupt checks, and verify
- *   the LED in open-drain mode.
+ *   Board self-check: blink the LED push-pull and, when keys are given,
+ *   verify both keys read high when idle and optionally run interactive
+ *   key interrupt checks.
  *
  * Input Parameters:
  *   cfg - Active configuration.
@@ -1270,19 +1273,26 @@ static int run_board_case(const struct app_config_s *cfg)
   int ret;
 
   printf("[GPIO-board] START key0=%s key1=%s led=%s\n",
-         cfg->key0_path, cfg->key1_path, cfg->led_path);
+         cfg->key0_path ? cfg->key0_path : "none",
+         cfg->key1_path ? cfg->key1_path : "none", cfg->led_path);
 
-  ret = gpio_open_handle(&key0, cfg->key0_path, false);
-  if (ret < 0)
-    {
-      return ret;
-    }
+  key0.fd = -1;
+  key1.fd = -1;
 
-  ret = gpio_open_handle(&key1, cfg->key1_path, false);
-  if (ret < 0)
+  if (cfg->key0_path != NULL)
     {
-      gpio_close_handle(&key0, cfg->restore);
-      return ret;
+      ret = gpio_open_handle(&key0, cfg->key0_path, false);
+      if (ret < 0)
+        {
+          return ret;
+        }
+
+      ret = gpio_open_handle(&key1, cfg->key1_path, false);
+      if (ret < 0)
+        {
+          gpio_close_handle(&key0, cfg->restore);
+          return ret;
+        }
     }
 
   ret = gpio_open_handle(&led, cfg->led_path, false);
@@ -1299,11 +1309,17 @@ static int run_board_case(const struct app_config_s *cfg)
       goto out_fail;
     }
 
-  printf("[GPIO-board] LED push-pull active-low blink\n");
+  printf("[GPIO-board] LED push-pull active-high blink\n");
   ret = led_blink(&led, 3);
   if (ret < 0)
     {
       goto out_fail;
+    }
+
+  if (cfg->key0_path == NULL)
+    {
+      printf("[GPIO-board] SKIP key checks; use --key0 and --key1\n");
+      goto out_pass;
     }
 
   ret = gpio_set_type(&key0, GPIO_INPUT_PIN);
@@ -1406,27 +1422,7 @@ static int run_board_case(const struct app_config_s *cfg)
              "use --interactive\n");
     }
 
-  printf("[GPIO-board] LED open-drain active-low check\n");
-  ret = gpio_set_type(&led, GPIO_OUTPUT_PIN_OPENDRAIN);
-  if (ret < 0)
-    {
-      goto out_fail;
-    }
-
-  ret = led_set_active_low(&led, true);
-  if (ret < 0)
-    {
-      goto out_fail;
-    }
-
-  usleep(LED_BLINK_US * 3);
-
-  ret = led_set_active_low(&led, false);
-  if (ret < 0)
-    {
-      goto out_fail;
-    }
-
+out_pass:
   printf("[GPIO-board] PASS board GPIO checks completed\n");
   gpio_close_handle(&led, cfg->restore);
   gpio_close_handle(&key1, cfg->restore);
@@ -2279,7 +2275,7 @@ out_fail:
  *   without restoring (used to snapshot app-start state).
  *
  * Input Parameters:
- *   path - Device path to record.
+ *   path - Device path to record, or NULL to skip an unset optional GPIO.
  *
  * Returned Value:
  *   Zero on success; a negated errno value on failure.
@@ -2292,6 +2288,11 @@ static int record_one_gpio(const char *path)
   enum gpio_pintype_e type;
   bool value;
   int ret;
+
+  if (path == NULL)
+    {
+      return 0;
+    }
 
   ret = gpio_open_handle(&gpio, path, false);
   if (ret < 0)
@@ -2526,7 +2527,8 @@ int main(int argc, char *argv[])
   printf("MCU Peripheral GPIO Tests\n");
   printf("Case: %s\n", cfg.case_id);
   printf("KEY0=%s KEY1=%s LED=%s OUT=%s IN=%s\n",
-         cfg.key0_path, cfg.key1_path, cfg.led_path,
+         cfg.key0_path ? cfg.key0_path : "none",
+         cfg.key1_path ? cfg.key1_path : "none", cfg.led_path,
          cfg.out_path, cfg.in_path);
 
   if (cfg.arm_ms > 0)

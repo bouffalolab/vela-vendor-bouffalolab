@@ -41,13 +41,15 @@
 
 /* One entry per board-exposed test pin:
  *
- *   GPIO19, GPIO22, GPIO18, GPIO23, GPIO13  header outputs
- *   GPIO12  loopback output (wire to GPIO20 for readback tests)
- *   GPIO20  loopback input  (wire to GPIO12 for readback tests)
+ *   GPIO19, GPIO22, GPIO18, GPIO13, GPIO12  header outputs
+ *   GPIO23  loopback output (wire to GPIO20 for readback tests)
+ *   GPIO20  loopback input  (wire to GPIO23 for readback tests)
+ *   GPIO16  onboard blue LED
  *
- * None of these drive an onboard LED. The Ai-M64P-32S-Kit V1.0 schematic
- * puts the active-high LEDs on GPIO14 (red), GPIO15 (green), GPIO16 (blue),
- * GPIO28 (warm white) and GPIO27 (cold white).
+ * The Ai-M64P-32S-Kit V1.0 schematic puts the active-high LEDs on GPIO14
+ * (red), GPIO15 (green), GPIO16 (blue), GPIO28 (warm white) and GPIO27
+ * (cold white). Only the blue LED is registered, for the board case of
+ * mcu_gpio_test.
  *
  * Pins shared with the module flash (GPIO6..11, GPIO21), USB
  * (GPIO32/33) and UART0 console (GPIO34/35) are intentionally not
@@ -130,6 +132,9 @@ static const struct ai_m64p_kit_gpio_pin_s g_ai_m64p_kit_gpio_pins[] =
 #endif
 #if !AI_M64P_KIT_BUS_OWNS(20)
   { 20, GPIO_INPUT_PIN  },
+#endif
+#if !AI_M64P_KIT_BUS_OWNS(16)
+  { 16, GPIO_OUTPUT_PIN },
 #endif
 };
 
