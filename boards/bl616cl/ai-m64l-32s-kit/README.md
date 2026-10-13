@@ -4,7 +4,8 @@
 
 `configs/nsh-peripherals` 用于在同一固件中回归 DMA、I2C、PSRAM、PWM、SPI、
 Timer、UART 和 WDT。该配置保留 GPIO lower-half，但关闭与 SPI0 引脚冲突的
-GPIO 示例和测试命令。
+GPIO 示例和测试命令。NSH 命令行最长 127 个字符、最多 16 个参数，并开启命令历史和
+Tab 补全，各测试 README 中写全参数的命令可以直接输入。
 
 后续新增外设驱动及测试统一加入此配置，不为单个外设新增 defconfig。
 基础 `configs/nsh` 提供 `free`、`ps` 命令，并通过启动脚本挂载 `/proc`。
