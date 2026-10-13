@@ -16,6 +16,7 @@
 #include <nuttx/i2c/i2c_master.h>
 
 #include "bl616cl_i2c.h"
+#include "ai_m64p_kit.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -24,11 +25,9 @@
 #define AI_M64P_KIT_I2C_PIN_RESERVED(pin) ((pin) >= 32 && (pin) <= 36)
 
 #ifdef CONFIG_AI_M64P_KIT_I2C0
-#  ifdef CONFIG_AI_M64P_KIT_PWM
-#    if CONFIG_AI_M64P_KIT_I2C0_SCL_PIN == 22 || \
-        CONFIG_AI_M64P_KIT_I2C0_SDA_PIN == 22
-#      error "I2C0 pin conflicts with PWM0 channel 3 on GPIO22"
-#    endif
+#  if AI_M64P_KIT_PWM_OWNS(CONFIG_AI_M64P_KIT_I2C0_SCL_PIN) || \
+      AI_M64P_KIT_PWM_OWNS(CONFIG_AI_M64P_KIT_I2C0_SDA_PIN)
+#    error "I2C0 pin conflicts with a PWM0 output"
 #  endif
 #  if (CONFIG_AI_M64P_KIT_I2C0_SCL_PIN & 1) != 0
 #    error "I2C0 SCL pin must be even"
@@ -43,11 +42,9 @@
 #endif
 
 #ifdef CONFIG_AI_M64P_KIT_I2C1
-#  ifdef CONFIG_AI_M64P_KIT_PWM
-#    if CONFIG_AI_M64P_KIT_I2C1_SCL_PIN == 22 || \
-        CONFIG_AI_M64P_KIT_I2C1_SDA_PIN == 22
-#      error "I2C1 pin conflicts with PWM0 channel 3 on GPIO22"
-#    endif
+#  if AI_M64P_KIT_PWM_OWNS(CONFIG_AI_M64P_KIT_I2C1_SCL_PIN) || \
+      AI_M64P_KIT_PWM_OWNS(CONFIG_AI_M64P_KIT_I2C1_SDA_PIN)
+#    error "I2C1 pin conflicts with a PWM0 output"
 #  endif
 #  if (CONFIG_AI_M64P_KIT_I2C1_SCL_PIN & 1) != 0
 #    error "I2C1 SCL pin must be even"

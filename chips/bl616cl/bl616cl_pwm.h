@@ -32,6 +32,22 @@
 #include <nuttx/timers/pwm.h>
 
 /****************************************************************************
+ * Public Types
+ ****************************************************************************/
+
+/* Output pins of one PWM0 channel. GPIO n carries channel (n % 8) / 2: the
+ * positive output on an even n % 8 and the negative output on the odd one.
+ * The negative output is the complement of the positive output.
+ */
+
+struct bl616cl_pwm_output_s
+{
+  uint8_t channel;              /* Hardware channel, 0 to 3 */
+  int8_t pos_pin;               /* Positive output GPIO, -1 if unused */
+  int8_t neg_pin;               /* Negative output GPIO, -1 if unused */
+};
+
+/****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
@@ -39,20 +55,26 @@
  * Name: bl616cl_pwm_initialize
  *
  * Description:
- *   Get the PWM lower half. Only the fixed channel and pin of this port are
- *   supported. Looks up the PWM and GPIO devices.
+ *   Get the PWM0 lower half for the given channel outputs and look up the
+ *   PWM and GPIO devices. Each channel may use a positive output, a
+ *   negative output or both. Without CONFIG_PWM_MULTICHAN exactly one
+ *   channel must be given; with it, channel numbers 1 to 4 in pwm_info_s
+ *   select hardware channels 0 to 3.
  *
  * Input Parameters:
- *   channel - PWM channel number; must be BL616CL_PWM_CHANNEL
- *   pin     - GPIO pin number; must be BL616CL_PWM_PIN
+ *   outputs  - Channel outputs, one entry per channel
+ *   noutputs - Number of entries in outputs
  *
  * Returned Value:
- *   A pointer to the PWM lower half on success; NULL if the channel or pin is
- *   unsupported or a device lookup fails.
+ *   A pointer to the PWM lower half on success; NULL if an entry is invalid
+ *   (unknown or repeated channel, no pin, or a pin that does not carry that
+ *   channel output), the number of entries is not supported, or a device
+ *   lookup fails.
  *
  ****************************************************************************/
 
-struct pwm_lowerhalf_s *bl616cl_pwm_initialize(uint8_t channel,
-                                               uint8_t pin);
+struct pwm_lowerhalf_s *
+bl616cl_pwm_initialize(const struct bl616cl_pwm_output_s *outputs,
+                       unsigned int noutputs);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_PWM_H */

@@ -32,7 +32,8 @@
 - [BL616CL SPI0/SPI1 Master](bl616cl-spi.md)：说明 polling master 最大能力交集、
   双实例裁剪、GPIO CS、软件合同、构建证据和实物环回验收边界。
 - [BL616CL PWM](bl616cl-pwm.md)：说明 PWM controller 与 OpenVela upper-half 的
-  最大能力交集、CH3+/GPIO22 owner、频率和极性合同、裁剪及波形验收边界。
+  最大能力交集、CH0–CH3 多通道与互补输出、引脚 owner、频率和极性合同、裁剪及波形
+  验收边界。
 - [BL616CL Cache](bl616cl-cache.md)：说明 OpenVela cache 公共 ABI、地址域、partial
   ownership、运行时开关、裁剪和已确认的 cache geometry。
 - [BL616CL Wi-Fi STA 移植调研](bl616cl-wifi-sta-porting-research.md)：冻结 wl80211、

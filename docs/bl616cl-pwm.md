@@ -17,30 +17,33 @@ OpenVela 通用 PWM upper-half 提供 SET/GET characteristics、START、STOP 和
 这些选项会改变 `pwm_info_s` 或 lower `start` 签名，不能在未实现时形成可见组合。
 
 本适配不修改 CI 同步的 `vendor/bouffalolab/drivers/`。chip adapter 消费现有 LHAL，
-board 固定选择 PWM0 CH3 正向输出 GPIO22，并注册 `/dev/pwm0`。
+board 按 Kconfig 为 CH0–CH3 选择正、负输出脚，只注册一个 `/dev/pwm0`。首版只接了
+CH3 正向输出（GPIO22），之后扩展为多通道和互补输出，本文两段历史都保留。
 
 ## 最大能力交集
 
 | 能力 | 当前处理 | 依据和限制 |
 |---|---|---|
 | 单 controller | 纳入首版 | BL616CL 只有 `pwm_v2_0`；base、gate、reset、IRQ 与 TIMER 独立 |
-| CH3 正向输出 | 纳入首版 | PIN_MUX 表中 `reg_pwm1_io_sel=1` 时 GPIO22 为 CH3+ |
+| CH0–CH3 正/负输出 | 已纳入 | `reg_pwm1_io_sel=1` 时 GPIO n 输出 CH((n%8)/2)，n%8 偶数为正、奇数为负 |
 | continuous PWM | 纳入首版 | 对应非 pulse-count OpenVela lower ABI |
 | 整数 frequency | 纳入首版 | 读取实际 PBCLK，取放得下 16-bit period 的最小 divider，period 四舍五入 |
 | b16 duty | 纳入首版 | 0..65535/65536 映射到 threshold；最大值不声明为 100% |
 | `cpol`/`dcpol` | 纳入首版 | 正向 polarity 与 active/inactive stop-state 可无歧义映射 |
 | live update | 纳入首版 | 同 divider 使用 update gate；跨 divider 允许 stop/reinit |
 | 多 fd | 纳入首版 | 首次 open setup，最后 close shutdown，由 upper mutex 串行化 |
-| multichannel | P2 | 硬件支持四 channel，但缺少完整 pin、owner、并发和多探针证据 |
+| multichannel | 已纳入 | `PWM_MULTICHAN` 下通道号 1–4 对应 CH0–CH3；四通道共用 frequency |
 | pulse count/IRQ | P2 | LHAL 有 repetition/IRQ 原语，尚无完成回调和取消合同 |
-| complementary/deadtime | P2 | 硬件支持负向输出和 8-bit deadtime，缺 pin 与波形闭环 |
+| complementary | 已纳入 | 负输出始终是正输出的反相（运行和停止都是），没有死区 |
+| deadtime | P2 | 硬件有 8-bit deadtime，OpenVela `PWM_DEADTIME` ABI 未接入 |
 | brake/center-aligned | P2 | LHAL 有原语，尚未映射公共控制和安全状态 |
 | ADC trigger | P2 | 硬件支持，需与后续 ADC owner 联合设计 |
 | fixed-point frequency | P2 | OpenVela ABI 可选，首版只实现整数 frequency |
 | PWM DMA | P3 排除 | BL616CL DMA request 表没有 PWM request |
 
 完整枚举不等于一次性启用全部能力。P2 项保留为芯片共同能力和后续恢复入口，不能写成
-“BL616CL 不支持”；首版只声明可裁剪且有明确软件与波形判据的单通道子集。
+“BL616CL 不支持”；首版只声明可裁剪且有明确软件与波形判据的单通道子集，多通道和互补
+输出随后按同样的判据加入。
 
 ## 调用链与 archive 归属
 
@@ -48,50 +51,67 @@ board 固定选择 PWM0 CH3 正向输出 GPIO22，并注册 `/dev/pwm0`。
 board_late_initialize()
   -> bl616cl_board_initialize()
   -> ai_m64p_kit_pwm_initialize()
-  -> bl616cl_pwm_initialize(3, 22)
+  -> bl616cl_pwm_initialize(outputs, noutputs)   /* 每个已选通道一项 */
   -> pwm_register("/dev/pwm0", lower)
 
 open / SET / START / STOP / close
   -> OpenVela pwm upper-half
   -> BL616CL lower setup/start/stop/shutdown
-  -> PWM0 clock + PWM io_sel + GPIO22 pinmux
+  -> PWM0 clock + PWM io_sel + 各通道引脚 pinmux
   -> bflb_pwm_v2_*()
 ```
 
 - `chips/bl616cl/bl616cl_pwm.c`：OpenVela lower、频率求解、错误转换和 test diagnostic，
   编入 `libarch.a`；
-- `boards/bl616cl/ai-m64p-32s-kit/src/ai_m64p_kit_pwm.c`：固定 CH3+/GPIO22 和
-  `/dev/pwm0` 注册，编入 `libboard.a`；
+- `boards/bl616cl/ai-m64p-32s-kit/src/ai_m64p_kit_pwm.c`：按 Kconfig 生成通道和引脚表，
+  编译期检查引脚槽位，注册 `/dev/pwm0`，编入 `libboard.a`；
 - `cmake/bl616cl_lhal.cmake`：按 PWM Kconfig 选择现有 LHAL PWM/clock 依赖，
   编入 `libbl_lhal.a`；
 - `apps/mcu_peripheral_tests/pwm/`：单一测试 main，独立生成测试 archive；
 - `drivers/`：保持只读，chip adapter 不放入 `libbl_std.a`。
 
-## Kconfig 与 GPIO22 所有权
+## Kconfig 与引脚所有权
 
 | 选项 | 作用 | 关闭效果 |
 |---|---|---|
 | `BL616CL_PWM` | chip lower 总开关，并启用通用 PWM upper-half | 无 lower 和 PWM LHAL 对象 |
-| `AI_M64P_KIT_PWM` | board CH3+/GPIO22 和 `/dev/pwm0` | 不接管 GPIO22，不注册节点 |
+| `AI_M64P_KIT_PWM` | board 通道选择和 `/dev/pwm0` | 不接管引脚，不注册节点 |
+| `AI_M64P_KIT_PWM_CHn` | 启用通道 n（0–3） | 该通道不可用 |
+| `AI_M64P_KIT_PWM_CHn_POS_PIN` / `_NEG_PIN` | 通道 n 的正/负输出 GPIO，-1 表示不用，至少配一个 | — |
 | `BL616CL_PWM_TEST` | timeout fault 与诊断 API | 产品无 test symbol |
 | `BL_MCU_PERIPHERAL_TESTS_PWM` | `mcu_pwm_test` 单一测试 main | 无测试 archive、命令和字符串 |
 
-`BL616CL_PWM` 依赖关闭 `PWM_PULSECOUNT`、`PWM_MULTICHAN`、
-`PWM_FREQUENCY_FIXED` 和 `PWM_DEADTIME`。board 选项使用 `depends on BL616CL_PWM`，
-不能通过 `select` 绕过 chip 选项依赖。
+芯片 `select ARCH_HAVE_PWM_MULTICHAN`。`BL616CL_PWM` 依赖关闭 `PWM_PULSECOUNT`、
+`PWM_FREQUENCY_FIXED` 和 `PWM_DEADTIME`。开 `PWM_MULTICHAN` 时可选 1–4 个通道；不开时
+board 必须只选一个通道，否则编译失败，沿用单通道 ABI。板级默认只开 CH3、正输出 GPIO6。
+board 选项使用 `depends on BL616CL_PWM`，不能通过 `select` 绕过 chip 选项依赖。
 
-启用 board PWM 后：
+启用 board PWM 后，所有已配引脚都归 PWM（`ai_m64p_kit.h` 的 `AI_M64P_KIT_PWM_OWNS()`）：
 
-1. GPIO 列表无条件移除 `/dev/gpio22`；
-2. I2C0/I2C1 的 SCL 或 SDA 选择 GPIO22 时编译失败；
-3. SPI0 的 CLK、MISO、MOSI、CS0 或 CS1 选择 GPIO22 时编译失败；
+1. GPIO 测试节点列表跳过这些引脚；
+2. I2C0/I2C1、SPI0、UART1 选到这些引脚时编译失败；
+3. 引脚不在所选通道的槽位上时编译失败；
 4. `/dev/pwm1` 不存在，不用运行时注册顺序解决双 owner。
 
 PWM 输出脚由 GLB `reg_pwm1_io_sel` 决定通道映射：复位值 0 时按 GPIO 号模 4 只输出
 CH0..CH3 正向，GPIO22 是 CH2+；置 1 后按模 8 依次输出 CH0±..CH3±，GPIO22 才是
-CH3+。lower 在接管引脚时置 1（`PWM_IO_SEL_DIFF_END`），并在编译期检查固定 pin 是
-所选通道的正向输出。该映射来自 PIN_MUX 表，已用逻辑分析仪在 GPIO22 上确认（见
-“实物波形数据”）。
+CH3+。lower 在 START 时置 1（`PWM_IO_SEL_DIFF_END`）。正负脚由模 8 余数唯一确定，
+不同通道、同一通道正负之间不会撞脚。板级 Kconfig 允许 GPIO0–31（32–36 是 USB、UART0
+和 BOOT）：
+
+| 通道 | 正输出（n%8） | 负输出（n%8） |
+|---|---|---|
+| CH0 | 0、8、16、24（0） | 1、9、17、25（1） |
+| CH1 | 2、10、18、26（2） | 3、11、19、27（3） |
+| CH2 | 4、12、20、28（4） | 5、13、21、29（5） |
+| CH3 | 6、14、22、30（6） | 7、15、23、31（7） |
+
+该映射来自 PIN_MUX 表，已用逻辑分析仪在 GPIO12、13、16、22 上确认（见
+“实物波形数据”和“多通道与互补输出实测”）。
+
+`nsh-peripherals` 的分配：CH0 正 8/负 9，CH1 正 10/负 11，CH2 只用负输出 21，CH3 正
+6/负 7。CH2 正输出的候选 4、12、20、28 分别被 I2C1、SPI0、GPIO 回环和暖白灯占用；
+GPIO22 回到 GPIO 测试节点。
 
 ## 频率、duty 与 polarity 合同
 
@@ -122,12 +142,48 @@ stop_active = (cpol == HIGH && dcpol == HIGH) ||
 ```
 
 `CPOL_NDEF` 和 `DCPOL_NDEF` 均拒绝。软件测试回读 CONFIG1 polarity/stop-state bit；
-STOP 和 close 后还需由仪器确认 GPIO22 实际电平。
+STOP 和 close 后还需由仪器确认引脚实际电平。
+
+`cpol`/`dcpol` 描述正输出。负输出用与正输出相同的 polarity（NPL=PPL）和相反的
+stop-state（NSI=!PSI），所以运行和停止时都是正输出的反相：停止电平正输出为 dcpol、
+负输出为 !dcpol。只配负脚时，引脚上就是反相波形，例如 duty 25% 时负脚高 75%。正负
+输出由同一计数器比较产生，没有死区，不能直接驱动需要死区的半桥或功率级。
+
+## 多通道合同
+
+- 四个通道共用 clock、divider 和 period，频率必然相同，因此只注册一个 `/dev/pwm0`，
+  不按通道分设备（分设备会互相改频率）。
+- `PWM_MULTICHAN` 下 START 中 `channel=0` 的项跳过，`-1` 结束；提到的通道必须是板级
+  已配的通道且不重复，一个都没提到也拒绝，均返回 `-EINVAL`，硬件不变。
+- START 中没提到的通道保持原状态：已运行的按原 duty 继续，未运行的保持停止。频率不变
+  时只改提到的通道；频率变化需要换 divider 时，全部通道停下后按新 period 重建，没提到
+  的运行通道按原 duty 恢复。
+- STOP 和最后一个 close 停全部通道。
+
+## 启停顺序
+
+STOP（含跨 divider 重建前的停止）：
+
+1. 一次寄存器写清掉所有通道的 PEN/NEN，全部输出同时进入停止电平；
+2. 停计数器；
+3. 先把各引脚的 GPIO 输出锁存写成空闲电平，再把引脚切回 GPIO 输出。`bflb_gpio_init()`
+   不改输出锁存（CFG136/137），所以切换时电平不动；
+4. deinit 并关 clock。deinit 会把 polarity/stop-state 复位，此时引脚已不在 PWM 功能上。
+
+START：
+
+1. 配置 divider/period，以及各通道 polarity、stop-state、threshold；
+2. 对新启动的通道，把 GPIO 引脚移到新设置的空闲电平（先写变为非有效的那一路，正负
+   不会同时有效），再切到 PWM 功能，此时 PWM 停止电平与引脚电平相同；
+3. 一次寄存器写打开所有新通道的 PEN/NEN，再启动计数器。
+
+dcpol 与上次停止时相同时，START 没有中间电平；dcpol 改变时，引脚先在新空闲电平停留
+几到几十 µs（实测 7–47 µs）再开始输出。
 
 ## timeout 与 upper-half 限制
 
 LHAL `init/start/stop/deinit` 返回 `void`，等待硬件状态超过 100ms 时静默返回。lower
-必须在调用后读取 `PWM_STS_STOP`，把失败转换为 `-ETIMEDOUT`，并强制关闭 CH3+、
+必须在调用后读取 `PWM_STS_STOP`，把失败转换为 `-ETIMEDOUT`，并强制关闭全部输出、
 退出 PWM pinmux、gate clock 和清理内部 started 状态。test-only fault 只改变调用后的
 状态判断，不写硬件寄存器、不导出产品 ioctl，也不绕过输入校验或清理。
 
@@ -168,12 +224,12 @@ defconfig 通过 Kconfig 工具和 `savedefconfig` 生成，不手工追加选�
 
 ## 软件与实物流程
 
-测试 app 使用一个 `mcu_pwm_test` main，以 `-c 001..008` 选择 case。逐 case 的命令、
-内部动作、errno、寄存器和资源清理判据见
-`apps/mcu_peripheral_tests/pwm/README.md`。软件阶段还要回归现役 GPIO、TIMER0、
-TIMER1、oneshot、WDT 和 RTC；PWM 配置中的 GPIO 回归排除已移交的 GPIO22。
+测试 app 使用一个 `mcu_pwm_test` main，以 `-c 001..009` 选择 case。001～008 针对主
+通道（编号最小的已配通道），009 验证多通道和互补输出。逐 case 的命令、内部动作、
+errno、寄存器和资源清理判据见 `apps/mcu_peripheral_tests/pwm/README.md`。软件阶段还要
+回归现役 GPIO、TIMER0、TIMER1、oneshot、WDT 和 RTC；GPIO 回归排除已配给 PWM 的引脚。
 
-G4 波形在 GPIO22 验证：
+单通道 G4 波形最初在 GPIO22（CH3+）验证：
 
 1. 100Hz/75%、1kHz/25%、1kHz/50%、1kHz/75%、10kHz/25%；
 2. frequency 误差不超过 1%，duty 误差不超过 2 个百分点；
@@ -182,7 +238,7 @@ G4 波形在 GPIO22 验证：
 5. 跨 divider update 记录停顿，但本轮不声明无毛刺。
 
 USB2 只承载控制台，GPIO22 也不接板载 LED；引脚处于 PWM 复用功能时 GPIO 输入寄存器
-不反映引脚电平，软件回读同样不能证明 frequency、duty、polarity、停止电平或动态更新
+不反映引脚电平（STOP 后引脚是 GPIO 输出，输入寄存器才跟随引脚），软件回读同样不能证明 frequency、duty、polarity、停止电平或动态更新
 波形。逻辑分析仪已完成第 1～5 项（见“实物波形数据”）；第 3 项中 cpol=LOW/dcpol=LOW
 的运行极性因 50% duty 且起始相位与停止电平相连，无法单独从波形区分。
 
@@ -279,4 +335,47 @@ DSLogic U3Pro32 接 GPIO22 和 GND，阈值 1.6 V，采样率 2 MHz，以 GPIO22
 
 STOP 和 close 电平都等于请求的 dcpol。停止态下 SET 下一组时，输出先变为新组的停止
 电平（LOW/HIGH 前 15 µs 高、HIGH/LOW 前 16 µs 低）；HIGH/HIGH 前只出现 1.5 µs 高，
-随后低 204.5 µs 才开始输出；close 时有一个 12.5 µs 的低脉冲。
+随后低 204.5 µs 才开始输出；close 时有一个 12.5 µs 的低脉冲。以上是改为多通道前的单通道
+驱动数据，现行启停顺序的结果见下节。
+
+## 多通道与互补输出实测
+
+2026-10-13 在同一块 Ai-M64P-32S-Kit 上测量。`nsh-peripherals` 的 PWM 引脚（6–11、21）
+没有接逻辑分析仪，波形用三个临时板级配置（未提交，只改 PWM 引脚）在已接探头的
+GPIO12、13、16、22 上测；DSLogic U3Pro32，阈值 1.6 V。
+
+配置 A（`PWM_MULTICHAN`，CH0 正 16、CH1 负 19、CH2 正 12/负 13、CH3 正 22/负 23；19、23
+未接探头），20 MHz，`mcu_pwm_test -c 009 -w 2`：
+
+| 阶段 | GPIO16 CH0+ | GPIO12 CH2+ | GPIO13 CH2− | GPIO22 CH3+ | 频率 |
+|---|---|---|---|---|---|
+| 四通道同时 START | 20.00% | 60.00% | 40.00% | 80.00% | 999.97 Hz |
+| 只提 CH0 改为 10 kHz/50% | 50.00% | 60.00% | 40.00% | 90.00% | 9999.67 Hz |
+| 最后 STOP（dcpol LOW） | 0 | 0 | 1 | 0 | — |
+
+CH3 在两段之间单独改为 90%，其余通道 threshold 不变。GPIO13 与 GPIO12 逐样本相等的比例
+为 0.0006%，都在边沿上，边沿偏差中位数为 0。跨 divider 时四路在同一个样本进入空闲电平，
+停顿 1.10 ms 后在同一个样本开始输出；同 divider 更新有一个缩短的周期（1 kHz 时
+906 µs），之后为新 duty，与单通道时的行为相同。
+
+配置 B（`PWM_MULTICHAN`，CH2 正 12/负 13 为主通道，CH3 正 22/负 23）：
+
+- 10 MHz，`-c 005 -w 1 -v`：四组 cpol/dcpol 都是 999.97 Hz/50%，GPIO13 始终是 GPIO12 的
+  反相（相等样本 0.0002%）；STOP 电平正 = dcpol、负 = !dcpol；组间 START 先在新空闲电平
+  停留 7–11 µs，过渡中正负从不同时处于有效电平（cpol LOW 时同为高、cpol HIGH 时同为低，
+  都是同时无效）。
+- 20 MHz，`-c 009 -w 1`：CH2 20%/80%（正/负）、CH3 40%，CH3 原地改为 90% 后其余不变，
+  10 kHz 时 CH2 50%/50%、CH3 90%；全部 PASS。
+- TIMER 测试 `mcu_timer_test -c 003 -f 2000 -D 40 -C 3`：GPIO12 1999.94 Hz/40.00%，GPIO13
+  60.00%；`-c 004 -f 1000 -s 25 -i 300 -n 1 -C 3` 各档 25/50/75% 正确；`-C 2`（未配置的
+  CH1）START 返回 `EINVAL`。
+
+配置 C（不开 `PWM_MULTICHAN`，只配 CH2 负输出 GPIO13）：`-c all -w 1` 为 8 PASS、009 SKIP；
+10 MHz `-c 004 -w 1` 时 duty 0、25%、50%、75% 对应 GPIO13 高 100%、75.00%、50.00%、
+25.00%，65535/65536 时每周期只有 1 个计数（约 19 ns）的高脉冲，close 后为 1（dcpol LOW）。
+
+`nsh-peripherals` 实板：`mcu_pwm_test -c all -w 1 -v` 9/9 PASS，clean build 镜像（`nuttx.bin`
+SHA256 `61f14972b54c1322a885577cf465fc074052bd18a2618399ed6c07c190cbdb02`）上复跑
+`-c all -w 0` 仍为 9/9。PWM-009 在 dcpol HIGH 和
+LOW 两次 STOP 后从 GPIO 输入寄存器读回 GPIO6–11、21 的电平，都与正 = dcpol、负 = !dcpol
+一致，说明这些脚在本板上可作普通 IO 驱动；这些脚上的频率和占空比没有用仪器测。

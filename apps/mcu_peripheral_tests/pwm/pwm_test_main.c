@@ -40,6 +40,18 @@
 #define DUTY_75             ((ub16_t)49152)
 #define DUTY_MAX            ((ub16_t)UINT16_MAX)
 
+#define CASE_SKIPPED        1
+
+#ifdef CONFIG_PWM_MULTICHAN
+#  define INFO_DUTY(info)   ((info)->channels[0].duty)
+#  define INFO_CPOL(info)   ((info)->channels[0].cpol)
+#  define INFO_DCPOL(info)  ((info)->channels[0].dcpol)
+#else
+#  define INFO_DUTY(info)   ((info)->duty)
+#  define INFO_CPOL(info)   ((info)->cpol)
+#  define INFO_DCPOL(info)  ((info)->dcpol)
+#endif
+
 /****************************************************************************
  * Private Types
  ****************************************************************************/
@@ -69,12 +81,22 @@ struct case_entry_s
 };
 
 /****************************************************************************
+ * Private Data
+ ****************************************************************************/
+
+/* Cases 001-008 drive the primary channel, the lowest channel the board
+ * configured. main() reads it from the lower-half diagnostics.
+ */
+
+static int g_primary = -1;
+
+/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
 static void print_usage(const char *progname)
 {
-  printf("Usage: %s [-c 001..008|all] [-d dev] [-w seconds] [-v]\n",
+  printf("Usage: %s [-c 001..009|all] [-d dev] [-w seconds] [-v]\n",
          progname);
   printf("  -c <id>  Select one case or all (default: all)\n");
   printf("  -d <dev> PWM device (default: %s)\n", DEFAULT_PWM_DEVPATH);
@@ -103,9 +125,12 @@ static int pwm_set(int fd, const struct pwm_point_s *point)
 
   memset(&info, 0, sizeof(info));
   info.frequency = point->frequency;
-  info.duty = point->duty;
-  info.cpol = point->cpol;
-  info.dcpol = point->dcpol;
+#ifdef CONFIG_PWM_MULTICHAN
+  info.channels[0].channel = g_primary + 1;
+#endif
+  INFO_DUTY(&info) = point->duty;
+  INFO_CPOL(&info) = point->cpol;
+  INFO_DCPOL(&info) = point->dcpol;
 
   if (ioctl(fd, PWMIOC_SETCHARACTERISTICS,
             (unsigned long)(uintptr_t)&info) < 0)
@@ -165,25 +190,52 @@ static int get_diag(struct bl616cl_pwm_test_diag_s *diag)
 static void print_diag(const char *label,
                        const struct bl616cl_pwm_test_diag_s *diag)
 {
+  const struct bl616cl_pwm_test_channel_s *chan;
+  int ch;
+
   printf("  %s: calls=%lu/%lu/%lu/%lu src=%luHz actual=%luHz "
-         "div=%u period=%u threshold=%u..%u pol=%u stop=%u "
-         "channel=%u pin=%u clock=%u started=%u last=%d errors=%lu\n",
+         "div=%u period=%u pin=%u clock=%u started=%u last=%d "
+         "errors=%lu\n",
          label, (unsigned long)diag->setup_calls,
          (unsigned long)diag->start_calls,
          (unsigned long)diag->stop_calls,
          (unsigned long)diag->shutdown_calls,
          (unsigned long)diag->source_frequency,
          (unsigned long)diag->actual_frequency, diag->divider, diag->period,
-         diag->threshold_low, diag->threshold_high,
-         diag->polarity_active_high, diag->stop_active,
-         diag->channel_enabled, diag->pin_acquired, diag->clock_enabled,
-         diag->started, diag->last_error, (unsigned long)diag->error_count);
+         diag->pin_acquired, diag->clock_enabled, diag->started,
+         diag->last_error, (unsigned long)diag->error_count);
+
+  for (ch = 0; ch < BL616CL_PWM_TEST_NCHANNELS; ch++)
+    {
+      chan = &diag->channels[ch];
+      if (!chan->configured)
+        {
+          continue;
+        }
+
+      printf("    ch%d pins=%d/%d threshold=%u..%u active=%u enabled=%u "
+             "out=%u/%u pol=%u/%u stop=%u/%u level=%u/%u\n",
+             ch, chan->pos_pin, chan->neg_pin, chan->threshold_low,
+             chan->threshold_high, chan->active, chan->enabled,
+             chan->pos_output, chan->neg_output, chan->pos_polarity_high,
+             chan->neg_polarity_high, chan->pos_stop_active,
+             chan->neg_stop_active, chan->pos_level, chan->neg_level);
+    }
 }
 
 static bool diag_clean(const struct bl616cl_pwm_test_diag_s *diag)
 {
-  return !diag->channel_enabled && !diag->pin_acquired &&
-         !diag->clock_enabled && !diag->started;
+  int ch;
+
+  for (ch = 0; ch < BL616CL_PWM_TEST_NCHANNELS; ch++)
+    {
+      if (diag->channels[ch].enabled || diag->channels[ch].active)
+        {
+          return false;
+        }
+    }
+
+  return !diag->pin_acquired && !diag->clock_enabled && !diag->started;
 }
 
 static int expect_ioctl_errno(int fd, int command, int expected,
@@ -240,21 +292,17 @@ static uint32_t absolute_difference(uint32_t a, uint32_t b)
   return a >= b ? a - b : b - a;
 }
 
-static int verify_point(const struct pwm_point_s *point,
-                        const struct bl616cl_pwm_test_diag_s *diag,
-                        bool verbose)
+static int verify_timebase(uint32_t frequency,
+                           const struct bl616cl_pwm_test_diag_s *diag)
 {
   uint64_t product;
   uint64_t scaled;
   uint32_t calculated_frequency;
   uint32_t frequency_error;
-  uint32_t expected_delta;
-  uint32_t actual_delta;
 
   if (diag->source_frequency == 0 || diag->divider == 0 ||
-      diag->period < 2 || diag->threshold_low > diag->threshold_high ||
-      diag->threshold_high >= diag->period || !diag->channel_enabled ||
-      !diag->pin_acquired || !diag->clock_enabled || !diag->started)
+      diag->period < 2 || !diag->pin_acquired || !diag->clock_enabled ||
+      !diag->started)
     {
       print_diag("invalid register state", diag);
       return -EIO;
@@ -264,10 +312,10 @@ static int verify_point(const struct pwm_point_s *point,
    * the finest duty steps, and the period must be rounded to the request.
    */
 
-  scaled = (uint64_t)point->frequency * diag->divider;
+  scaled = (uint64_t)frequency * diag->divider;
   if (diag->source_frequency > scaled * UINT16_MAX ||
       (diag->divider > 1 && diag->source_frequency <=
-                            (scaled - point->frequency) * UINT16_MAX) ||
+                            (scaled - frequency) * UINT16_MAX) ||
       diag->period != (diag->source_frequency + scaled / 2) / scaled)
     {
       print_diag("divider is not the smallest that fits", diag);
@@ -277,23 +325,50 @@ static int verify_point(const struct pwm_point_s *point,
   product = (uint64_t)diag->divider * diag->period;
   calculated_frequency =
     (uint32_t)((diag->source_frequency + product / 2) / product);
-  frequency_error = absolute_difference(calculated_frequency,
-                                        point->frequency);
-  if ((uint64_t)frequency_error * 100 > point->frequency)
+  frequency_error = absolute_difference(calculated_frequency, frequency);
+  if ((uint64_t)frequency_error * 100 > frequency)
     {
       print_diag("frequency out of tolerance", diag);
       return -ERANGE;
     }
 
-  actual_delta = diag->threshold_high - diag->threshold_low;
-  if (point->duty == DUTY_MAX)
+  return 0;
+}
+
+/* A running channel must hold the threshold of its duty, the polarity and
+ * stop state of its cpol/dcpol, and output enables for exactly the board
+ * pins. The negative output uses the same polarity and the opposite stop
+ * state, which makes it the complement of the positive output.
+ */
+
+static int verify_channel(int ch, ub16_t duty, uint8_t cpol, uint8_t dcpol,
+                          const struct bl616cl_pwm_test_diag_s *diag)
+{
+  const struct bl616cl_pwm_test_channel_s *chan = &diag->channels[ch];
+  uint32_t expected_delta;
+  uint32_t actual_delta;
+  bool stop_active;
+
+  if (!chan->configured || !chan->active || !chan->enabled ||
+      chan->threshold_low > chan->threshold_high ||
+      chan->threshold_high >= diag->period ||
+      chan->pos_output != (chan->pos_pin >= 0) ||
+      chan->neg_output != (chan->neg_pin >= 0))
+    {
+      print_diag("invalid channel state", diag);
+      printf("  FAIL: channel %d is not running on its board pins\n", ch);
+      return -EIO;
+    }
+
+  actual_delta = chan->threshold_high - chan->threshold_low;
+  if (duty == DUTY_MAX)
     {
       expected_delta = diag->period - 1;
     }
   else
     {
       expected_delta =
-        (uint32_t)(((uint64_t)diag->period * point->duty + 32768) >> 16);
+        (uint32_t)(((uint64_t)diag->period * duty + 32768) >> 16);
       if (expected_delta >= diag->period)
         {
           expected_delta = diag->period - 1;
@@ -303,23 +378,87 @@ static int verify_point(const struct pwm_point_s *point,
   if (absolute_difference(actual_delta, expected_delta) > 1)
     {
       print_diag("duty threshold mismatch", diag);
+      printf("  FAIL: channel %d duty=%lu\n", ch, (unsigned long)duty);
       return -ERANGE;
     }
 
-  if (diag->cpol != point->cpol || diag->dcpol != point->dcpol ||
-      diag->polarity_active_high != (point->cpol == PWM_CPOL_HIGH) ||
-      diag->stop_active != ((point->cpol == PWM_CPOL_HIGH &&
-                             point->dcpol == PWM_DCPOL_HIGH) ||
-                            (point->cpol == PWM_CPOL_LOW &&
-                             point->dcpol == PWM_DCPOL_LOW)))
+  stop_active = (cpol == PWM_CPOL_HIGH && dcpol == PWM_DCPOL_HIGH) ||
+                (cpol == PWM_CPOL_LOW && dcpol == PWM_DCPOL_LOW);
+  if (chan->cpol != cpol || chan->dcpol != dcpol ||
+      chan->pos_polarity_high != (cpol == PWM_CPOL_HIGH) ||
+      chan->neg_polarity_high != chan->pos_polarity_high ||
+      chan->pos_stop_active != stop_active ||
+      chan->neg_stop_active == stop_active)
     {
       print_diag("polarity mapping mismatch", diag);
+      printf("  FAIL: channel %d cpol=%u dcpol=%u\n", ch, cpol, dcpol);
       return -EIO;
+    }
+
+  return 0;
+}
+
+static int verify_point(const struct pwm_point_s *point,
+                        const struct bl616cl_pwm_test_diag_s *diag,
+                        bool verbose)
+{
+  int ret;
+
+  ret = verify_timebase(point->frequency, diag);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = verify_channel(g_primary, point->duty, point->cpol, point->dcpol,
+                       diag);
+  if (ret < 0)
+    {
+      return ret;
     }
 
   if (verbose)
     {
       print_diag("verified", diag);
+    }
+
+  return 0;
+}
+
+/* After STOP every board pin is a plain GPIO output again: the positive
+ * output idles at the dcpol level of its channel and the negative output at
+ * the complement. The GPIO input register follows the pin in this mode.
+ */
+
+static int verify_idle_levels(const char *label)
+{
+  const struct bl616cl_pwm_test_channel_s *chan;
+  struct bl616cl_pwm_test_diag_s diag;
+  bool high;
+  int ch;
+
+  if (get_diag(&diag) < 0)
+    {
+      return -EIO;
+    }
+
+  for (ch = 0; ch < BL616CL_PWM_TEST_NCHANNELS; ch++)
+    {
+      chan = &diag.channels[ch];
+      if (!chan->configured)
+        {
+          continue;
+        }
+
+      high = chan->dcpol == PWM_DCPOL_HIGH;
+      if ((chan->pos_pin >= 0 && chan->pos_level != high) ||
+          (chan->neg_pin >= 0 && chan->neg_level == high))
+        {
+          print_diag(label, &diag);
+          printf("  FAIL: %s channel %d idle levels do not match dcpol\n",
+                 label, ch);
+          return -EIO;
+        }
     }
 
   return 0;
@@ -401,7 +540,8 @@ static int run_case_001(const struct app_config_s *cfg)
   close(fd1);
   fd1 = -1;
   if (pwm_get(fd2, &info) < 0 || info.frequency != point.frequency ||
-      info.duty != point.duty || get_diag(&diag) < 0 || !diag.started ||
+      INFO_DUTY(&info) != point.duty || get_diag(&diag) < 0 ||
+      !diag.started ||
       diag.shutdown_calls != 0)
     {
       printf("  FAIL: first close changed shared state\n");
@@ -448,8 +588,8 @@ static int check_stopped_invalid(int fd, const struct pwm_point_s *point,
   struct pwm_info_s info;
 
   if (pwm_set(fd, point) < 0 || pwm_get(fd, &info) < 0 ||
-      info.frequency != point->frequency || info.cpol != point->cpol ||
-      info.dcpol != point->dcpol)
+      info.frequency != point->frequency ||
+      INFO_CPOL(&info) != point->cpol || INFO_DCPOL(&info) != point->dcpol)
     {
       printf("  FAIL: stopped SET/GET %s did not preserve upper request\n",
              label);
@@ -721,7 +861,7 @@ static int run_case_005(const struct app_config_s *cfg)
   int ret = -EIO;
   int i;
 
-  printf("[PWM-005] CPOL/DCPOL mapping and stopped state\n");
+  printf("[PWM-005] CPOL/DCPOL mapping and stopped levels\n");
   bl616cl_pwm_test_reset();
   fd = pwm_open(cfg->devpath);
   if (fd < 0)
@@ -744,9 +884,14 @@ static int run_case_005(const struct app_config_s *cfg)
         }
 
       if (pwm_stop(fd) < 0 || get_diag(&diag) < 0 ||
-          diag.channel_enabled || diag.started)
+          diag.channels[g_primary].enabled || diag.started)
         {
           printf("  FAIL: STOP did not disable combination %d\n", i + 1);
+          goto out;
+        }
+
+      if (verify_idle_levels("PWM-005 STOP") < 0)
+        {
           goto out;
         }
     }
@@ -757,7 +902,7 @@ static int run_case_005(const struct app_config_s *cfg)
       return -EIO;
     }
 
-  printf("  [PWM-005] PASS all CPOL/DCPOL register mappings\n\n");
+  printf("  [PWM-005] PASS CPOL/DCPOL registers and stopped levels\n\n");
   return 0;
 
 out:
@@ -824,7 +969,9 @@ static int run_case_006(const struct app_config_s *cfg)
 
   if (set_start_verify(fd, &p2, true, cfg->verbose) < 0 ||
       get_diag(&d2) < 0 || d2.divider != d1.divider ||
-      d2.period != d1.period || d2.threshold_high == d1.threshold_high)
+      d2.period != d1.period ||
+      d2.channels[g_primary].threshold_high ==
+        d1.channels[g_primary].threshold_high)
     {
       printf("  FAIL: same-frequency duty update changed timebase\n");
       goto out;
@@ -1041,6 +1188,46 @@ static int expect_missing(const char *path)
   return 0;
 }
 
+/* Every board PWM pin belongs to /dev/pwm0, so none of them may also be
+ * registered as a GPIO test device.
+ */
+
+static int expect_pins_owned(const struct bl616cl_pwm_test_diag_s *diag)
+{
+  const struct bl616cl_pwm_test_channel_s *chan;
+  char path[16];
+  int ch;
+
+  for (ch = 0; ch < BL616CL_PWM_TEST_NCHANNELS; ch++)
+    {
+      chan = &diag->channels[ch];
+      if (!chan->configured)
+        {
+          continue;
+        }
+
+      if (chan->pos_pin >= 0)
+        {
+          snprintf(path, sizeof(path), "/dev/gpio%d", chan->pos_pin);
+          if (expect_missing(path) < 0)
+            {
+              return -EIO;
+            }
+        }
+
+      if (chan->neg_pin >= 0)
+        {
+          snprintf(path, sizeof(path), "/dev/gpio%d", chan->neg_pin);
+          if (expect_missing(path) < 0)
+            {
+              return -EIO;
+            }
+        }
+    }
+
+  return 0;
+}
+
 static int run_case_008(const struct app_config_s *cfg)
 {
   /* clang-format off */
@@ -1052,9 +1239,10 @@ static int run_case_008(const struct app_config_s *cfg)
 
   /* clang-format on */
 
+  struct bl616cl_pwm_test_diag_s diag;
   int fd;
 
-  printf("[PWM-008] Device nodes, GPIO22 ownership and cleanup\n");
+  printf("[PWM-008] Device nodes, pin ownership and cleanup\n");
   bl616cl_pwm_test_reset();
   fd = pwm_open(cfg->devpath);
   if (fd < 0)
@@ -1062,8 +1250,8 @@ static int run_case_008(const struct app_config_s *cfg)
       return fd;
     }
 
-  if (expect_missing("/dev/pwm1") < 0 ||
-      expect_missing("/dev/gpio22") < 0 ||
+  if (get_diag(&diag) < 0 || expect_missing("/dev/pwm1") < 0 ||
+      expect_pins_owned(&diag) < 0 ||
       set_start_verify(fd, &point, false, cfg->verbose) < 0 ||
       pwm_stop(fd) < 0)
     {
@@ -1078,9 +1266,333 @@ static int run_case_008(const struct app_config_s *cfg)
       return -EIO;
     }
 
-  printf("  nodes: pwm0=yes pwm1=no gpio22=no\n");
+  printf("  nodes: pwm0=yes pwm1=no gpio for PWM pins=no\n");
   printf("  [PWM-008] PASS runtime owner and cleanup contract\n\n");
   return 0;
+}
+
+#ifdef CONFIG_PWM_MULTICHAN
+/* Send one request with the given channel entries. The list ends with -1
+ * when there is room, as the upper half expects.
+ */
+
+static int pwm_set_channels(int fd, uint32_t frequency,
+                            const struct pwm_chan_s *chans, int nchans)
+{
+  struct pwm_info_s info;
+  int i;
+
+  memset(&info, 0, sizeof(info));
+  info.frequency = frequency;
+  for (i = 0; i < nchans && i < CONFIG_PWM_NCHANNELS; i++)
+    {
+      info.channels[i] = chans[i];
+    }
+
+  if (i < CONFIG_PWM_NCHANNELS)
+    {
+      info.channels[i].channel = -1;
+    }
+
+  if (ioctl(fd, PWMIOC_SETCHARACTERISTICS,
+            (unsigned long)(uintptr_t)&info) < 0)
+    {
+      return -errno;
+    }
+
+  return 0;
+}
+
+static int verify_channels(uint32_t frequency, const struct pwm_chan_s *chans,
+                           int nchans, bool verbose,
+                           struct bl616cl_pwm_test_diag_s *diag)
+{
+  int i;
+
+  if (get_diag(diag) < 0 || verify_timebase(frequency, diag) < 0)
+    {
+      return -EIO;
+    }
+
+  for (i = 0; i < nchans; i++)
+    {
+      if (verify_channel(chans[i].channel - 1, chans[i].duty, chans[i].cpol,
+                         chans[i].dcpol, diag) < 0)
+        {
+          return -EIO;
+        }
+    }
+
+  if (verbose)
+    {
+      print_diag("verified", diag);
+    }
+
+  return 0;
+}
+
+/* A rejected request must not touch the running outputs. */
+
+static int expect_rejected(int fd, const struct pwm_chan_s *chans,
+                           int nchans, const char *label,
+                           const struct bl616cl_pwm_test_diag_s *before)
+{
+  struct bl616cl_pwm_test_diag_s after;
+  int ret;
+  int ch;
+
+  ret = pwm_set_channels(fd, 1000, chans, nchans);
+  if (ret != -EINVAL || get_diag(&after) < 0 || !after.started ||
+      after.divider != before->divider || after.period != before->period)
+    {
+      printf("  FAIL: %s ret=%d expected=%d\n", label, ret, -EINVAL);
+      return -EIO;
+    }
+
+  for (ch = 0; ch < BL616CL_PWM_TEST_NCHANNELS; ch++)
+    {
+      if (after.channels[ch].active != before->channels[ch].active ||
+          after.channels[ch].threshold_high !=
+            before->channels[ch].threshold_high)
+        {
+          print_diag(label, &after);
+          printf("  FAIL: %s changed channel %d\n", label, ch);
+          return -EIO;
+        }
+    }
+
+  printf("  rejected: %s errno=%d\n", label, EINVAL);
+  return 0;
+}
+#endif
+
+static int run_case_009(const struct app_config_s *cfg)
+{
+#ifndef CONFIG_PWM_MULTICHAN
+  (void)cfg;
+  printf("[PWM-009] Multichannel and complementary outputs\n");
+  printf("  SKIP: CONFIG_PWM_MULTICHAN is disabled\n\n");
+  return CASE_SKIPPED;
+#else
+  struct pwm_chan_s chans[BL616CL_PWM_TEST_NCHANNELS];
+  struct pwm_chan_s req[2];
+  struct bl616cl_pwm_test_diag_s before;
+  struct bl616cl_pwm_test_diag_s diag;
+  int unconfigured = -1;
+  int nchans = 0;
+  int last;
+  int fd;
+  int ch;
+  int i;
+  int ret = -EIO;
+
+  printf("[PWM-009] Multichannel and complementary outputs\n");
+  bl616cl_pwm_test_reset();
+  if (get_diag(&diag) < 0)
+    {
+      return -EIO;
+    }
+
+  /* 20%, 40%, 60% and 80% in channel order, so that every output can be
+   * told apart on a logic analyzer.
+   */
+
+  memset(chans, 0, sizeof(chans));
+  for (ch = 0; ch < BL616CL_PWM_TEST_NCHANNELS; ch++)
+    {
+      if (!diag.channels[ch].configured)
+        {
+          unconfigured = ch;
+          continue;
+        }
+
+      if (nchans < CONFIG_PWM_NCHANNELS)
+        {
+          chans[nchans].channel = ch + 1;
+          chans[nchans].duty = (ub16_t)(13107 * (nchans + 1));
+          chans[nchans].cpol = PWM_CPOL_HIGH;
+          chans[nchans].dcpol = PWM_DCPOL_HIGH;
+          nchans++;
+        }
+    }
+
+  if (nchans < 2)
+    {
+      printf("  SKIP: needs two configured channels and "
+             "CONFIG_PWM_NCHANNELS >= 2\n\n");
+      return CASE_SKIPPED;
+    }
+
+  last = nchans - 1;
+  fd = pwm_open(cfg->devpath);
+  if (fd < 0)
+    {
+      return fd;
+    }
+
+  /* 1. With dcpol HIGH, STOP leaves positive outputs high and negative
+   * outputs low.
+   */
+
+  if (pwm_set_channels(fd, 1000, chans, nchans) < 0 || pwm_start(fd) < 0 ||
+      verify_channels(1000, chans, nchans, cfg->verbose, &diag) < 0 ||
+      pwm_stop(fd) < 0 || verify_idle_levels("PWM-009 STOP high") < 0)
+    {
+      printf("  FAIL: dcpol HIGH start/stop\n");
+      goto out;
+    }
+
+  /* 2. All channels start together on one timebase. */
+
+  for (i = 0; i < nchans; i++)
+    {
+      chans[i].dcpol = PWM_DCPOL_LOW;
+    }
+
+  if (pwm_set_channels(fd, 1000, chans, nchans) < 0 || pwm_start(fd) < 0 ||
+      verify_channels(1000, chans, nchans, cfg->verbose, &diag) < 0)
+    {
+      printf("  FAIL: all-channel start\n");
+      goto out;
+    }
+
+  for (i = 0; i < nchans; i++)
+    {
+      ch = chans[i].channel - 1;
+      printf("  channel %d: 1000Hz duty=%lu/65536 pins=%d/%d\n", ch,
+             (unsigned long)chans[i].duty, diag.channels[ch].pos_pin,
+             diag.channels[ch].neg_pin);
+    }
+
+  if (cfg->hold_s > 0)
+    {
+      sleep(cfg->hold_s);
+    }
+
+  /* 3. An entry with channel 0 is skipped; updating one channel leaves the
+   * others and the timebase untouched.
+   */
+
+  if (get_diag(&before) < 0)
+    {
+      goto out;
+    }
+
+  memset(req, 0, sizeof(req));
+  chans[last].duty = (ub16_t)58982;
+  req[1] = chans[last];
+  if (pwm_set_channels(fd, 1000, req, 2) < 0 ||
+      verify_channels(1000, chans, nchans, cfg->verbose, &diag) < 0 ||
+      diag.solve_calls != before.solve_calls)
+    {
+      printf("  FAIL: single-channel update\n");
+      goto out;
+    }
+
+  for (i = 0; i < last; i++)
+    {
+      ch = chans[i].channel - 1;
+      if (diag.channels[ch].threshold_high !=
+          before.channels[ch].threshold_high)
+        {
+          printf("  FAIL: updating channel %d changed channel %d\n",
+                 chans[last].channel - 1, ch);
+          goto out;
+        }
+    }
+
+  printf("  channel %d: duty=%lu/65536, other channels unchanged\n",
+         chans[last].channel - 1, (unsigned long)chans[last].duty);
+  if (cfg->hold_s > 0)
+    {
+      sleep(cfg->hold_s);
+    }
+
+  /* 4. A new frequency rebuilds the timebase and keeps running the
+   * channels that the request does not mention.
+   */
+
+  chans[0].duty = DUTY_50;
+  if (pwm_set_channels(fd, 10000, chans, 1) < 0 ||
+      verify_channels(10000, chans, nchans, cfg->verbose, &diag) < 0 ||
+      diag.divider == before.divider)
+    {
+      printf("  FAIL: frequency change with one channel\n");
+      goto out;
+    }
+
+  printf("  10000Hz via channel %d: divider %u->%u, all channels kept\n",
+         chans[0].channel - 1, before.divider, diag.divider);
+  if (cfg->hold_s > 0)
+    {
+      sleep(cfg->hold_s);
+    }
+
+  /* 5. Unknown, unconfigured, repeated and missing channels are rejected
+   * before the hardware changes.
+   */
+
+  if (get_diag(&before) < 0)
+    {
+      goto out;
+    }
+
+  req[0] = chans[0];
+  req[0].channel = BL616CL_PWM_TEST_NCHANNELS + 1;
+  if (expect_rejected(fd, req, 1, "unknown channel", &before) < 0)
+    {
+      goto out;
+    }
+
+  if (unconfigured >= 0)
+    {
+      req[0].channel = unconfigured + 1;
+      if (expect_rejected(fd, req, 1, "unconfigured channel", &before) < 0)
+        {
+          goto out;
+        }
+    }
+  else
+    {
+      printf("  unconfigured channel: SKIP (all channels configured)\n");
+    }
+
+  req[0] = chans[0];
+  req[1] = chans[0];
+  if (expect_rejected(fd, req, 2, "repeated channel", &before) < 0 ||
+      expect_rejected(fd, req, 0, "no channel", &before) < 0)
+    {
+      goto out;
+    }
+
+  /* 6. STOP leaves positive outputs at dcpol LOW and negative outputs high.
+   */
+
+  if (pwm_stop(fd) < 0 || verify_idle_levels("PWM-009 STOP low") < 0)
+    {
+      goto out;
+    }
+
+  if (cfg->hold_s > 0)
+    {
+      sleep(cfg->hold_s);
+    }
+
+  close(fd);
+  if (verify_clean("PWM-009 close") < 0)
+    {
+      return -EIO;
+    }
+
+  printf("  [PWM-009] PASS %d channels, updates, errno and idle levels\n\n",
+         nchans);
+  return 0;
+
+out:
+  (void)pwm_stop(fd);
+  close(fd);
+  return ret;
+#endif
 }
 
 /****************************************************************************
@@ -1102,12 +1614,15 @@ int main(int argc, char *argv[])
     { "006", run_case_006 },
     { "007", run_case_007 },
     { "008", run_case_008 },
+    { "009", run_case_009 },
   };
 
+  struct bl616cl_pwm_test_diag_s diag;
   struct app_config_s cfg;
   bool found = false;
   int executed = 0;
   int passed = 0;
+  int skipped = 0;
   int opt;
   int ret;
   int i;
@@ -1147,8 +1662,38 @@ int main(int argc, char *argv[])
     }
 
   printf("MCU Peripheral PWM Tests\n");
-  printf("Case: %s Device: %s GPIO: 22 hold=%ds\n",
+  printf("Case: %s Device: %s hold=%ds\n",
          cfg.case_id, cfg.devpath, cfg.hold_s);
+
+  if (get_diag(&diag) < 0)
+    {
+      return ERROR;
+    }
+
+  g_primary = -1;
+  for (i = 0; i < BL616CL_PWM_TEST_NCHANNELS; i++)
+    {
+      if (!diag.channels[i].configured)
+        {
+          continue;
+        }
+
+      if (g_primary < 0)
+        {
+          g_primary = i;
+        }
+
+      printf("Channel %d: positive GPIO%d negative GPIO%d\n", i,
+             diag.channels[i].pos_pin, diag.channels[i].neg_pin);
+    }
+
+  if (g_primary < 0)
+    {
+      printf("No PWM channel is configured\n");
+      return ERROR;
+    }
+
+  printf("Primary channel for 001-008: %d\n", g_primary);
 
   for (i = 0; i < (int)(sizeof(cases) / sizeof(cases[0])); i++)
     {
@@ -1161,7 +1706,11 @@ int main(int argc, char *argv[])
       found = true;
       executed++;
       ret = cases[i].run(&cfg);
-      if (ret >= 0)
+      if (ret == CASE_SKIPPED)
+        {
+          skipped++;
+        }
+      else if (ret >= 0)
         {
           passed++;
         }
@@ -1183,9 +1732,9 @@ int main(int argc, char *argv[])
     }
 
   (void)bl616cl_pwm_test_set_fault(BL616CL_PWM_TEST_FAULT_NONE);
-  printf("PWM Summary: executed=%d passed=%d failed=%d -> %s\n",
-         executed, passed, executed - passed,
-         executed == passed ? "PASS" : "FAIL");
+  printf("PWM Summary: executed=%d passed=%d skipped=%d failed=%d -> %s\n",
+         executed, passed, skipped, executed - passed - skipped,
+         executed == passed + skipped ? "PASS" : "FAIL");
 
-  return executed == passed ? OK : ERROR;
+  return executed == passed + skipped ? OK : ERROR;
 }

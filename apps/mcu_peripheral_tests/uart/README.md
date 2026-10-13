@@ -258,7 +258,7 @@ build。每轮要求“构建失败，并命中指定错误”，随后用 `vela
 | SPI0 CS=GPIO14 | `UART1 and SPI0 pins must not overlap` |
 
 GPIO14/15 是 board 固定映射，因此不再提供任意 UART1 pin Kconfig；reserved pin、TX/RX
-重复和 PWM GPIO22 冲突属于编译期防御合同，不能通过正式 board 配置任意改写 pin 来
+重复和与已配 PWM 引脚冲突属于编译期防御合同，不能通过正式 board 配置任意改写 pin 来
 伪造测试。
 
 ## 本轮实测数据

@@ -18,6 +18,7 @@ config ARCH_CHIP_BL616CL
 	select ARCH_HAVE_MISALIGN_EXCEPTION
 	select ARCH_HAVE_RESET
 	select ARCH_HAVE_NETDEV_STATISTICS
+	select ARCH_HAVE_PWM_MULTICHAN
 	select ARCH_RV_ISA_M
 	select ARCH_RV_ISA_A
 	select ARCH_RV_ISA_C
@@ -398,14 +399,16 @@ config BL616CL_PWM
 	default n
 	depends on PWM
 	depends on !PWM_PULSECOUNT
-	depends on !PWM_MULTICHAN
 	depends on !PWM_FREQUENCY_FIXED
 	depends on !PWM_DEADTIME
 	---help---
-		Enable the BL616CL PWM lower-half for one continuous-output channel.
-		The initial board integration uses PWM0 channel 3 positive output.
-		Pulse count, multichannel, fixed-point frequency, and dead-time ABIs
-		are intentionally excluded until their hardware paths are adapted.
+		Enable the BL616CL PWM0 lower-half for continuous output. The four
+		channels share one counter and always run at the same frequency.
+		Each channel drives a positive output, a negative output that is its
+		complement, or both. With PWM_MULTICHAN, channel numbers 1 to 4
+		select channels 0 to 3; without it the board configures exactly one
+		channel. Pulse count, fixed-point frequency and dead-time ABIs are
+		not supported.
 
 if BL616CL_PWM
 

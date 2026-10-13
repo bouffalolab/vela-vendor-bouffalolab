@@ -21,7 +21,7 @@ GPIO6–11、21 可作普通 IO（GPIO6–11 只是外置 flash SF2 的候选脚
 | UART1 | TX 14、RX 15 | 测试时外接环回线 |
 | I2C1 | SCL 4、SDA 5 | 外接 3.3 V 目标和上拉电阻 |
 | SPI0 | CS 12、CLK 13、MISO 18、MOSI 19 | 测试时 MISO 与 MOSI 外接环回 |
-| PWM0 channel 3 | 22 | 正向输出，可接逻辑分析仪或示波器 |
+| PWM0 | CH0 正 8/负 9、CH1 正 10/负 11、CH2 负 21、CH3 正 6/负 7 | `nsh-peripherals` 的分配，可在板级 Kconfig 改；四通道同频，负输出是正输出的反相 |
 | GPIO 回环 | GPIO23 output、GPIO20 input | `mcu_gpio_test` 默认回环，测试时外接跳线 |
 | 板载 LED | 红 14、绿 15、蓝 16、暖白 28、冷白 27 | 高电平点亮（Ai-M64P-32S-Kit V1.0 原理图）；蓝灯注册为 `/dev/gpio16` |
 
@@ -40,8 +40,8 @@ TIMER1 同时是普通 timer lower-half 和 one-shot lower-half 的硬件资源�
 - SPI0：GPIO18 MISO 与 GPIO19 MOSI 短接；GPIO12 是软件片选。
 - I2C1：GPIO4/5 接外部 3.3 V I2C 目标，并提供 SCL/SDA 上拉。没有目标时
   fake transport 用例仍可运行，硬件探测/传输用例应报告环境缺失。
-- PWM：GPIO22 接测量设备。
+- PWM：测量时把探头接 GPIO6–11、21（CH2 只有负输出 21）。
 - WDT：会触发复位的用例必须单独执行并根据 reset cause 验证，不能与其余
   并发测试混跑。
 - GPIO：GPIO23 与 GPIO20 短接；统一配置只注册 `/dev/gpio16`（板载蓝灯）、
-  `/dev/gpio20` 和 `/dev/gpio23`。
+  `/dev/gpio20`、`/dev/gpio22` 和 `/dev/gpio23`。

@@ -117,6 +117,7 @@ struct app_config_s
   bool        pwm_freq_set;   /* 003: -f given => single point, not 3 groups */
   unsigned    pwm_duty_pct;   /* 003 single-point duty (-D) */
   int         pwm_hold_s;     /* 003 per-step hold seconds (-w) */
+  int         pwm_channel;    /* 003/004 PWM_MULTICHAN channel (-C) */
   int         breath_step_pct;
   int         breath_step_ms; /* 004 step interval ms (-i) */
   bool        verbose;
@@ -136,6 +137,8 @@ static void print_usage(const char *progname)
   printf("  -c <id>   Case: 001..010,all (default: all)\n");
   printf("  -d <dev>  Timer device (default: %s)\n", DEFAULT_TIMER_DEVPATH);
   printf("  -p <dev>  PWM device  (default: %s)\n", DEFAULT_PWM_DEVPATH);
+  printf("  -C <n>    [003/004] PWM channel with PWM_MULTICHAN "
+         "(default: 1)\n");
   printf("  -g <dev>  [001/002] toggle GPIO each expiry "
          "for scope (e.g. %s)\n",
          DEFAULT_GPIO_DEVPATH);
@@ -663,6 +666,29 @@ static int run_case_002(const struct app_config_s *cfg)
   return -EIO;
 }
 
+/* Fill a one-channel PWM request. With CONFIG_PWM_MULTICHAN the duty goes
+ * to the channel selected by -C. The BL616CL PWM driver rejects
+ * PWM_CPOL_NDEF/PWM_DCPOL_NDEF.
+ */
+
+static void pwm_fill(struct pwm_info_s *info, const struct app_config_s *cfg,
+                     uint32_t freq, ub16_t duty)
+{
+  memset(info, 0, sizeof(*info));
+  info->frequency = freq;
+#ifdef CONFIG_PWM_MULTICHAN
+  info->channels[0].channel = cfg->pwm_channel;
+  info->channels[0].duty    = duty;
+  info->channels[0].cpol    = PWM_CPOL_HIGH;
+  info->channels[0].dcpol   = PWM_DCPOL_LOW;
+#else
+  UNUSED(cfg);
+  info->duty  = duty;
+  info->cpol  = PWM_CPOL_HIGH;
+  info->dcpol = PWM_DCPOL_LOW;
+#endif
+}
+
 /****************************************************************************
  * TIMER-003 : PWM frequency / duty precision
  ****************************************************************************/
@@ -712,13 +738,7 @@ static int run_case_003(const struct app_config_s *cfg)
 
   for (i = 0; i < npts; i++)
     {
-      /* The BL616CL PWM driver rejects PWM_CPOL_NDEF/PWM_DCPOL_NDEF. */
-
-      memset(&info, 0, sizeof(info));
-      info.frequency = pts[i].freq;
-      info.duty      = PCT_TO_DUTY_B16(pts[i].duty_pct);
-      info.cpol      = PWM_CPOL_HIGH;
-      info.dcpol     = PWM_DCPOL_LOW;
+      pwm_fill(&info, cfg, pts[i].freq, PCT_TO_DUTY_B16(pts[i].duty_pct));
 
       ret = ioctl(fd, PWMIOC_SETCHARACTERISTICS,
                   (unsigned long)((uintptr_t)&info));
@@ -737,7 +757,7 @@ static int run_case_003(const struct app_config_s *cfg)
           return -errno;
         }
 
-      printf("  step %d: freq=%luHz duty=%u%% on %s (GPIO22), hold %ds\n",
+      printf("  step %d: freq=%luHz duty=%u%% on %s, hold %ds\n",
              i + 1, (unsigned long)pts[i].freq, pts[i].duty_pct,
              cfg->pwm_devpath, hold_s);
       printf("         -> verify with scope / logic analyzer\n");
@@ -779,11 +799,7 @@ static int run_case_004(const struct app_config_s *cfg)
       return -errno;
     }
 
-  memset(&info, 0, sizeof(info));
-  info.frequency = cfg->pwm_freq;   /* fixed; only duty ramps */
-  info.duty      = 0;
-  info.cpol      = PWM_CPOL_HIGH;
-  info.dcpol     = PWM_DCPOL_LOW;
+  pwm_fill(&info, cfg, cfg->pwm_freq, 0);   /* fixed; only duty ramps */
 
   ret = ioctl(fd, PWMIOC_SETCHARACTERISTICS,
               (unsigned long)((uintptr_t)&info));
@@ -808,7 +824,7 @@ static int run_case_004(const struct app_config_s *cfg)
 
       for (duty = 0; duty <= 100; duty += step_pct)
         {
-          info.duty = PCT_TO_DUTY_B16(duty);
+          pwm_fill(&info, cfg, cfg->pwm_freq, PCT_TO_DUTY_B16(duty));
           ioctl(fd, PWMIOC_SETCHARACTERISTICS,
                 (unsigned long)((uintptr_t)&info));
           ioctl(fd, PWMIOC_START, 0);  /* freq unchanged -> fast duty update */
@@ -825,7 +841,7 @@ static int run_case_004(const struct app_config_s *cfg)
 
       for (duty = 100; duty >= 0; duty -= step_pct)
         {
-          info.duty = PCT_TO_DUTY_B16(duty);
+          pwm_fill(&info, cfg, cfg->pwm_freq, PCT_TO_DUTY_B16(duty));
           ioctl(fd, PWMIOC_SETCHARACTERISTICS,
                 (unsigned long)((uintptr_t)&info));
           ioctl(fd, PWMIOC_START, 0);
@@ -1458,13 +1474,14 @@ int main(int argc, char *argv[])
   cfg.pwm_freq_set    = false;
   cfg.pwm_duty_pct    = DEF_PWM_DUTY_PCT;
   cfg.pwm_hold_s      = DEF_PWM_HOLD_S;
+  cfg.pwm_channel     = 1;
   cfg.breath_step_pct = DEF_BREATH_STEP_PCT;
   cfg.breath_step_ms  = DEF_BREATH_STEP_MS;
   cfg.verbose         = false;
   cfg.gpio_toggle     = false;
 
   while ((opt = getopt(argc, argv,
-                       "c:d:p:g:t:n:e:a:b:f:D:w:s:i:vh")) != -1)
+                       "c:d:p:g:t:n:e:a:b:f:D:w:s:i:C:vh")) != -1)
     {
       switch (opt)
         {
@@ -1486,6 +1503,7 @@ int main(int argc, char *argv[])
           case 'w': cfg.pwm_hold_s    = atoi(optarg);               break;
           case 's': cfg.breath_step_pct = atoi(optarg);             break;
           case 'i': cfg.breath_step_ms  = atoi(optarg);             break;
+          case 'C': cfg.pwm_channel     = atoi(optarg);             break;
           case 'v': cfg.verbose       = true;                       break;
           case 'h':
           default:  print_usage(argv[0]);                        return 0;

@@ -10,14 +10,106 @@ menuconfig AI_M64P_KIT_UART1
 		GPIO15 RX test loopback pair. Runtime termios is independently
 		controlled by SERIAL_TERMIOS.
 
-config AI_M64P_KIT_PWM
+menuconfig AI_M64P_KIT_PWM
 	bool "Ai-M64P-32S-Kit PWM output"
 	default n
 	depends on BL616CL_PWM
 	---help---
-		Register PWM0 as /dev/pwm0 using PWM channel 3 positive output on
-		GPIO22. Enabling this option transfers GPIO22 ownership from the
-		board GPIO test device to PWM.
+		Register PWM0 as /dev/pwm0 on the selected channels. The channels
+		share one frequency. A channel uses a positive output, a negative
+		output or both; the negative output is the complement of the
+		positive one, also when stopped. Without PWM_MULTICHAN exactly one
+		channel must be selected. The selected pins leave the board GPIO
+		test devices and must not be used by I2C, SPI or UART1. GPIO28 drives
+		the warm white LED and GPIO27 the cold white LED.
+
+if AI_M64P_KIT_PWM
+
+config AI_M64P_KIT_PWM_CH0
+	bool "Channel 0"
+	default n
+	---help---
+		Drive PWM0 channel 0. Its positive output is on a GPIO with
+		pin % 8 == 0 and its negative output on pin % 8 == 1.
+
+if AI_M64P_KIT_PWM_CH0
+
+config AI_M64P_KIT_PWM_CH0_POS_PIN
+	int "Channel 0 positive output GPIO (-1: unused)"
+	default 8
+	range -1 31
+
+config AI_M64P_KIT_PWM_CH0_NEG_PIN
+	int "Channel 0 negative output GPIO (-1: unused)"
+	default -1
+	range -1 31
+
+endif # AI_M64P_KIT_PWM_CH0
+
+config AI_M64P_KIT_PWM_CH1
+	bool "Channel 1"
+	default n
+	---help---
+		Drive PWM0 channel 1. Its positive output is on a GPIO with
+		pin % 8 == 2 and its negative output on pin % 8 == 3.
+
+if AI_M64P_KIT_PWM_CH1
+
+config AI_M64P_KIT_PWM_CH1_POS_PIN
+	int "Channel 1 positive output GPIO (-1: unused)"
+	default 10
+	range -1 31
+
+config AI_M64P_KIT_PWM_CH1_NEG_PIN
+	int "Channel 1 negative output GPIO (-1: unused)"
+	default -1
+	range -1 31
+
+endif # AI_M64P_KIT_PWM_CH1
+
+config AI_M64P_KIT_PWM_CH2
+	bool "Channel 2"
+	default n
+	---help---
+		Drive PWM0 channel 2. Its positive output is on a GPIO with
+		pin % 8 == 4 and its negative output on pin % 8 == 5.
+
+if AI_M64P_KIT_PWM_CH2
+
+config AI_M64P_KIT_PWM_CH2_POS_PIN
+	int "Channel 2 positive output GPIO (-1: unused)"
+	default 28
+	range -1 31
+
+config AI_M64P_KIT_PWM_CH2_NEG_PIN
+	int "Channel 2 negative output GPIO (-1: unused)"
+	default -1
+	range -1 31
+
+endif # AI_M64P_KIT_PWM_CH2
+
+config AI_M64P_KIT_PWM_CH3
+	bool "Channel 3"
+	default y
+	---help---
+		Drive PWM0 channel 3. Its positive output is on a GPIO with
+		pin % 8 == 6 and its negative output on pin % 8 == 7.
+
+if AI_M64P_KIT_PWM_CH3
+
+config AI_M64P_KIT_PWM_CH3_POS_PIN
+	int "Channel 3 positive output GPIO (-1: unused)"
+	default 6
+	range -1 31
+
+config AI_M64P_KIT_PWM_CH3_NEG_PIN
+	int "Channel 3 negative output GPIO (-1: unused)"
+	default -1
+	range -1 31
+
+endif # AI_M64P_KIT_PWM_CH3
+
+endif # AI_M64P_KIT_PWM
 
 menuconfig AI_M64P_KIT_I2C
 	bool "Ai-M64P-32S-Kit I2C buses"

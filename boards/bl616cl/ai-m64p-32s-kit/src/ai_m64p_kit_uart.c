@@ -103,9 +103,9 @@
 #error "UART1 and SPI0 target 1 CS pins must not overlap"
 #endif
 
-#if defined(CONFIG_AI_M64P_KIT_PWM) && \
-  (AI_M64P_KIT_UART1_TX_PIN == 22 || AI_M64P_KIT_UART1_RX_PIN == 22)
-#error "UART1 pins must not overlap the PWM GPIO22 output"
+#if AI_M64P_KIT_PWM_OWNS(AI_M64P_KIT_UART1_TX_PIN) || \
+  AI_M64P_KIT_PWM_OWNS(AI_M64P_KIT_UART1_RX_PIN)
+#error "UART1 pins must not overlap a PWM0 output"
 #endif
 
 /****************************************************************************

@@ -23,6 +23,7 @@
 #include "bflb_gpio.h"
 #include "bflb_name.h"
 #include "bl616cl_spi.h"
+#include "ai_m64p_kit.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -35,17 +36,15 @@
 
 #define AI_M64P_KIT_SPI_PIN_RESERVED(pin) ((pin) >= 32 && (pin) <= 36)
 
-#ifdef CONFIG_AI_M64P_KIT_PWM
-#  if CONFIG_AI_M64P_KIT_SPI0_CS_PIN == 22 ||   \
-      CONFIG_AI_M64P_KIT_SPI0_CLK_PIN == 22 ||  \
-      CONFIG_AI_M64P_KIT_SPI0_MISO_PIN == 22 || \
-      CONFIG_AI_M64P_KIT_SPI0_MOSI_PIN == 22
-#    error "SPI0 pin conflicts with PWM0 channel 3 on GPIO22"
-#  endif
-#  if defined(CONFIG_AI_M64P_KIT_SPI0_TARGET1) && \
-      CONFIG_AI_M64P_KIT_SPI0_TARGET1_CS_PIN == 22
-#    error "SPI0 target 1 CS conflicts with PWM0 channel 3 on GPIO22"
-#  endif
+#if AI_M64P_KIT_PWM_OWNS(CONFIG_AI_M64P_KIT_SPI0_CS_PIN) ||  \
+  AI_M64P_KIT_PWM_OWNS(CONFIG_AI_M64P_KIT_SPI0_CLK_PIN) ||    \
+  AI_M64P_KIT_PWM_OWNS(CONFIG_AI_M64P_KIT_SPI0_MISO_PIN) ||   \
+  AI_M64P_KIT_PWM_OWNS(CONFIG_AI_M64P_KIT_SPI0_MOSI_PIN)
+#  error "SPI0 pin conflicts with a PWM0 output"
+#endif
+#if defined(CONFIG_AI_M64P_KIT_SPI0_TARGET1) && \
+  AI_M64P_KIT_PWM_OWNS(CONFIG_AI_M64P_KIT_SPI0_TARGET1_CS_PIN)
+#  error "SPI0 target 1 CS conflicts with a PWM0 output"
 #endif
 
 #if CONFIG_AI_M64P_KIT_SPI0_CLK_PIN % 4 != 1

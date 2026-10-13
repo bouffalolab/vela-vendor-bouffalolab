@@ -3,11 +3,13 @@
 本目录验证 BL616CL PWM controller 与 OpenVela PWM upper-half 的首版能力交集。
 `pwm_test_main.c` 编译为独立测试 archive，注册 NSH 命令 `mcu_pwm_test`；它不进入
 `libarch.a`。chip lower、板级注册和 PWM LHAL 对象由各自 Kconfig 控制并进入对应内核
-archive。测试 app 打开 `/dev/pwm0`，实际输出固定为 PWM CH3 正向端 GPIO22。
+archive。测试 app 打开 `/dev/pwm0`，输出引脚由板级 Kconfig 决定。PWM-001～008 针对
+主通道（编号最小的已配通道），PWM-009 验证多通道和互补输出。`nsh-peripherals` 的分配为
+CH0 正 8/负 9、CH1 正 10/负 11、CH2 只用负输出 21、CH3 正 6/负 7，主通道为 CH0。
 
-首版覆盖整数频率、连续输出、b16 duty、`cpol`/`dcpol`、运行中更新、多 fd 生命周期和
-timeout 清理。multichannel、pulse count、complementary、deadtime、brake、center-aligned、
-ADC trigger、fixed-point frequency 和 PWM DMA 不属于本轮声明。
+覆盖整数频率、连续输出、b16 duty、`cpol`/`dcpol`、运行中更新、多 fd 生命周期、
+timeout 清理、多通道（`PWM_MULTICHAN`）和互补输出。pulse count、deadtime、brake、
+center-aligned、ADC trigger、fixed-point frequency 和 PWM DMA 不属于本轮声明。
 
 ## 配置与裁剪
 
@@ -19,6 +21,10 @@ CONFIG_BL616CL_PWM=y
 CONFIG_AI_M64P_KIT_PWM=y
 ```
 
+并用 `CONFIG_AI_M64P_KIT_PWM_CHn`、`_POS_PIN`、`_NEG_PIN` 选通道和引脚（默认只开 CH3、
+正输出 GPIO6）。选多个通道时还要启用 `CONFIG_PWM_MULTICHAN` 和
+`CONFIG_PWM_NCHANNELS`（PWM-009 需要不小于 2）。
+
 测试配置再启用：
 
 ```text
@@ -26,18 +32,18 @@ CONFIG_BL_MCU_PERIPHERAL_TESTS_PWM=y
 ```
 
 测试 app 自动选择 `CONFIG_BL616CL_PWM_TEST=y`，从而编入诊断和 timeout fault hook；
-产品配置必须同时关闭测试 app 与 hook。首版与 `PWM_PULSECOUNT`、`PWM_MULTICHAN`、
+产品配置必须同时关闭测试 app 与 hook。lower 与 `PWM_PULSECOUNT`、
 `PWM_FREQUENCY_FIXED`、`PWM_DEADTIME` 不兼容，Kconfig 不允许形成这些 ABI 组合。
-启用板级 PWM 后，GPIO22 从 GPIO 测试节点移交给 PWM；I2C/SPI 任一信号配置为 GPIO22
-都必须在编译期失败。
+启用板级 PWM 后，已配的 PWM 引脚从 GPIO 测试节点移交给 PWM；I2C、SPI、UART1 任一信号
+配置到这些引脚都必须在编译期失败。
 
 ## 运行前检查
 
 1. 固件启动后确认出现 `NuttShell (NSH)` 和 `nsh>`。
 2. 执行 `help`，必须能找到 `mcu_pwm_test`。
-3. 执行 `ls /dev`，必须有 `pwm0`，不能有 `gpio22` 和 `pwm1`。
-4. 纯软件合同可执行 `mcu_pwm_test -c all`；该命令会真实驱动 GPIO22。
-5. 波形验收时将逻辑分析仪或示波器探头接 GPIO22，共地，量程适配 3.3V。
+3. 执行 `ls /dev`，必须有 `pwm0`，不能有 `pwm1` 和已配 PWM 引脚的 `gpioN`。
+4. 纯软件合同可执行 `mcu_pwm_test -c all`；该命令会真实驱动所有已配 PWM 引脚。
+5. 波形验收时将逻辑分析仪或示波器探头接已配 PWM 引脚，共地，量程适配 3.3V。
 6. USB2 串口日志、板载 LED 和软件 PASS 不能替代频率、占空比、停止电平或毛刺证据。
 
 ## 命令
@@ -53,9 +59,11 @@ mcu_pwm_test -c 005 -w 3
 mcu_pwm_test -c 006 -w 3
 mcu_pwm_test -c 007
 mcu_pwm_test -c 008
+mcu_pwm_test -c 009 -w 3
 ```
 
-`-d` 可覆盖 PWM 节点，默认 `/dev/pwm0`；`-w` 是每个可观测波形档位的保持秒数，默认
+启动时先打印每个已配通道的正/负引脚（-1 表示不用）和主通道编号。`-d` 可覆盖 PWM 节点，
+默认 `/dev/pwm0`；`-w` 是每个可观测波形档位的保持秒数，默认
 1 秒；`-v` 打印每个寄存器诊断点。指定单个 case 时任一步失败立即返回非零；`all` 会
 继续执行并在末尾汇总。
 
@@ -160,10 +168,12 @@ active/inactive stop-state，不能把枚举值直接写入 bit。
 3. stop-active 必须满足 `(cpol==HIGH && dcpol==HIGH) ||
    (cpol==LOW && dcpol==LOW)`。
 4. 每种组合保持 `-w` 秒；仪器记录运行波形初始极性。
-5. STOP 后记录 GPIO22 电平，必须等于本组 dcpol；重新 START 后进入下一组。
+5. STOP 后从 GPIO 输入寄存器读回所有已配引脚：正输出必须等于该通道 dcpol，负输出必须
+   相反（STOP 后引脚是 GPIO 输出，输入寄存器才跟随引脚）；重新 START 后进入下一组。
 6. 最后一组 close 后再次记录停止电平和资源清理状态。
 
-完成判据：四种寄存器映射全部正确；实物阶段还需 GPIO22 的 STOP/close 电平与请求一致。
+完成判据：四种寄存器映射和停止电平回读全部正确；实物阶段还需仪器确认 STOP/close 电平
+与请求一致。
 
 ## PWM-006 同 divider 与跨 divider 更新
 
@@ -209,18 +219,21 @@ shutdown errno 传播；active close 后 reopen+START 必须真实调用 lower �
 
 ## PWM-008 owner、节点与关闭态裁剪
 
-背景：GPIO22 只能由 PWM 或 GPIO/I2C/SPI 一方拥有；测试配置还必须证明节点和
-test-only 资源按配置出现。
+背景：每个 PWM 引脚只能由 PWM 或 GPIO/I2C/SPI/UART1 一方拥有；测试配置还必须证明
+节点和 test-only 资源按配置出现。
 
 命令：`mcu_pwm_test -c 008`
 
 流程：
 
 1. 打开 `/dev/pwm0` 必须成功；打开 `/dev/pwm1` 必须失败并返回 `ENOENT`。
-2. 打开 `/dev/gpio22` 必须失败并返回 `ENOENT`，证明 GPIO 测试节点已移除。
+2. 打开每个已配 PWM 引脚的 `/dev/gpioN` 必须失败并返回 `ENOENT`，证明 GPIO 测试节点
+   已移除。
 3. 设置并启动 1kHz/50%，STOP、close；诊断必须显示 channel/pin/clock/started 全部清理。
-4. 配置期分别让 I2C0/I2C1 SCL/SDA、SPI0 CLK/MISO/MOSI/CS0/CS1 使用 GPIO22；每组
-   必须在编译期失败。合法默认 pin 配置必须 clean build 通过。
+4. 配置期分别让 I2C0/I2C1 SCL/SDA、SPI0 CLK/MISO/MOSI/CS0/CS1、UART1 TX/RX 使用已配
+   PWM 引脚；每组必须在编译期失败。PWM 引脚不在所选通道槽位（正 `pin%8==2*ch`、负
+   `pin%8==2*ch+1`）、一个通道都没选，或不开 `PWM_MULTICHAN` 时选了多个通道，也必须
+   编译失败。合法默认 pin 配置必须 clean build 通过。
 5. off/product/test 三组制品分别检查 source、archive、map、ELF symbol 和 `help`：off
    无 lower/LHAL/board/app/hook；product 有 `/dev/pwm0` 但无 app/hook；test 才有全部测试符号。
 6. board 注册失败路径只做代码审查：失败前 lower 必须是静态、未 acquire 状态。不要在
@@ -228,7 +241,39 @@ test-only 资源按配置出现。
 
 完成判据：运行时 owner 和清理断言通过，配置冲突矩阵与三态裁剪证据完整。
 
+## PWM-009 多通道与互补输出
+
+背景：四个通道共用 frequency，各自 duty；负输出是正输出的反相。START 中没提到的通道
+必须保持原状态，非法通道请求不得改动硬件。只在 `PWM_MULTICHAN` 开启且已配不少于两个
+通道时运行，否则 SKIP。
+
+命令：`mcu_pwm_test -c 009 -w 3 -v`
+
+流程：
+
+1. 全部已配通道按通道顺序取 20%、40%、60%、80%（便于在仪器上区分），cpol HIGH、
+   dcpol HIGH，1kHz START，逐通道回读 threshold、PEN/NEN、polarity 和 stop-state；
+   STOP 后读回引脚：正输出为 1、负输出为 0。
+2. dcpol 改为 LOW，再次全部通道 1kHz START 并回读，保持 `-w` 秒。
+3. 只更新最后一个通道到 90%（请求里第一项 `channel=0` 跳过）；其余通道 threshold
+   不变，不重新求解频率，保持 `-w` 秒。
+4. 只提第一个通道，改为 10kHz/50%；divider 必须改变，其余通道按原 duty 在新 period
+   上恢复，保持 `-w` 秒。
+5. 未知通道号、未配置通道（全部已配时 SKIP）、重复通道、空请求都必须返回 `EINVAL`，
+   且硬件诊断不变。
+6. STOP 后读回引脚：正输出为 0、负输出为 1；close 后资源清理。
+
+完成判据：所有回读与 errno 断言通过；实物阶段由仪器确认各通道频率一致、duty 正确、
+负输出与正输出逐样本反相，以及 STOP 电平。
+
 ## 当前实测数据
+
+2026-10-13 多通道版本在 `nsh-peripherals`（4 通道，见开头分配）上执行
+`mcu_pwm_test -c all -w 1 -v`：PWM-001～009 共 9/9 PASS，PWM-009 的两次 STOP 回读
+GPIO6–11、21 的电平都与 dcpol 一致。不开 `PWM_MULTICHAN`、只配 CH2 负输出的临时配置上
+为 8 PASS、009 SKIP。逻辑分析仪数据见 `docs/bl616cl-pwm.md` 的“多通道与互补输出实测”。
+
+以下是单通道（CH3+/GPIO22）时期的数据。
 
 测试固件 `nsh` 在 `/dev/ttyUSB2`、2,000,000 baud 启动并进入 NSH。
 `help` 包含 `mcu_pwm_test`；`ls /dev` 有 `pwm0`，无 `pwm1` 和 `gpio22`。

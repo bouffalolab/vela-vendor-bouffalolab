@@ -50,6 +50,34 @@ enum bl616cl_pwm_test_fault_e
   BL616CL_PWM_TEST_FAULT_DEINIT_TIMEOUT,
 };
 
+#define BL616CL_PWM_TEST_NCHANNELS 4
+
+/* Per-channel state. The register fields are valid only while the PWM clock
+ * is enabled; the pin levels follow the pins only while they are plain GPIO
+ * outputs, that is after STOP or before the first START.
+ */
+
+struct bl616cl_pwm_test_channel_s
+{
+  int8_t pos_pin;               /* Positive output GPIO, -1 if unused */
+  int8_t neg_pin;               /* Negative output GPIO, -1 if unused */
+  uint16_t threshold_low;
+  uint16_t threshold_high;
+  uint8_t cpol;                 /* Last applied cpol */
+  uint8_t dcpol;                /* Last applied dcpol */
+  bool configured;              /* Channel provided by the board */
+  bool active;                  /* Running since the last START */
+  bool enabled;                 /* Output enables set by the lower half */
+  bool pos_output;              /* PEN */
+  bool neg_output;              /* NEN */
+  bool pos_polarity_high;       /* PPL */
+  bool neg_polarity_high;       /* NPL */
+  bool pos_stop_active;         /* PSI */
+  bool neg_stop_active;         /* NSI */
+  bool pos_level;               /* GPIO input level of pos_pin */
+  bool neg_level;               /* GPIO input level of neg_pin */
+};
+
 struct bl616cl_pwm_test_diag_s
 {
   uint32_t setup_calls;
@@ -63,16 +91,10 @@ struct bl616cl_pwm_test_diag_s
   int last_error;
   uint16_t divider;
   uint16_t period;
-  uint16_t threshold_low;
-  uint16_t threshold_high;
-  uint8_t cpol;
-  uint8_t dcpol;
-  bool polarity_active_high;
-  bool stop_active;
-  bool channel_enabled;
   bool pin_acquired;
   bool clock_enabled;
   bool started;
+  struct bl616cl_pwm_test_channel_s channels[BL616CL_PWM_TEST_NCHANNELS];
 };
 
 /****************************************************************************
@@ -117,9 +139,10 @@ int bl616cl_pwm_test_set_fault(enum bl616cl_pwm_test_fault_e fault);
  * Name: bl616cl_pwm_test_get_diag
  *
  * Description:
- *   Copy the call counters, last error, cached settings and the current
- *   polarity state to a diagnostics structure. Polarity is read from the
- *   registers while the clock is enabled.
+ *   Copy the call counters, last error, cached settings and the per-channel
+ *   state to a diagnostics structure. Output enables, polarity and stop
+ *   states are read from the registers while the clock is enabled; the pin
+ *   levels are read from the GPIO input register.
  *
  * Input Parameters:
  *   diag - Location that receives the diagnostics

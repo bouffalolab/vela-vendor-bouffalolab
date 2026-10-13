@@ -28,6 +28,46 @@
 #define AI_M64P_KIT_UART1_TX_PIN 14
 #define AI_M64P_KIT_UART1_RX_PIN 15
 
+/* PWM0 output pins, -1 when the output or its channel is not selected */
+
+#if defined(CONFIG_AI_M64P_KIT_PWM) && defined(CONFIG_AI_M64P_KIT_PWM_CH0)
+#  define AI_M64P_KIT_PWM_CH0_POS CONFIG_AI_M64P_KIT_PWM_CH0_POS_PIN
+#  define AI_M64P_KIT_PWM_CH0_NEG CONFIG_AI_M64P_KIT_PWM_CH0_NEG_PIN
+#else
+#  define AI_M64P_KIT_PWM_CH0_POS -1
+#  define AI_M64P_KIT_PWM_CH0_NEG -1
+#endif
+
+#if defined(CONFIG_AI_M64P_KIT_PWM) && defined(CONFIG_AI_M64P_KIT_PWM_CH1)
+#  define AI_M64P_KIT_PWM_CH1_POS CONFIG_AI_M64P_KIT_PWM_CH1_POS_PIN
+#  define AI_M64P_KIT_PWM_CH1_NEG CONFIG_AI_M64P_KIT_PWM_CH1_NEG_PIN
+#else
+#  define AI_M64P_KIT_PWM_CH1_POS -1
+#  define AI_M64P_KIT_PWM_CH1_NEG -1
+#endif
+
+#if defined(CONFIG_AI_M64P_KIT_PWM) && defined(CONFIG_AI_M64P_KIT_PWM_CH2)
+#  define AI_M64P_KIT_PWM_CH2_POS CONFIG_AI_M64P_KIT_PWM_CH2_POS_PIN
+#  define AI_M64P_KIT_PWM_CH2_NEG CONFIG_AI_M64P_KIT_PWM_CH2_NEG_PIN
+#else
+#  define AI_M64P_KIT_PWM_CH2_POS -1
+#  define AI_M64P_KIT_PWM_CH2_NEG -1
+#endif
+
+#if defined(CONFIG_AI_M64P_KIT_PWM) && defined(CONFIG_AI_M64P_KIT_PWM_CH3)
+#  define AI_M64P_KIT_PWM_CH3_POS CONFIG_AI_M64P_KIT_PWM_CH3_POS_PIN
+#  define AI_M64P_KIT_PWM_CH3_NEG CONFIG_AI_M64P_KIT_PWM_CH3_NEG_PIN
+#else
+#  define AI_M64P_KIT_PWM_CH3_POS -1
+#  define AI_M64P_KIT_PWM_CH3_NEG -1
+#endif
+
+#define AI_M64P_KIT_PWM_OWNS(pin) \
+  ((pin) == AI_M64P_KIT_PWM_CH0_POS || (pin) == AI_M64P_KIT_PWM_CH0_NEG || \
+   (pin) == AI_M64P_KIT_PWM_CH1_POS || (pin) == AI_M64P_KIT_PWM_CH1_NEG || \
+   (pin) == AI_M64P_KIT_PWM_CH2_POS || (pin) == AI_M64P_KIT_PWM_CH2_NEG || \
+   (pin) == AI_M64P_KIT_PWM_CH3_POS || (pin) == AI_M64P_KIT_PWM_CH3_NEG)
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
@@ -125,7 +165,8 @@ int ai_m64p_kit_spi_initialize(void);
  * Name: ai_m64p_kit_pwm_initialize
  *
  * Description:
- *   Initialize PWM0 channel 3 on GPIO22 and register it as /dev/pwm0.
+ *   Initialize the PWM0 channels selected in Kconfig on their positive and
+ *   negative output pins and register them as /dev/pwm0.
  *
  * Input Parameters:
  *   None.
