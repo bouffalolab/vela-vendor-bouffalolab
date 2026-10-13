@@ -50,7 +50,6 @@
 
 #define BL616CL_PWM_CHANNEL     PWM_CH3
 #define BL616CL_PWM_PIN         22
-#define BL616CL_PWM_MIN_DIVIDER 1
 #define BL616CL_PWM_MAX_DIVIDER UINT16_MAX
 #define BL616CL_PWM_MIN_PERIOD  2
 #define BL616CL_PWM_MAX_PERIOD  UINT16_MAX
@@ -78,8 +77,6 @@ struct bl616cl_pwm_solution_s
   uint16_t divider;
   uint16_t period;
   uint32_t actual;
-  uint64_t error_num;
-  uint32_t error_den;
 };
 
 enum bl616cl_pwm_operation_e
@@ -200,132 +197,33 @@ static void bl616cl_pwm_record_error(
 }
 
 /****************************************************************************
- * Name: bl616cl_pwm_error_less
- *
- * Description:
- *   Compare two frequency errors given as fractions (num / den) without
- *   overflowing 64 bits. Integer quotients are compared first, then the
- *   remainders by cross-multiplication.
- *
- * Input Parameters:
- *   left_num  - Numerator of the left error
- *   left_den  - Denominator of the left error
- *   right_num - Numerator of the right error
- *   right_den - Denominator of the right error
- *
- * Returned Value:
- *   true if the left error is strictly smaller than the right error; false
- *   otherwise.
- *
- ****************************************************************************/
-
-static bool bl616cl_pwm_error_less(uint64_t left_num, uint32_t left_den,
-                                   uint64_t right_num, uint32_t right_den)
-{
-  uint64_t left_quotient = left_num / left_den;
-  uint64_t right_quotient = right_num / right_den;
-  uint64_t left_remainder;
-  uint64_t right_remainder;
-
-  if (left_quotient != right_quotient)
-    {
-      return left_quotient < right_quotient;
-    }
-
-  left_remainder = left_num % left_den;
-  right_remainder = right_num % right_den;
-
-  /* Both remainders and denominators are below 2^32, so this comparison
-   * remains bounded in 64 bits.
-   */
-
-  return left_remainder * right_den < right_remainder * left_den;
-}
-
-/****************************************************************************
- * Name: bl616cl_pwm_consider_solution
- *
- * Description:
- *   Evaluate one divider/period pair for the requested frequency and keep it
- *   in best if it is the first valid candidate or has a smaller error. Ties
- *   prefer the smaller divider. Periods outside the hardware limits are
- *   ignored.
- *
- * Input Parameters:
- *   source    - Source clock frequency in Hz
- *   frequency - Requested PWM frequency in Hz
- *   divider   - Candidate clock divider
- *   period    - Candidate counter period
- *   best      - Best solution so far, updated in place
- *   found     - Set to true once a solution is stored in best
- *
- * Returned Value:
- *   None.
- *
- ****************************************************************************/
-
-static void bl616cl_pwm_consider_solution(
-  uint32_t source, uint32_t frequency, uint32_t divider, uint32_t period,
-  struct bl616cl_pwm_solution_s *best, bool *found)
-{
-  uint64_t denominator;
-  uint64_t requested;
-  uint64_t error;
-  uint32_t actual;
-
-  if (period < BL616CL_PWM_MIN_PERIOD ||
-      period > BL616CL_PWM_MAX_PERIOD)
-    {
-      return;
-    }
-
-  denominator = (uint64_t)divider * period;
-  requested = (uint64_t)frequency * denominator;
-  error = requested > source ? requested - source : source - requested;
-  actual = (uint32_t)((uint64_t)source / denominator);
-
-  if (!*found ||
-      bl616cl_pwm_error_less(error, (uint32_t)denominator,
-                             best->error_num, best->error_den) ||
-      (error == best->error_num && denominator == best->error_den &&
-       divider < best->divider))
-    {
-      best->divider = divider;
-      best->period = period;
-      best->actual = actual;
-      best->error_num = error;
-      best->error_den = (uint32_t)denominator;
-      *found = true;
-    }
-}
-
-/****************************************************************************
  * Name: bl616cl_pwm_solve
  *
  * Description:
- *   Find the divider and period whose output frequency is closest to the
- *   requested one, by searching around the rounded period for each divider.
+ *   Pick the smallest divider that keeps the period within 16 bits, so the
+ *   period and the duty resolution are as large as possible, and round the
+ *   period to the requested frequency.
  *
  * Input Parameters:
  *   source    - Source clock frequency in Hz
  *   frequency - Requested PWM frequency in Hz
- *   solution  - Location that receives the best divider, period and actual
+ *   solution  - Location that receives the divider, period and actual
  *               frequency
  *
  * Returned Value:
  *   Zero (OK) on success; a negated errno value on failure. Errors: -ERANGE
- *   if source is 0, solution is NULL, the frequency is too high, or no valid
- *   pair exists; -EINVAL if frequency is 0.
+ *   if source is 0, solution is NULL, or the frequency is too high or too
+ *   low for the 16-bit divider and period; -EINVAL if frequency is 0.
  *
  ****************************************************************************/
 
 static int bl616cl_pwm_solve(uint32_t source, uint32_t frequency,
                              struct bl616cl_pwm_solution_s *solution)
 {
+  uint64_t max_count;
   uint64_t scaled;
   uint32_t divider;
   uint32_t period;
-  bool found = false;
 
   if (solution == NULL || source == 0)
     {
@@ -342,33 +240,24 @@ static int bl616cl_pwm_solve(uint32_t source, uint32_t frequency,
       return -ERANGE;
     }
 
-  for (divider = BL616CL_PWM_MIN_DIVIDER;
-       divider <= BL616CL_PWM_MAX_DIVIDER; divider++)
+  /* With the smallest divider the period stays at or below the maximum
+   * after rounding, and above half of it once the divider exceeds 1.
+   */
+
+  max_count = (uint64_t)frequency * BL616CL_PWM_MAX_PERIOD;
+  divider = (uint32_t)((source + max_count - 1) / max_count);
+  if (divider > BL616CL_PWM_MAX_DIVIDER)
     {
-      scaled = (uint64_t)frequency * divider;
-      period = (uint32_t)(((uint64_t)source + scaled / 2) / scaled);
-
-      if (period > 0)
-        {
-          bl616cl_pwm_consider_solution(source, frequency, divider,
-                                        period - 1, solution, &found);
-        }
-
-      bl616cl_pwm_consider_solution(source, frequency, divider, period,
-                                    solution, &found);
-      if (period < UINT32_MAX)
-        {
-          bl616cl_pwm_consider_solution(source, frequency, divider,
-                                        period + 1, solution, &found);
-        }
-
-      if (period < BL616CL_PWM_MIN_PERIOD)
-        {
-          break;
-        }
+      return -ERANGE;
     }
 
-  return found ? OK : -ERANGE;
+  scaled = (uint64_t)frequency * divider;
+  period = (uint32_t)((source + scaled / 2) / scaled);
+
+  solution->divider = divider;
+  solution->period = period;
+  solution->actual = source / (divider * period);
+  return OK;
 }
 
 /****************************************************************************
@@ -892,8 +781,8 @@ static int bl616cl_pwm_start(struct pwm_lowerhalf_s *lower,
   priv->source_frequency =
     bflb_clk_get_system_clock(BFLB_SYSTEM_PBCLK);
 
-  /* The search walks every divider, so reuse the last result when only the
-   * duty or polarity changes.
+  /* Reuse the last result when only the duty or polarity changes, so such
+   * updates skip the 64-bit divisions.
    */
 
   if (priv->solved_frequency == info->frequency &&

@@ -26,7 +26,7 @@ board 固定选择 PWM0 CH3 正向输出 GPIO22，并注册 `/dev/pwm0`。
 | 单 controller | 纳入首版 | BL616CL 只有 `pwm_v2_0`；base、gate、reset、IRQ 与 TIMER 独立 |
 | CH3 正向输出 | 纳入首版 | PIN_MUX 表中 `reg_pwm1_io_sel=1` 时 GPIO22 为 CH3+ |
 | continuous PWM | 纳入首版 | 对应非 pulse-count OpenVela lower ABI |
-| 整数 frequency | 纳入首版 | 读取实际 PBCLK，在 16-bit divider/period 范围求最小误差 |
+| 整数 frequency | 纳入首版 | 读取实际 PBCLK，取放得下 16-bit period 的最小 divider，period 四舍五入 |
 | b16 duty | 纳入首版 | 0..65535/65536 映射到 threshold；最大值不声明为 100% |
 | `cpol`/`dcpol` | 纳入首版 | 正向 polarity 与 active/inactive stop-state 可无歧义映射 |
 | live update | 纳入首版 | 同 divider 使用 update gate；跨 divider 允许 stop/reinit |
@@ -95,16 +95,17 @@ CH3+。lower 在接管引脚时置 1（`PWM_IO_SEL_DIFF_END`），并在编译�
 
 ## 频率、duty 与 polarity 合同
 
-lower 读取实际 PBCLK。请求 frequency 为 0、源时钟为 0，或请求高于 `PBCLK/2` 时拒绝。
-divider 遍历 1..65535；每个 divider 只比较理想 period 附近且落在 2..65535 的候选，
-用 64-bit 有理误差比较选择最优组合。配置后必须读取实际 divider/period 并据此计算
-actual frequency，不能用请求值或仅缓存配置冒充寄存器证据。
+lower 读取实际 PBCLK。请求 frequency 为 0、源时钟为 0，或请求高于 `PBCLK/2` 时拒绝；
+所需 divider 超过 65535（频率过低）时同样拒绝。divider 取让 period 不超过 65535 的
+最小值 `ceil(PBCLK / (frequency * 65535))`，period 取
+`round(PBCLK / (frequency * divider))`，使 period 和 duty 分辨率最大，与 STM32、Linux
+等 PWM 驱动的取舍相同。divider 大于 1 时 period 不小于 32768，频率误差不超过
+`1/(2*period)`（约 15 ppm）；divider 为 1 时 period 就是最接近的整数。配置后必须读取
+实际 divider/period 并据此计算 actual frequency，不能用请求值或仅缓存配置冒充寄存器
+证据。
 
-穷举有明显耗时：只有 period 小于 2 时才提前结束，低频请求会遍历全部 65535 个
-divider。PBCLK 为 160 MHz 时，一次完整遍历在开启 KASAN 的 `nsh-peripherals` 上约
-0.35 s，关闭 KASAN、UBSAN 和 stack canary 后约 0.17 s。lower 记住上一次求解时的
-PBCLK、frequency 和结果，两者都没变（只改 duty 或 polarity）时直接沿用，不再求解；
-test-only 诊断的 `solve_calls` 记录实际求解次数。
+lower 记住上一次求解时的 PBCLK、frequency 和结果，两者都没变（只改 duty 或
+polarity）时直接沿用；test-only 诊断的 `solve_calls` 记录实际求解次数。
 
 `duty` 是 `ub16_t`：
 
@@ -201,7 +202,7 @@ USB2 只承载控制台，GPIO22 也不接板载 LED；引脚处于 PWM 复用�
 | PWM-003 | 100 Hz、1 kHz、10 kHz 均通过；PBCLK 160 MHz；实际频率分别 100/1000/10000 Hz |
 | PWM-004 | duty 0、25%、50%、75%、65535/65536 全通过；最大 duty 为 `period-1` |
 | PWM-005 | CPOL/DCPOL 四组合全部通过；CONFIG1 polarity/stop-state 回读匹配 |
-| PWM-006 | 同 divider 更新保持 4/40000；跨 divider 为 25/64000 和 1/16000；重复 START/STOP 幂等 |
+| PWM-006 | 同 divider 更新保持 3/53333；跨 divider 为 25/64000 和 1/16000；重复 START/STOP 幂等 |
 | PWM-007 | INIT、START、STOP timeout 均返回 errno 110；active-close/reopen 后 lower 重新 START |
 | PWM-008 | `pwm0=yes pwm1=no gpio22=no`；owner 和 close 清理通过 |
 
@@ -209,6 +210,9 @@ USB2 只承载控制台，GPIO22 也不接板载 LED；引脚处于 PWM 复用�
 完成现役回归：GPIO edge 3 cycles、TIMER-001 0.253% 最大误差、TIMER-002 周期比
 2.000、TIMER-005、oneshot 100000 us、WDT-002（3026 ms 内 keepalive 6 次）、
 WDT-003、`/dev/rtc0` 以及 `date` 两秒递增；系统存活检查返回 0。
+
+2026-10-13 改为最小 divider 后，在 `nsh-peripherals` 上复跑 `-c all -w 0 -v` 仍为 8/8；
+PWM-006 的 1 kHz 由 4/40000 变为 3/53333，上表已更新。
 
 active close 修复先在未修复 NuttX 上复现 `executed=8 passed=7 failed=1`，唯一失败为 active
 close/reopen 未重新调用 lower。修复后同一 USB2、配置和命令得到 8/8 PASS；同次
@@ -242,5 +246,7 @@ DSLogic U3Pro32 接 GPIO22 和 GND，阈值 1.6 V，采样率 2 MHz，以 GPIO22
 - 同 divider（1 kHz 50% → 75%）：出现一个 1118 µs 的周期（高 618 µs），之后为 75%。
 
 同 divider 更新的异常只持续一个 PWM 周期，满足第 4 项判据，但切换不是无毛刺的。
-10kHz/25% 不在本次采集窗口内；四组 cpol/dcpol 的运行极性、STOP 电平和 close 电平
+采集时 lower 按全局最小频率误差遍历 divider，1 kHz 为 divider 4、period 40000；
+改为最小 divider 后 1 kHz 为 divider 3、period 53333（理论 1000.006 Hz），这组波形
+尚未重测。10kHz/25% 不在本次采集窗口内；四组 cpol/dcpol 的运行极性、STOP 电平和 close 电平
 尚未测量。

@@ -245,6 +245,7 @@ static int verify_point(const struct pwm_point_s *point,
                         bool verbose)
 {
   uint64_t product;
+  uint64_t scaled;
   uint32_t calculated_frequency;
   uint32_t frequency_error;
   uint32_t expected_delta;
@@ -257,6 +258,20 @@ static int verify_point(const struct pwm_point_s *point,
     {
       print_diag("invalid register state", diag);
       return -EIO;
+    }
+
+  /* The divider must be the smallest one whose period fits in 16 bits, for
+   * the finest duty steps, and the period must be rounded to the request.
+   */
+
+  scaled = (uint64_t)point->frequency * diag->divider;
+  if (diag->source_frequency > scaled * UINT16_MAX ||
+      (diag->divider > 1 && diag->source_frequency <=
+                            (scaled - point->frequency) * UINT16_MAX) ||
+      diag->period != (diag->source_frequency + scaled / 2) / scaled)
+    {
+      print_diag("divider is not the smallest that fits", diag);
+      return -ERANGE;
     }
 
   product = (uint64_t)diag->divider * diag->period;
@@ -621,8 +636,8 @@ out:
   return ret;
 }
 
-/* The divider search is slow, so the lower half must reuse its result while
- * the frequency stays the same and search again only when it changes.
+/* The lower half must reuse its divider and period while the frequency
+ * stays the same and solve again only when it changes.
  */
 
 static int expect_solve_calls(const char *case_id, uint32_t expected)
@@ -636,7 +651,7 @@ static int expect_solve_calls(const char *case_id, uint32_t expected)
 
   if (diag.solve_calls != expected)
     {
-      printf("  FAIL: %s searched the divider %lu times, expected %lu\n",
+      printf("  FAIL: %s solved the divider %lu times, expected %lu\n",
              case_id, (unsigned long)diag.solve_calls,
              (unsigned long)expected);
       return -EIO;

@@ -116,7 +116,9 @@ mcu_pwm_test -c 008
 1. 依次设置 100Hz/75%、1kHz/25%、1kHz/50%、1kHz/75%、10kHz/25%。
 2. 每点 SET 后 START；后续 SET 在运行中触发 live update。
 3. test-only 诊断回读 source clock、divider、period、threshold 和实际频率。
-4. 检查 divider/period 在 1..65535 和 2..65535；threshold low 为 0，high 小于 period。
+4. 检查 divider/period 在 1..65535 和 2..65535；divider 必须是放得下 16-bit period 的
+   最小值，period 为 `round(source/(frequency*divider))`；threshold low 为 0，high
+   小于 period。
 5. 由 `source/(divider*period)` 重算频率，软件误差必须不超过 1%；由
    `(high-low)/period` 重算 duty，量化误差必须不超过一个 counter tick。
 6. 每点保持 `-w` 秒供外部仪器记录，全部结束后 STOP、close。
@@ -245,11 +247,14 @@ PWM-002  invalid request errno=22/34; hardware preserved  PASS
 PWM-003  PBCLK=160000000Hz; actual=100/1000/10000Hz      PASS
 PWM-004  duty=0/25/50/75/65535; high max=period-1       PASS
 PWM-005  CPOL/DCPOL four register mappings              PASS
-PWM-006  1k=4/40000 100=25/64000 10k=1/16000            PASS
+PWM-006  1k=3/53333 100=25/64000 10k=1/16000            PASS
 PWM-007  timeout errno=110; active-close/reopen restart PASS
 PWM-008  pwm0=yes pwm1=no gpio22=no                     PASS
 PWM Summary: executed=8 passed=8 failed=0 -> PASS
 ```
+
+PWM-006 一行是 2026-10-13 改为最小 divider 后在 `nsh-peripherals` 上复跑的结果（原为
+1k=4/40000），其余行不变。
 
 同一固件继续执行 GPIO edge、TIMER-001/002/005、oneshot、WDT-002/003 和 RTC 回归，
 均通过；TIMER-001 最大误差 253 us（0.253%），TIMER-002 周期比 2.000，WDT-002
@@ -281,6 +286,6 @@ CPOL/DCPOL 四组合       running polarity=待测  STOP level=待测  close lev
 超过一个 PWM 周期的异常脉冲。已测项目满足阈值；10kHz 点和 CPOL/DCPOL 电平补齐前，
 G4 波形验收仍未完成。
 
-上述采集所用镜像上，`-w N` 时每点实际持续约 N+1 s。之后的镜像上复测，改频率的 SET
-在 `nsh-peripherals`（开启 KASAN）上约 0.35 s，只改 duty 不再求解；早先多出的耗时
-原因未查明。用仪器分段时按实际边沿切分，不要按 `-w` 推算。
+上述采集所用镜像上，`-w N` 时每点实际持续约 N+1 s，当时 lower 每次 SET 都遍历全部
+divider（之后的镜像复测约 0.35 s，早先多出的耗时原因未查明）。lower 改为直接计算
+最小 divider 后，SET 不再有明显耗时。用仪器分段时按实际边沿切分，不要按 `-w` 推算。
