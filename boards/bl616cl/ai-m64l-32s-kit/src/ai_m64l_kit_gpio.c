@@ -39,15 +39,15 @@
  * Pre-processor Types
  ****************************************************************************/
 
-/* One entry per board-exposed test pin (Ai-M64L-32S-Kit):
+/* One entry per board-exposed test pin:
  *
- *   GPIO19  RGB led red    (board onboard, active high)
- *   GPIO22  RGB led green  (board onboard, active high)
- *   GPIO18  RGB led blue   (board onboard, active high)
- *   GPIO23  warm-white led (board onboard, active high)
- *   GPIO13  cold-white led (board onboard, active high)
+ *   GPIO19, GPIO22, GPIO18, GPIO23, GPIO13  header outputs
  *   GPIO12  loopback output (wire to GPIO20 for readback tests)
  *   GPIO20  loopback input  (wire to GPIO12 for readback tests)
+ *
+ * None of these drive an onboard LED. The Ai-M64P-32S-Kit V1.0 schematic
+ * puts the active-high LEDs on GPIO14 (red), GPIO15 (green), GPIO16 (blue),
+ * GPIO28 (warm white) and GPIO27 (cold white).
  *
  * Pins shared with the module flash (GPIO6..11, GPIO21), USB
  * (GPIO32/33) and UART0 console (GPIO34/35) are intentionally not
