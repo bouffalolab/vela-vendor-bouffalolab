@@ -421,8 +421,11 @@ Finished
 Mon, Jan 01 00:00:13 2018
 ```
 
-当前没有 MOSI-MISO 安全短接和逻辑分析仪证据，因此所有 `hw` case 尚未记录实测
-PASS。SPI0 的 controller、pinmux、CS、数据和波形仍待实物闭环；SPI1 的四线 pin、
-板级注册和实物验证也尚未冻结。OpenVela `spi_transfer()` 不能传播 `exchange(void)`
-内部错误，当前测试通过 chip diagnostic 读取 timeout/config/select 结果；普通 consumer
-不能据 ioctl 返回值推断所有 lower-half 错误。
+2026-10-13 已在 Ai-M64P-32S-Kit 上短接 GPIO18-19 完成 SPI0 实物验证：`hw boundary`
+MSB/LSB 共 96 组、`hw loopback`（100 kHz、1 MHz、mode 1..3）、`hw paths`、
+`hw sequence` 全部 PASS；断开短接时 `hw loopback` 按预期 FAIL。逻辑分析仪确认了
+MOSI 方向、sequence 的 CS 保持/释放、实际频率和 CPOL，数据见
+`docs/bl616cl-spi.md` 的“实物实测数据”。CPHA 和 LSB bit order 尚未用分析仪确认；
+SPI1 的四线 pin、板级注册和实物验证也尚未冻结。OpenVela `spi_transfer()` 不能传播
+`exchange(void)` 内部错误，当前测试通过 chip diagnostic 读取 timeout/config/select
+结果；普通 consumer 不能据 ioctl 返回值推断所有 lower-half 错误。

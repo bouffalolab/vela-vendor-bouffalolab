@@ -90,7 +90,8 @@ open / SET / START / STOP / close
 PWM 输出脚由 GLB `reg_pwm1_io_sel` 决定通道映射：复位值 0 时按 GPIO 号模 4 只输出
 CH0..CH3 正向，GPIO22 是 CH2+；置 1 后按模 8 依次输出 CH0±..CH3±，GPIO22 才是
 CH3+。lower 在接管引脚时置 1（`PWM_IO_SEL_DIFF_END`），并在编译期检查固定 pin 是
-所选通道的正向输出。该映射来自 PIN_MUX 表，尚待逻辑分析仪确认。
+所选通道的正向输出。该映射来自 PIN_MUX 表，已用逻辑分析仪在 GPIO22 上确认（见
+“实物波形数据”）。
 
 ## 频率、duty 与 polarity 合同
 
@@ -98,6 +99,10 @@ lower 读取实际 PBCLK。请求 frequency 为 0、源时钟为 0，或请求�
 divider 遍历 1..65535；每个 divider 只比较理想 period 附近且落在 2..65535 的候选，
 用 64-bit 有理误差比较选择最优组合。配置后必须读取实际 divider/period 并据此计算
 actual frequency，不能用请求值或仅缓存配置冒充寄存器证据。
+
+穷举有明显耗时：开启 KASAN 的 `nsh-peripherals` 上每次 SET 约 1 s，
+`mcu_pwm_test -c 003 -w 0` 的五个点共用 4.0 s，`-w N` 时每点实际持续约 N+1 s。
+只有 period 小于 2 时才提前结束，低频请求会遍历全部 65535 个 divider。
 
 `duty` 是 `ub16_t`：
 
@@ -173,9 +178,11 @@ G4 波形在 GPIO22 验证：
 4. 同 divider duty update 不出现超过一个 PWM 周期的异常脉冲；
 5. 跨 divider update 记录停顿，但本轮不声明无毛刺。
 
-当前没有可识别的逻辑分析仪或示波器。USB2 只承载控制台，GPIO22 也不接板载 LED；
-引脚处于 PWM 复用功能时 GPIO 输入寄存器不反映引脚电平，软件回读同样不能证明
-frequency、duty、polarity、停止电平或动态更新波形。软件闭环通过后 patch 可以进入 vendor 开发 `trunk`，但在补齐仪器数据前本能力保持 G4 waiting。
+USB2 只承载控制台，GPIO22 也不接板载 LED；引脚处于 PWM 复用功能时 GPIO 输入寄存器
+不反映引脚电平，软件回读同样不能证明 frequency、duty、polarity、停止电平或动态更新
+波形。逻辑分析仪已完成第 1 项的前四个点和第 2、4、5 项（见“实物波形数据”），
+10kHz/25% 和第 3 项尚未测。软件闭环通过后 patch 可以进入 vendor 开发 `trunk`，但在
+补齐仪器数据前本能力保持 G4 waiting。
 
 ## 软件实测数据
 
@@ -208,3 +215,30 @@ TIMER-001 最大误差 0.275%，其他现役外设回归和系统存活检查继
 最新 `nsh` whole image 为 4 MiB，boot2、双 partition 和 app magic 正确，
 MFG 区域保持全 `0xff`；烧录到 USB2 后设备端 SHA256 与主机一致。产品配置无测试
 命令和 test hook，关闭态无 PWM lower、board 和 LHAL PWM 对象。
+
+## 实物波形数据
+
+2026-10-13 在 Ai-M64P-32S-Kit（BL616CL QFN48，片内 4 MB flash、4 MB PSRAM）上测量。
+固件为 `nsh-peripherals`，`nuttx.bin` SHA256 为
+`7aa301b940a05d30f19ae2f6b749cd055547302c4d794dbb29f28fccd66e782f`。逻辑分析仪
+DSLogic U3Pro32 接 GPIO22 和 GND，阈值 1.6 V，采样率 2 MHz，以 GPIO22 上升沿触发后
+运行 `mcu_pwm_test -c 003`（`-w 1`）：
+
+| 设定 | 实测频率 | 实测占空比 | 周期数 |
+|---|---|---|---|
+| 100 Hz / 75% | 100.00 Hz | 75.00% | 200 |
+| 1 kHz / 25% | 999.97 Hz | 25.00% | 2013 |
+| 1 kHz / 50% | 999.97 Hz | 50.00% | 2017 |
+| 1 kHz / 75% | 999.97 Hz | 75.00% | 887（采集窗口结束） |
+
+频率误差不超过 0.003%，占空比误差为 0，满足 G4 阈值。参数切换处的逐周期数据：
+
+- 跨 divider（100 Hz → 1 kHz）：最后一个 100 Hz 周期从 10000 µs 拉长到 10114 µs，
+  停顿约 114 µs；随后第一个 1 kHz 周期为 1002 µs，此后正常。
+- 同 divider（1 kHz 25% → 50%）：出现一个 476.5 µs 的短周期（高 250 µs），再输出一个
+  旧占空比周期，之后为 50%。
+- 同 divider（1 kHz 50% → 75%）：出现一个 1118 µs 的周期（高 618 µs），之后为 75%。
+
+同 divider 更新的异常只持续一个 PWM 周期，满足第 4 项判据，但切换不是无毛刺的。
+10kHz/25% 不在本次采集窗口内；四组 cpol/dcpol 的运行极性、STOP 电平和 close 电平
+尚未测量。

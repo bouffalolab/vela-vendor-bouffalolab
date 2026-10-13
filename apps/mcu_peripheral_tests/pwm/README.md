@@ -258,22 +258,25 @@ active close 修复前，未修复 NuttX 得到 `executed=8 passed=7 failed=1`�
 `started` 后，同一 USB2、固件配置和命令得到 8/8 PASS；同次 TIMER-001 最大误差
 275 us（0.275%），其余上述回归和系统存活检查继续通过。
 
-## 待补齐的波形数据
+## 波形数据
 
-当前没有逻辑分析仪或示波器。软件 PASS 和寄存器回读不能替代 GPIO22 波形实测；具备
-仪器后记录以下原始测量值：
+2026-10-13 用逻辑分析仪在 GPIO22 测量（2 MHz 采样、阈值 1.6 V，运行
+`mcu_pwm_test -c 003`），环境和逐周期数据见 `docs/bl616cl-pwm.md` 的“实物波形数据”：
 
 ```text
-GPIO22  100Hz / 75%      measured frequency=待测  duty=待测
-GPIO22    1kHz / 25%     measured frequency=待测  duty=待测
-GPIO22    1kHz / 50%     measured frequency=待测  duty=待测
-GPIO22    1kHz / 75%     measured frequency=待测  duty=待测
+GPIO22  100Hz / 75%      measured frequency=100.00Hz  duty=75.00%
+GPIO22    1kHz / 25%     measured frequency=999.97Hz  duty=25.00%
+GPIO22    1kHz / 50%     measured frequency=999.97Hz  duty=50.00%
+GPIO22    1kHz / 75%     measured frequency=999.97Hz  duty=75.00%
 GPIO22   10kHz / 25%     measured frequency=待测  duty=待测
 CPOL/DCPOL 四组合       running polarity=待测  STOP level=待测  close level=待测
-同 divider duty update   longest abnormal pulse=待测
-跨 divider update        observed pause=待测
+同 divider duty update   longest abnormal pulse=一个周期（476.5us 或 1118us）
+跨 divider update        observed pause=约 114us（100Hz→1kHz）
 ```
 
 判定阈值为频率误差不超过 1%、占空比误差不超过 2 个百分点；同 divider 更新不得出现
-超过一个 PWM 周期的异常脉冲。未补齐这些数据前，软件 case PASS 只证明配置、寄存器和
-错误清理合同，不代表 G4 波形验收完成。
+超过一个 PWM 周期的异常脉冲。已测项目满足阈值；10kHz 点和 CPOL/DCPOL 电平补齐前，
+G4 波形验收仍未完成。
+
+每次 SET 在 `nsh-peripherals`（开启 KASAN）上约耗时 1 s，`-w N` 时每点实际持续约
+N+1 s，用仪器分段时按实际边沿切分，不要按 `-w` 推算。

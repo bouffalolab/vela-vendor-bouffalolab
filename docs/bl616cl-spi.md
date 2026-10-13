@@ -2,8 +2,8 @@
 
 本文说明 BL616CL SPI master 与 OpenVela SPI 子系统的最大能力交集、实现归属、
 Kconfig 裁剪、构建证据、软件实测和实物验收限制。当前已完成 SPI0/SPI1 lower-half、
-七类裁剪构建和 USB2 fake 软件合同；SPI0 环回与波形、SPI1 pin 和板级注册仍待实物
-资源冻结，因此能力声明限定在已有证据范围内。
+七类裁剪构建、USB2 fake 软件合同，以及 SPI0 实物环回和 CS/CLK 波形；SPI1 pin 和
+板级注册仍待实物资源冻结，因此能力声明限定在已有证据范围内。
 
 ## 背景
 
@@ -13,8 +13,8 @@ SPI lower-half、board pin/CS owner 或 `/dev/spiN` 注册。
 
 本适配不修改 CI 同步的 `vendor/bouffalolab/drivers/`。chip adapter 翻译 OpenVela
 SPI ABI，board 代码只接管从同源 BL616CLDK 选择的 SPI0 候选 pin 和 GPIO CS，
-父仓 CMake wrapper 按实例选择 LHAL `bflb_spi.c`。该候选 pinmux 仍待 Ai-M64L
-环回和波形闭环；SPI1 完整四线 pin 也未经当前板卡证实，故只开放 lower-half 和
+父仓 CMake wrapper 按实例选择 LHAL `bflb_spi.c`。该 pinmux 已在 Ai-M64P-32S-Kit
+上完成环回和波形验证；SPI1 完整四线 pin 未经当前板卡证实，故只开放 lower-half 和
 软件测试，不创建虚假的 board 节点。
 
 ## 最大能力交集
@@ -94,7 +94,8 @@ signal 编号、pin 唯一性、保留 pin、第二 CS，以及与 I2C、UART1�
 两个数据 signal 对调，而不是只对调 MISO/MOSI；因此 pinmux 配置把该端口所有分组的
 swap 清零，只用端口级 MOSI/MISO swap 选择数据方向：MISO 在 signal 2 时不交换，
 在 signal 3 时交换。MISO/MOSI 两脚必须分别落在 signal 2 和 3。默认 pin 的寄存器
-取值与原生 SDK 一致；signal 3 作 MISO 的组合和实际数据方向尚待逻辑分析仪确认。
+取值与原生 SDK 一致，逻辑分析仪确认 MOSI 数据从 GPIO19 输出、GPIO18 为输入；
+signal 3 作 MISO 的交换组合尚未实测。
 
 SPI1 只有 chip 开关，没有 Ai-M64L board 开关。这保证未知 pin 不会被软件占用，
 同时允许独立构建和 fake 验证 lower-half。
@@ -218,9 +219,48 @@ GPIO12(CS0)、MOSI、MISO 和 GND。除烧录外，完整流程如下：
 `apps/mcu_peripheral_tests/spi/README.md`，该文档直接记录关键实测数据，不依赖外部
 任务日志。
 
+## 实物实测数据
+
+2026-10-13 在 Ai-M64P-32S-Kit（BL616CL QFN48，片内 4 MB flash、4 MB PSRAM）上测量。
+固件为 `nsh-peripherals`，`nuttx.bin` SHA256 为
+`7aa301b940a05d30f19ae2f6b749cd055547302c4d794dbb29f28fccd66e782f`。逻辑分析仪
+DSLogic U3Pro32，阈值 1.6 V。命令省略了默认参数（bus 0、target 0、mode 0、8-bit、
+400 kHz、32 words）。
+
+负例：未短接时 `hw loopback` 报 FAIL。同时采集的波形中 CS 有一个约 0.84 ms 的低脉冲，
+CLK 为 256 个时钟（32 字节 × 8 位），GPIO19 上解码出测试数据
+`29 5E 93 C8 FD 32 …`（mode 0、MSB first），GPIO18 恒为高。这确认 MOSI 从 GPIO19 输出，
+GPIO18 是未被驱动的输入。
+
+短接 GPIO18-19 后的终端结果：
+
+| 命令 | 结果 |
+|---|---|
+| `hw boundary` | mode 0..3 × 8/16-bit × 1/31/32/33/256/1024 words，48 组全部 PASS |
+| `hw boundary --lsb` | 同一集合 48 组全部 PASS |
+| `hw loopback --freq 100000` | PASS |
+| `hw loopback --freq 1000000` | PASS |
+| `hw loopback --mode 1`、`--mode 2`、`--mode 3` | 均 PASS |
+| `hw paths --length 33` | full-duplex、TX-only、RX-only 均 PASS |
+| `hw sequence` | `cs=hold:PASS release:PASS` |
+
+同时以 20 MHz 采集 CS（GPIO12）和 CLK（GPIO13）：
+
+| 检查项 | 实测 |
+|---|---|
+| sequence hold 轮 | 一个 CS 低电平窗口内 16 个时钟，两段 transfer 之间 CS 不释放 |
+| sequence release 轮 | 两个 CS 窗口各 8 个时钟，中间释放一次 |
+| 请求 100 kHz / 400 kHz / 1 MHz | 实测 100.0 / 400.0 / 1000.0 kHz，不高于请求值 |
+| CPOL | mode 0/1 时 CLK 空闲为低，mode 2/3 为高 |
+| 1 MHz 连续性 | 第 104 个时钟后停顿 24.3 µs，其余连续 |
+
+CPHA 和 LSB bit order 只由各 mode、MSB/LSB 下的环回数据间接证明，尚未用分析仪同时
+采 MOSI/MISO 确认。本轮未重跑 GPIO、timer、WDT、oneshot、RTC 现役回归。
+
 ## 当前限制
 
-- SPI0 fake、裁剪、启动和 `/dev/spi0` 注册已通过；SPI0 实物环回和波形尚未执行。
+- SPI0 fake、裁剪、启动、`/dev/spi0` 注册、实物环回和 CS/CLK 波形已通过；CPHA 和
+  LSB bit order 的波形尚未确认。
 - SPI1 lower-half 的 fake 和裁剪已通过；四线 pin、模组引出、board 注册和实物测试
   尚未冻结，不能声明 SPI1/dual 实板通过。
 - 普通 consumer 无法通过 `spi_transfer()` 返回值取得 `exchange(void)` 内部错误；

@@ -386,3 +386,22 @@ nsh>
 GPIO14/15 已由 UART1 占用，GPIO 回归使用非冲突 `/dev/gpio18`。以上回归证明 UART1
 适配未破坏现役 GPIO 软件状态恢复、TIMER0、oneshot、
 WDT 非复位生命周期、RTC 推进和 UART0 NSH 存活；不替代各外设的仪器证据。
+
+## 2026-10-13 新板复测与波形
+
+设备为 Ai-M64P-32S-Kit（BL616CL QFN48，片内 4 MB flash、4 MB PSRAM），固件为
+`nsh-peripherals`，`nuttx.bin` SHA256 为
+`7aa301b940a05d30f19ae2f6b749cd055547302c4d794dbb29f28fccd66e782f`。
+
+短接 GPIO14/15 后，UART-001..009 全部 PASS。UART-010 程序输出
+`PARTIAL UART1 pressure PASS; USB2 needs operator evidence`，100 轮压力回环完成；
+运行期间在 console 执行 `help`、`ls /dev`，输出完整、无乱码或卡顿，按通过条件判通过。
+
+逻辑分析仪 DSLogic U3Pro32（阈值 1.6 V）接 GPIO14、GPIO15 和 GND，未短接时测得：
+
+- 打开 `/dev/ttyS1` 前 GPIO14/15 为低（板载 LED 下拉），打开后 TX、RX 均为高；
+- `echo HelloUART1 > /dev/ttyS1` 在 GPIO14 上按 115200 解码为
+  `48 65 6C 6C 6F 55 41 52 54 31 0A`，每位 8.5–8.7 µs；
+- UART-002 经 termios 设置 115200 后发送的首字节 0x00，低电平 78.0 µs（9 位）；
+- UART-003 设置 9600 后每位 104.18 µs；
+- 同一次启动内连续打开、关闭 `/dev/ttyS1` 五次，速率不变。
