@@ -94,8 +94,10 @@ signal 编号、pin 唯一性、保留 pin、第二 CS，以及与 I2C、UART1�
 两个数据 signal 对调，而不是只对调 MISO/MOSI；因此 pinmux 配置把该端口所有分组的
 swap 清零，只用端口级 MOSI/MISO swap 选择数据方向：MISO 在 signal 2 时不交换，
 在 signal 3 时交换。MISO/MOSI 两脚必须分别落在 signal 2 和 3。默认 pin 的寄存器
-取值与原生 SDK 一致，逻辑分析仪确认 MOSI 数据从 GPIO19 输出、GPIO18 为输入；
-signal 3 作 MISO 的交换组合尚未实测。
+取值与原生 SDK 一致，逻辑分析仪确认 MOSI 数据从 GPIO19 输出、GPIO18 为输入。
+交换组合（MISO=GPIO19、MOSI=GPIO18）用临时配置实测：不短接时数据从 GPIO18 输出、
+GPIO19 无翻转；短接后 `hw loopback`（mode 0 MSB 1 MHz、mode 3 LSB 400 kHz）和
+`hw paths` PASS。
 
 SPI1 只有 chip 开关，没有 Ai-M64P board 开关。这保证未知 pin 不会被软件占用，
 同时允许独立构建和 fake 验证 lower-half。
@@ -254,13 +256,26 @@ GPIO18 是未被驱动的输入。
 | CPOL | mode 0/1 时 CLK 空闲为低，mode 2/3 为高 |
 | 1 MHz 连续性 | 第 104 个时钟后停顿 24.3 µs，其余连续 |
 
-CPHA 和 LSB bit order 只由各 mode、MSB/LSB 下的环回数据间接证明，尚未用分析仪同时
-采 MOSI/MISO 确认。本轮未重跑 GPIO、timer、WDT、oneshot、RTC 现役回归。
+本轮未重跑 GPIO、timer、WDT、oneshot、RTC 现役回归。
+
+同日补测 CPHA 和 bit order：不接 GPIO18-19 短接（环回数据比较按预期 FAIL），分析仪
+50 MHz 采样 CS/CLK/GPIO18/GPIO19，执行
+`mcu_spi_test hw loopback --freq 1000000 --mode N --length 4 [--lsb]`，N 为 0..3。
+发送数据为 `29 5E 93 C8`。8 种组合的结果：
+
+| mode | CLK 空闲 | MOSI 变化沿 | 按另一沿采样，MSB first 命令 | LSB first 命令 |
+|---|---|---|---|---|
+| 0 | 低 | 后沿（CPHA=0） | `29 5E 93 C8` | 按 LSB 拼为 `29 5E 93 C8` |
+| 1 | 低 | 前沿（CPHA=1） | 同上 | 同上 |
+| 2 | 高 | 后沿（CPHA=0） | 同上 | 同上 |
+| 3 | 高 | 前沿（CPHA=1） | 同上 | 同上 |
+
+每帧 32 个时钟，SCLK 1 MHz；GPIO18 全程无翻转，说明控制器不驱动 MISO 脚。
 
 ## 当前限制
 
-- SPI0 fake、裁剪、启动、`/dev/spi0` 注册、实物环回和 CS/CLK 波形已通过；CPHA 和
-  LSB bit order 的波形尚未确认。
+- SPI0 fake、裁剪、启动、`/dev/spi0` 注册、实物环回，以及 CS/CLK、CPOL/CPHA 和 bit
+  order 波形已通过。
 - SPI1 lower-half 的 fake 和裁剪已通过；四线 pin、模组引出、board 注册和实物测试
   尚未冻结，不能声明 SPI1/dual 实板通过。
 - 普通 consumer 无法通过 `spi_transfer()` 返回值取得 `exchange(void)` 内部错误；

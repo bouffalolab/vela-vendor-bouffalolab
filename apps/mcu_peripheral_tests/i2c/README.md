@@ -27,8 +27,9 @@ DMA、10-bit 地址、三段以上 repeated-start、`NOSTART` continuation、总
 
 2026-08-30 已在 Ai-M64P-32S-Kit 的 I2C1-only 固件上完成 clean build、烧录、
 启动和全部单总线 fake case。实物总线仍缺外接 target、上拉和逻辑分析仪，`hw`
-case 只记录完整执行流程和判据，不标记为已实测 PASS。I2C0 默认 GPIO4/5 会与
-当前模组的 32.768 kHz/DC-DC 资源冲突，I2C0-only 和 dual 也不标记为运行通过。
+case 只记录完整执行流程和判据，不标记为已实测 PASS。2026-10-13 起 `hw probe
+--no-target` 已在 GPIO4/5 上用逻辑分析仪确认（I2C0、I2C1 各一次，见
+`docs/bl616cl-i2c.md`）；I2C0 在 GPIO4/5 可正常启动，dual 仍需两组不同 pin。
 
 ## 配置与构建
 

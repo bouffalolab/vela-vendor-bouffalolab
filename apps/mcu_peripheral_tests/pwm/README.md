@@ -276,15 +276,17 @@ GPIO22  100Hz / 75%      measured frequency=100.00Hz  duty=75.00%
 GPIO22    1kHz / 25%     measured frequency=999.97Hz  duty=25.00%
 GPIO22    1kHz / 50%     measured frequency=999.97Hz  duty=50.00%
 GPIO22    1kHz / 75%     measured frequency=999.97Hz  duty=75.00%
-GPIO22   10kHz / 25%     measured frequency=待测  duty=待测
-CPOL/DCPOL 四组合       running polarity=待测  STOP level=待测  close level=待测
+GPIO22   10kHz / 25%     measured frequency=9999.68Hz  duty=25.00%（闭式求解后复测）
+CPOL/DCPOL 四组合       STOP level=0/1/0/1 与 dcpol 一致  close level=1（HIGH/HIGH）
+                        running polarity: START 后首个相位与 cpol 一致，LOW/LOW 无法区分
 同 divider duty update   longest abnormal pulse=一个周期（476.5us 或 1118us）
 跨 divider update        observed pause=约 114us（100Hz→1kHz）
 ```
 
 判定阈值为频率误差不超过 1%、占空比误差不超过 2 个百分点；同 divider 更新不得出现
-超过一个 PWM 周期的异常脉冲。已测项目满足阈值；10kHz 点和 CPOL/DCPOL 电平补齐前，
-G4 波形验收仍未完成。
+超过一个 PWM 周期的异常脉冲。已测项目满足阈值。10kHz 点和 CPOL/DCPOL 来自闭式求解后的
+复测（`-c 003 -w 2`、`-c 005 -w 1`），停止态切换的短脉冲等细节见 `docs/bl616cl-pwm.md`
+“闭式求解后的复测”。
 
 上述采集所用镜像上，`-w N` 时每点实际持续约 N+1 s，当时 lower 每次 SET 都遍历全部
 divider（之后的镜像复测约 0.35 s，早先多出的耗时原因未查明）。lower 改为直接计算

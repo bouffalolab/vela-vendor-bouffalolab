@@ -1,9 +1,9 @@
 # BL616CL I2C0/I2C1 Master 适配与验证
 
 本文说明 BL616CL I2C master 与 OpenVela I2C 子系统的最大能力交集、实现边界、
-Kconfig 裁剪、构建检查和运行验证。当前已完成 I2C1-only 软件合同与现役外设回归；
-I2C0 GPIO4/5 和外接 I2C target 资源尚未冻结，因此不把 fake 或 USB-UART 结果写成
-实物 I2C 总线通过。
+Kconfig 裁剪、构建检查和运行验证。当前已完成 I2C1-only 软件合同与现役外设回归，
+并用逻辑分析仪确认 I2C0、I2C1 在 GPIO4/5 上的无 target 地址波形；外接 I2C target
+尚未冻结，因此不把 fake 或 USB-UART 结果写成正向总线通过。
 
 ## 背景
 
@@ -84,8 +84,10 @@ I2CIOC_TRANSFER
 
 板级默认关闭 I2C：
 
-- I2C0 默认 GPIO4=SCL、GPIO5=SDA。当前 Ai-M64P-32S-Kit 模组上这两脚与
-  32.768 kHz/DC-DC 资源相关；未确认模组变体前不能作为可用 I2C0 pin。
+- I2C0 默认 GPIO4=SCL、GPIO5=SDA。数据手册引脚表中 GPIO4/5 的 function 5 就是
+  I2C0 SCL/SDA，没有 32.768 kHz 晶振或 DC-DC 功能。早先在另一块模组上记录过这两脚
+  冲突、启用后无启动日志；在 Ai-M64P-32S-Kit 上未复现，启用 I2C0 后正常启动，
+  波形见“逻辑分析仪实测”。
 - I2C1 默认 GPIO12=SCL、GPIO13=SDA。开启后这两脚从 GPIO lower-half 表移除，
   不生成 `/dev/gpio12`、`/dev/gpio13`，避免双 owner。
 - Flash GPIO6..11/21、USB GPIO32/33、UART0 GPIO34/35、boot GPIO36 不作为 I2C pin。
@@ -210,7 +212,31 @@ nsh>
 ```
 
 这证明了 OpenVela `/dev/i2c1`、chip adapter、LHAL polling 和超时 errno 规范化路径。
-当前没有外接上拉和分析仪，不能把它解释为 SCL、NACK 波形或正向 target 通过。
+该记录当时没有分析仪，波形见下节；它不能解释为正向 target 通过。
+
+### 逻辑分析仪实测
+
+2026-10-13，Ai-M64P-32S-Kit，DSLogic U3Pro32（10 MHz 采样、阈值 1.6 V）接 GPIO4/5，
+不接 target，也不接外部上拉，只有芯片内部上拉。分别在 `nsh-peripherals`（I2C1 在
+GPIO4/5）和临时配置（I2C0 在 GPIO4/5、关闭 I2C1）上执行：
+
+```text
+mcu_i2c_test hw probe --bus 1 --addr 0x52 --freq 100000 --no-target
+mcu_i2c_test hw probe --bus 1 --addr 0x52 --freq 400000 --no-target
+mcu_i2c_test hw probe --bus 0 --addr 0x52 --freq 100000 --no-target
+```
+
+三条命令都返回 `PASS ... ret=-110 raw_status=0000000b`，sigrok I2C 解码均为
+Start、Address write 0x52、NACK、Stop。临时配置启动到 `nsh>`，`/dev/i2c0` 存在。
+
+| 实例 | 请求 | SCL 实测 |
+|---|---|---|
+| I2C1 | 100 kHz | 92.6 kHz |
+| I2C1 | 400 kHz | 303.0 kHz |
+| I2C0 | 100 kHz | 92.6 kHz |
+
+SCL 低于请求值，不超过请求值。当时只有内部上拉，接外部 2.2 kOhm 至 4.7 kOhm 上拉后的
+频率未测，原因未验证。
 
 ## 现役外设回归
 
@@ -284,11 +310,10 @@ I2C1-only 临时配置没有该节点，因此该 case 不计为通过。RTC 本
 ## 当前限制和验收状态
 
 - I2C1-only 的构建、裁剪、烧录、启动、fake 合同和真实无 target 超时路径已通过。
-- I2C0-only 和 dual 当前不能通过运行验收。默认 GPIO4/5 在本模组上与
-  32.768 kHz/DC-DC 资源冲突，启用后曾出现烧录校验成功但无启动日志；在 pin owner
-  冻结前不能解释为 I2C0 功能通过或失败。
-- 外接 EEPROM、上拉和逻辑分析仪尚未冻结，所有 `hw` case 均未取得实测 PASS。
+- I2C0-only 在 GPIO4/5 上已确认启动和无 target 地址波形；正向 target 仍缺。dual 需要
+  两组不同 pin（`nsh-peripherals` 的 I2C1 也在 GPIO4/5）和两路 target。
+- 外接 EEPROM 和上拉尚未冻结，除无 target probe 外的 `hw` case 均未取得实测 PASS。
 - I2C1 fake 证明软件消息合同，不证明实际 SCL 频率、ACK/NACK、repeated-start
   波形、电气质量或 EEPROM 数据保持。
 - 完成 I2C 验收仍需补齐 I2C1 实物总线、oneshot/RTC 回归；若要验收双实例，还需
-  先为 I2C0 冻结不冲突的模组 pin 和两路 target。
+  为两个实例分配不同 pin 和两路 target。
