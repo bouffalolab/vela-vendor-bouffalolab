@@ -55,6 +55,15 @@
 #define BL616CL_PWM_MIN_PERIOD  2
 #define BL616CL_PWM_MAX_PERIOD  UINT16_MAX
 
+/* PWM_IO_SEL_DIFF_END maps GPIO n to channel (n % 8) / 2, positive output on
+ * an even n % 8. The reset layout puts only positive outputs on n % 4, which
+ * would route GPIO22 to channel 2.
+ */
+
+#if BL616CL_PWM_PIN % 8 != BL616CL_PWM_CHANNEL * 2
+#error "BL616CL_PWM_PIN is not the positive output of BL616CL_PWM_CHANNEL"
+#endif
+
 #define BL616CL_PWM_GPIO_OUTPUT \
   (GPIO_FUNC_GPIO | GPIO_OUTPUT | GPIO_FLOAT | GPIO_SMT_EN | GPIO_DRV_1)
 #define BL616CL_PWM_GPIO_ALT \
@@ -465,7 +474,8 @@ static int bl616cl_pwm_enable_clock(
  * Name: bl616cl_pwm_acquire
  *
  * Description:
- *   Enable the PWM clock and route the output pin to the PWM function.
+ *   Enable the PWM clock, select the per-channel pin layout and route the
+ *   output pin to the PWM function.
  *
  * Input Parameters:
  *   priv - PWM lower-half state
@@ -480,6 +490,13 @@ static int bl616cl_pwm_acquire(struct bl616cl_pwm_lowerhalf_s *priv)
   int ret;
 
   ret = bl616cl_pwm_enable_clock(priv);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  ret = bflb_pwm_v2_feature_control(priv->dev, PWM_CMD_IO_SEL,
+                                    PWM_IO_SEL_DIFF_END);
   if (ret < 0)
     {
       return ret;

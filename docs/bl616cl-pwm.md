@@ -24,7 +24,7 @@ board 固定选择 PWM0 CH3 正向输出 GPIO22，并注册 `/dev/pwm0`。
 | 能力 | 当前处理 | 依据和限制 |
 |---|---|---|
 | 单 controller | 纳入首版 | BL616CL 只有 `pwm_v2_0`；base、gate、reset、IRQ 与 TIMER 独立 |
-| CH3 正向输出 | 纳入首版 | 同芯片 board 映射和 PWM pinmux 均支持 GPIO22 |
+| CH3 正向输出 | 纳入首版 | PIN_MUX 表中 `reg_pwm1_io_sel=1` 时 GPIO22 为 CH3+ |
 | continuous PWM | 纳入首版 | 对应非 pulse-count OpenVela lower ABI |
 | 整数 frequency | 纳入首版 | 读取实际 PBCLK，在 16-bit divider/period 范围求最小误差 |
 | b16 duty | 纳入首版 | 0..65535/65536 映射到 threshold；最大值不声明为 100% |
@@ -54,7 +54,7 @@ board_late_initialize()
 open / SET / START / STOP / close
   -> OpenVela pwm upper-half
   -> BL616CL lower setup/start/stop/shutdown
-  -> PWM0 clock + GPIO22 pinmux
+  -> PWM0 clock + PWM io_sel + GPIO22 pinmux
   -> bflb_pwm_v2_*()
 ```
 
@@ -86,6 +86,11 @@ open / SET / START / STOP / close
 2. I2C0/I2C1 的 SCL 或 SDA 选择 GPIO22 时编译失败；
 3. SPI0 的 CLK、MISO、MOSI、CS0 或 CS1 选择 GPIO22 时编译失败；
 4. `/dev/pwm1` 不存在，不用运行时注册顺序解决双 owner。
+
+PWM 输出脚由 GLB `reg_pwm1_io_sel` 决定通道映射：复位值 0 时按 GPIO 号模 4 只输出
+CH0..CH3 正向，GPIO22 是 CH2+；置 1 后按模 8 依次输出 CH0±..CH3±，GPIO22 才是
+CH3+。lower 在接管引脚时置 1（`PWM_IO_SEL_DIFF_END`），并在编译期检查固定 pin 是
+所选通道的正向输出。该映射来自 PIN_MUX 表，尚待逻辑分析仪确认。
 
 ## 频率、duty 与 polarity 合同
 
@@ -168,9 +173,9 @@ G4 波形在 GPIO22 验证：
 4. 同 divider duty update 不出现超过一个 PWM 周期的异常脉冲；
 5. 跨 divider update 记录停顿，但本轮不声明无毛刺。
 
-当前没有可识别的逻辑分析仪或示波器。USB2 只承载控制台，板载绿灯只可作 smoke；
-两者都不能证明 frequency、duty、polarity、停止电平或动态更新波形。软件闭环通过后
-patch 可以进入 vendor 开发 `trunk`，但在补齐仪器数据前本能力保持 G4 waiting。
+当前没有可识别的逻辑分析仪或示波器。USB2 只承载控制台，GPIO22 也不接板载 LED；
+引脚处于 PWM 复用功能时 GPIO 输入寄存器不反映引脚电平，软件回读同样不能证明
+frequency、duty、polarity、停止电平或动态更新波形。软件闭环通过后 patch 可以进入 vendor 开发 `trunk`，但在补齐仪器数据前本能力保持 G4 waiting。
 
 ## 软件实测数据
 
