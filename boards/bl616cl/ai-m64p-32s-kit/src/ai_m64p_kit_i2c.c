@@ -21,9 +21,7 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define AI_M64P_KIT_I2C_PIN_RESERVED(pin) \
-  (((pin) >= 6 && (pin) <= 11) || (pin) == 21 || \
-   ((pin) >= 32 && (pin) <= 36))
+#define AI_M64P_KIT_I2C_PIN_RESERVED(pin) ((pin) >= 32 && (pin) <= 36)
 
 #ifdef CONFIG_AI_M64P_KIT_I2C0
 #  ifdef CONFIG_AI_M64P_KIT_PWM

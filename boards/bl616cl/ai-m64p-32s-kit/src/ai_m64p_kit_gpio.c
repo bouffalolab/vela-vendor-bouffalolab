@@ -51,9 +51,8 @@
  * (cold white). Only the blue LED is registered, for the board case of
  * mcu_gpio_test.
  *
- * Pins shared with the module flash (GPIO6..11, GPIO21), USB
- * (GPIO32/33) and UART0 console (GPIO34/35) are intentionally not
- * registered.
+ * Pins used by USB (GPIO32/33), the UART0 console (GPIO34/35) and BOOT
+ * (GPIO36) are intentionally not registered.
  */
 
 struct ai_m64p_kit_gpio_pin_s

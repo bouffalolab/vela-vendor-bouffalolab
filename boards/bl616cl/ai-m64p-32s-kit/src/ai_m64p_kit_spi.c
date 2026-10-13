@@ -33,9 +33,7 @@
 #define AI_M64P_KIT_SPI_CS_CFG \
   (GPIO_OUTPUT | GPIO_PULLUP | GPIO_SMT_EN | GPIO_DRV_1)
 
-#define AI_M64P_KIT_SPI_PIN_RESERVED(pin)        \
-  (((pin) >= 6 && (pin) <= 11) || (pin) == 21 || \
-   ((pin) >= 32 && (pin) <= 36))
+#define AI_M64P_KIT_SPI_PIN_RESERVED(pin) ((pin) >= 32 && (pin) <= 36)
 
 #ifdef CONFIG_AI_M64P_KIT_PWM
 #  if CONFIG_AI_M64P_KIT_SPI0_CS_PIN == 22 ||   \

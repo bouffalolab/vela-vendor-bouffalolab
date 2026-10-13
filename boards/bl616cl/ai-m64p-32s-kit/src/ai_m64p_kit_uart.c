@@ -18,9 +18,7 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define AI_M64P_KIT_UART_PIN_RESERVED(pin)       \
-  (((pin) >= 6 && (pin) <= 11) || (pin) == 21 || \
-   ((pin) >= 32 && (pin) <= 36))
+#define AI_M64P_KIT_UART_PIN_RESERVED(pin) ((pin) >= 32 && (pin) <= 36)
 
 #if AI_M64P_KIT_UART1_TX_PIN == AI_M64P_KIT_UART1_RX_PIN
 #error "UART1 TX and RX pins must be distinct"

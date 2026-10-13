@@ -90,7 +90,7 @@ I2CIOC_TRANSFER
   波形见“逻辑分析仪实测”。
 - I2C1 默认 GPIO12=SCL、GPIO13=SDA。开启后这两脚从 GPIO lower-half 表移除，
   不生成 `/dev/gpio12`、`/dev/gpio13`，避免双 owner。
-- Flash GPIO6..11/21、USB GPIO32/33、UART0 GPIO34/35、boot GPIO36 不作为 I2C pin。
+- USB GPIO32/33、UART0 GPIO34/35、boot GPIO36 不作为 I2C pin。
 - 板上没有已确认的 I2C target 和独立上拉。实物测试需外接 3.3 V EEPROM 和
   2.2 kOhm 至 4.7 kOhm 上拉。
 

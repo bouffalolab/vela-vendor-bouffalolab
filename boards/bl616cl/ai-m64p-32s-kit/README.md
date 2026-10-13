@@ -10,11 +10,12 @@ Tab 补全，各测试 README 中写全参数的命令可以直接输入。
 后续新增外设驱动及测试统一加入此配置，不为单个外设新增 defconfig。
 基础 `configs/nsh` 提供 `free`、`ps` 命令，并通过启动脚本挂载 `/proc`。
 
-QFN48 封装提供 GPIO0 到 GPIO36。板级固定或保留资源如下：
+QFN48 封装提供 GPIO0 到 GPIO36。片内 flash（SF1）和 PSRAM 不占用这些 GPIO，
+GPIO6–11、21 可作普通 IO（GPIO6–11 只是外置 flash SF2 的候选脚）。板级固定或保留
+资源如下：
 
 | 功能 | GPIO | 说明 |
 |---|---:|---|
-| SPI Flash | 6-11、21 | 不得用于测试外设 |
 | USB | 32、33 | 不得用于测试外设 |
 | UART0 console | TX 34、RX 35 | 2 Mbps 启动和 NSH 控制台 |
 | UART1 | TX 14、RX 15 | 测试时外接环回线 |
