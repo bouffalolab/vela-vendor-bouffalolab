@@ -275,6 +275,9 @@ mcu_spi_test fake dual
 mcu_spi_test fake all --bus 2
 ```
 
+`nsh-peripherals` 自 2026-10-14 起编入 SPI1 lower（不注册板级节点、不占引脚），
+`fake all --bus 1` 和 `fake dual` 均 PASS（`overlap=2`）。
+
 `fake dual` 为 SPI0、SPI1 分别安装 transport，各创建一个 worker 并同时放行。
 每个实例内部仍由自己的 mutex 串行，但跨实例 tracker 的 `overlap` 必须为 2，证明
 两个控制器的软件状态和锁互不串扰。bus 2 必须显示 `reason=no-device` 并以失败退出。

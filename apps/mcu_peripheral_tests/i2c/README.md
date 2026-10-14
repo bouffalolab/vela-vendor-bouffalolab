@@ -29,7 +29,9 @@ DMA、10-bit 地址、三段以上 repeated-start、`NOSTART` continuation、总
 启动和全部单总线 fake case。实物总线仍缺外接 target、上拉和逻辑分析仪，`hw`
 case 只记录完整执行流程和判据，不标记为已实测 PASS。2026-10-13 起 `hw probe
 --no-target` 已在 GPIO4/5 上用逻辑分析仪确认（I2C0、I2C1 各一次，见
-`docs/bl616cl-i2c.md`）；I2C0 在 GPIO4/5 可正常启动，dual 仍需两组不同 pin。
+`docs/bl616cl-i2c.md`）；I2C0 在 GPIO4/5 可正常启动。2026-10-14 起 `nsh-peripherals`
+同时注册 I2C0（GPIO30/31）和 I2C1（GPIO4/5），`fake all --bus 0/1`、`fake dual` 和两条
+总线的 `hw probe --no-target` 均 PASS；`hw dual` 仍需两路 target。
 
 ## 配置与构建
 

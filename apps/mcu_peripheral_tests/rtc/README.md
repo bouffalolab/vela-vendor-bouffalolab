@@ -7,7 +7,8 @@
 单路 Alarm 和设备生命周期；RTC-004 直接读取 chip 公开的 48 位 HBN counter。
 
 测试 app 由 `CONFIG_BL_MCU_PERIPHERAL_TESTS_RTC` 独立控制，默认关闭，并依赖
-`CONFIG_BL616CL_RTC`。当 `CONFIG_BL616CL_RTC_ALARM=n` 时，RTC-002、
+`CONFIG_BL616CL_RTC`。统一外设配置 `nsh-peripherals` 自 2026-10-14 起编入该 app
+（RTC + Alarm + DIG32K），`-c all` 与单独的 `-c 005` 均通过。当 `CONFIG_BL616CL_RTC_ALARM=n` 时，RTC-002、
 RTC-003 和 RTC-005 报告 SKIP；`-c all` 此时以 `PARTIAL` 汇总并返回非零，
 不能作为完整 Alarm 验收通过。单独 SKIP 和 FAIL 也返回非零，完整 PASS 返回 0；
 NSH 会把 builtin 的非零结果统一显示为 `$?=1`，自动化必须同时解析明确的

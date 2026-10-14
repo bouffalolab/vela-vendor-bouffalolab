@@ -310,10 +310,12 @@ I2C1-only 临时配置没有该节点，因此该 case 不计为通过。RTC 本
 ## 当前限制和验收状态
 
 - I2C1-only 的构建、裁剪、烧录、启动、fake 合同和真实无 target 超时路径已通过。
-- I2C0-only 在 GPIO4/5 上已确认启动和无 target 地址波形；正向 target 仍缺。dual 需要
-  两组不同 pin（`nsh-peripherals` 的 I2C1 也在 GPIO4/5）和两路 target。
+- I2C0-only 在 GPIO4/5 上已确认启动和无 target 地址波形；正向 target 仍缺。
+- 2026-10-14 起 `nsh-peripherals` 同时注册 I2C0（SCL 30、SDA 31）和 I2C1（GPIO4/5）：
+  两条总线的 `fake all`、`fake dual` 和 `hw probe --no-target`（`ret=-110`）都 PASS；
+  `hw dual` 仍缺两路 target，GPIO30/31 上也还没有逻辑分析仪波形。
 - 外接 EEPROM 和上拉尚未冻结，除无 target probe 外的 `hw` case 均未取得实测 PASS。
 - I2C1 fake 证明软件消息合同，不证明实际 SCL 频率、ACK/NACK、repeated-start
   波形、电气质量或 EEPROM 数据保持。
 - 完成 I2C 验收仍需补齐 I2C1 实物总线、oneshot/RTC 回归；若要验收双实例，还需
-  为两个实例分配不同 pin 和两路 target。
+  在 GPIO4/5 和 GPIO30/31 上各接一路 target。
