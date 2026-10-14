@@ -25,7 +25,7 @@ CH3 正向输出（GPIO22），之后扩展为多通道和互补输出，本文�
 | 能力 | 当前处理 | 依据和限制 |
 |---|---|---|
 | 单 controller | 纳入首版 | BL616CL 只有 `pwm_v2_0`；base、gate、reset、IRQ 与 TIMER 独立 |
-| CH0–CH3 正/负输出 | 已纳入 | `reg_pwm1_io_sel=1` 时 GPIO n 输出 CH((n%8)/2)，n%8 偶数为正、奇数为负 |
+| CH0–CH3 正/负输出 | 已纳入 | 有负脚时 `reg_pwm1_io_sel=1`，GPIO n 输出 CH((n%8)/2)，n%8 偶数为正、奇数为负；全是正输出时 `reg_pwm1_io_sel=0`，GPIO n 输出 CH(n%4)+ |
 | continuous PWM | 纳入首版 | 对应非 pulse-count OpenVela lower ABI |
 | 整数 frequency | 纳入首版 | 读取实际 PBCLK，取放得下 16-bit period 的最小 divider，period 四舍五入 |
 | b16 duty | 纳入首版 | 0..65535/65536 映射到 threshold；最大值不声明为 100% |
@@ -83,7 +83,8 @@ open / SET / START / STOP / close
 
 芯片 `select ARCH_HAVE_PWM_MULTICHAN`。`BL616CL_PWM` 依赖关闭 `PWM_PULSECOUNT`、
 `PWM_FREQUENCY_FIXED` 和 `PWM_DEADTIME`。开 `PWM_MULTICHAN` 时可选 1–4 个通道；不开时
-board 必须只选一个通道，否则编译失败，沿用单通道 ABI。板级默认只开 CH3、正输出 GPIO6。
+board 必须只选一个通道，否则编译失败，沿用单通道 ABI。板级默认只开 CH3、正输出 GPIO11；
+各通道正输出默认 GPIO8、9、10、11，都按下面的单端布局选取。
 board 选项使用 `depends on BL616CL_PWM`，不能通过 `select` 绕过 chip 选项依赖。
 
 启用 board PWM 后，所有已配引脚都归 PWM（`ai_m64p_kit.h` 的 `AI_M64P_KIT_PWM_OWNS()`）：
@@ -93,21 +94,28 @@ board 选项使用 `depends on BL616CL_PWM`，不能通过 `select` 绕过 chip 
 3. 引脚不在所选通道的槽位上时编译失败；
 4. `/dev/pwm1` 不存在，不用运行时注册顺序解决双 owner。
 
-PWM 输出脚由 GLB `reg_pwm1_io_sel` 决定通道映射：复位值 0 时按 GPIO 号模 4 只输出
-CH0..CH3 正向，GPIO22 是 CH2+；置 1 后按模 8 依次输出 CH0±..CH3±，GPIO22 才是
-CH3+。lower 在 START 时置 1（`PWM_IO_SEL_DIFF_END`）。正负脚由模 8 余数唯一确定，
-不同通道、同一通道正负之间不会撞脚。板级 Kconfig 允许 GPIO0–31（32–36 是 USB、UART0
+PWM 输出脚由 GLB `reg_pwm1_io_sel`（全局，一次只能一种）决定通道映射：
+
+- 单端布局（值 0，复位值，`PWM_IO_SEL_SINGLE_END`）：只有正输出，GPIO n 输出
+  CH(n%4)+，每个通道有 8 个候选脚。所有已配通道都没有负脚时使用。
+- 差分布局（值 1，`PWM_IO_SEL_DIFF_END`）：GPIO n 输出 CH((n%8)/2)，n%8 偶数为正、
+  奇数为负，每个通道正、负各 4 个候选脚。只要有一个通道配了负脚就使用。
+
+lower 在 START 时按板级表写 io_sel，并在回读时核对；board 在编译期按同样的规则检查
+引脚槽位，混用时报差分布局的规则。同一 GPIO 在两种布局下属于不同通道，例如 GPIO22
+在单端布局是 CH2+、在差分布局是 CH3+，所以给某个通道加负脚后，其余通道的正脚也要按
+差分布局重选。不同通道之间不会撞脚。板级 Kconfig 允许 GPIO0–31（32–36 是 USB、UART0
 和 BOOT）：
 
-| 通道 | 正输出（n%8） | 负输出（n%8） |
-|---|---|---|
-| CH0 | 0、8、16、24（0） | 1、9、17、25（1） |
-| CH1 | 2、10、18、26（2） | 3、11、19、27（3） |
-| CH2 | 4、12、20、28（4） | 5、13、21、29（5） |
-| CH3 | 6、14、22、30（6） | 7、15、23、31（7） |
+| 通道 | 单端正输出（n%4） | 差分正输出（n%8） | 差分负输出（n%8） |
+|---|---|---|---|
+| CH0 | 0、4、8、12、16、20、24、28 | 0、8、16、24 | 1、9、17、25 |
+| CH1 | 1、5、9、13、17、21、25、29 | 2、10、18、26 | 3、11、19、27 |
+| CH2 | 2、6、10、14、18、22、26、30 | 4、12、20、28 | 5、13、21、29 |
+| CH3 | 3、7、11、15、19、23、27、31 | 6、14、22、30 | 7、15、23、31 |
 
-该映射来自 PIN_MUX 表，已用逻辑分析仪在 GPIO12、13、16、22 上确认（见
-“实物波形数据”和“多通道与互补输出实测”）。
+两种映射来自 PIN_MUX 表，已用逻辑分析仪在 GPIO12、13、16、22 上确认（见
+“实物波形数据”“多通道与互补输出实测”和“单端布局实测”）。
 
 `nsh-peripherals` 的分配：CH0 正 8/负 9，CH1 正 10/负 11，CH2 只用负输出 21，CH3 正
 6/负 7。CH2 正输出的候选 4、12、20、28 分别被 I2C1、SPI0、GPIO 回环和暖白灯占用；
@@ -379,3 +387,23 @@ SHA256 `61f14972b54c1322a885577cf465fc074052bd18a2618399ed6c07c190cbdb02`）上�
 `-c all -w 0` 仍为 9/9。PWM-009 在 dcpol HIGH 和
 LOW 两次 STOP 后从 GPIO 输入寄存器读回 GPIO6–11、21 的电平，都与正 = dcpol、负 = !dcpol
 一致，说明这些脚在本板上可作普通 IO 驱动；这些脚上的频率和占空比没有用仪器测。
+
+## 单端布局实测
+
+2026-10-14 在同一块板上用临时配置（未提交）测量，DSLogic U3Pro32，阈值 1.6 V。
+
+- 4 通道只配正输出（`PWM_MULTICHAN`，CH0 16、CH1 13、CH2 22、CH3 11；11 未接探头），
+  20 MHz，`mcu_pwm_test -c 009 -w 1`：GPIO16 20.00%、GPIO13 40.00%、GPIO22 60.00%，
+  都是 999.97 Hz；只提 CH0 改为 10 kHz 后 GPIO16 50%，GPIO13、GPIO22 保持 40%、60%，
+  9999.67 Hz。GPIO13、GPIO22 在差分布局下分别是 CH2−、CH3+，这里输出 CH1、CH2，说明
+  io_sel 已切到 0；同属 CH0 槽位但未配置的 GPIO12 始终不动。`-c 005` 四组 cpol/dcpol 的
+  STOP 电平等于 dcpol，`-c all` 9/9，PWM-008 报告 `single-ended (pin % 4)`。
+- 单通道（不开 `PWM_MULTICHAN`，CH2 正 22），2 MHz，`-c 003 -w 1`：GPIO22 输出 100 Hz/75%、
+  1 kHz 25/50/75%、10 kHz/25%（9999.68 Hz）；`-c all` 8 PASS、009 SKIP。
+- 差分布局回归（CH2 12/13、CH3 22/23）：`-c 009` 波形与之前相同，GPIO12/13 互补，PWM-008
+  报告 `differential (pin % 8)`，`-c all` 9/9。
+- 编译期：单端下 CH2 选 GPIO12 报 `needs pin % 4 == 2 (no negative pins)`；CH0 加负脚 17
+  后，单端选的 13、22、11 按差分规则报错；板级默认（只开 CH3、正 GPIO11）可编过。
+- 正式 `nsh-peripherals`（差分布局，`nuttx.bin` SHA256
+  `9293866fe76e3647057f45f9656617d5ad8a42c8a9b7ef236147dc97d9f4823e`）：`-c all -w 0` 9/9，
+  PWM-008 报告 `differential (pin % 8)`；GPIO、SPI、I2C、UART 回归无失败。

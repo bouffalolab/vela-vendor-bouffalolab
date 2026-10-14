@@ -22,8 +22,10 @@ CONFIG_AI_M64P_KIT_PWM=y
 ```
 
 并用 `CONFIG_AI_M64P_KIT_PWM_CHn`、`_POS_PIN`、`_NEG_PIN` 选通道和引脚（默认只开 CH3、
-正输出 GPIO6）。选多个通道时还要启用 `CONFIG_PWM_MULTICHAN` 和
-`CONFIG_PWM_NCHANNELS`（PWM-009 需要不小于 2）。
+正输出 GPIO11）。所有通道都不配负脚时用单端布局（正输出 `pin%4==ch`），有负脚时用
+差分布局（正 `pin%8==2*ch`、负 `pin%8==2*ch+1`），见 `docs/bl616cl-pwm.md`。选多个
+通道时还要启用 `CONFIG_PWM_MULTICHAN` 和 `CONFIG_PWM_NCHANNELS`（PWM-009 需要不小于
+2）。
 
 测试配置再启用：
 
@@ -229,10 +231,12 @@ shutdown errno 传播；active close 后 reopen+START 必须真实调用 lower �
 1. 打开 `/dev/pwm0` 必须成功；打开 `/dev/pwm1` 必须失败并返回 `ENOENT`。
 2. 打开每个已配 PWM 引脚的 `/dev/gpioN` 必须失败并返回 `ENOENT`，证明 GPIO 测试节点
    已移除。
-3. 设置并启动 1kHz/50%，STOP、close；诊断必须显示 channel/pin/clock/started 全部清理。
+3. 设置并启动 1kHz/50%，诊断回读的 GLB `reg_pwm1_io_sel` 必须在有负脚时为 1、全是正
+   输出时为 0，并打印 `pin layout`；STOP、close 后 channel/pin/clock/started 全部清理。
 4. 配置期分别让 I2C0/I2C1 SCL/SDA、SPI0 CLK/MISO/MOSI/CS0/CS1、UART1 TX/RX 使用已配
-   PWM 引脚；每组必须在编译期失败。PWM 引脚不在所选通道槽位（正 `pin%8==2*ch`、负
-   `pin%8==2*ch+1`）、一个通道都没选，或不开 `PWM_MULTICHAN` 时选了多个通道，也必须
+   PWM 引脚；每组必须在编译期失败。PWM 引脚不在所选通道槽位（单端正 `pin%4==ch`；
+   差分正 `pin%8==2*ch`、负 `pin%8==2*ch+1`）、一个通道都没选，或不开 `PWM_MULTICHAN`
+   时选了多个通道，也必须
    编译失败。合法默认 pin 配置必须 clean build 通过。
 5. off/product/test 三组制品分别检查 source、archive、map、ELF symbol 和 `help`：off
    无 lower/LHAL/board/app/hook；product 有 `/dev/pwm0` 但无 app/hook；test 才有全部测试符号。

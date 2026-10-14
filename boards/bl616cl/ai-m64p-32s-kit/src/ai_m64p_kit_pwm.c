@@ -23,33 +23,61 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-/* A selected channel needs at least one pin, and each pin must carry that
- * channel output: positive on pin % 8 == 2 * channel, negative on the next
- * odd slot.
+/* A selected channel needs at least one pin. If some channel uses a
+ * negative output, the pins follow the differential layout: positive on
+ * pin % 8 == 2 * channel, negative on the next odd slot. Otherwise the
+ * single-ended layout applies: positive on pin % 4 == channel.
  */
 
-#define AI_M64P_KIT_PWM_PIN_BAD(pin, slot) ((pin) >= 0 && (pin) % 8 != (slot))
+#define AI_M64P_KIT_PWM_DIFF_END                                    \
+  (AI_M64P_KIT_PWM_CH0_NEG >= 0 || AI_M64P_KIT_PWM_CH1_NEG >= 0 || \
+   AI_M64P_KIT_PWM_CH2_NEG >= 0 || AI_M64P_KIT_PWM_CH3_NEG >= 0)
+
+#if AI_M64P_KIT_PWM_DIFF_END
+#  define AI_M64P_KIT_PWM_POS_BAD(pin, ch) \
+  ((pin) >= 0 && (pin) % 8 != (ch) * 2)
+#else
+#  define AI_M64P_KIT_PWM_POS_BAD(pin, ch) \
+  ((pin) >= 0 && (pin) % 4 != (ch))
+#endif
+
 #define AI_M64P_KIT_PWM_BAD(pos, neg, ch)                    \
-  (AI_M64P_KIT_PWM_PIN_BAD(pos, (ch) * 2) ||                 \
-   AI_M64P_KIT_PWM_PIN_BAD(neg, (ch) * 2 + 1) ||             \
+  (AI_M64P_KIT_PWM_POS_BAD(pos, ch) ||                      \
+   ((neg) >= 0 && (neg) % 8 != (ch) * 2 + 1) ||             \
    ((pos) < 0 && (neg) < 0))
 #define AI_M64P_KIT_PWM_USED(pos, neg) ((pos) >= 0 || (neg) >= 0)
 
 #if defined(CONFIG_AI_M64P_KIT_PWM_CH0) && \
   AI_M64P_KIT_PWM_BAD(AI_M64P_KIT_PWM_CH0_POS, AI_M64P_KIT_PWM_CH0_NEG, 0)
-#  error "PWM channel 0 needs pin % 8 == 0 (positive) or 1 (negative)"
+#  if AI_M64P_KIT_PWM_DIFF_END
+#    error "PWM channel 0 needs pin % 8 == 0 (positive) or 1 (negative)"
+#  else
+#    error "PWM channel 0 needs pin % 4 == 0 (no negative pins)"
+#  endif
 #endif
 #if defined(CONFIG_AI_M64P_KIT_PWM_CH1) && \
   AI_M64P_KIT_PWM_BAD(AI_M64P_KIT_PWM_CH1_POS, AI_M64P_KIT_PWM_CH1_NEG, 1)
-#  error "PWM channel 1 needs pin % 8 == 2 (positive) or 3 (negative)"
+#  if AI_M64P_KIT_PWM_DIFF_END
+#    error "PWM channel 1 needs pin % 8 == 2 (positive) or 3 (negative)"
+#  else
+#    error "PWM channel 1 needs pin % 4 == 1 (no negative pins)"
+#  endif
 #endif
 #if defined(CONFIG_AI_M64P_KIT_PWM_CH2) && \
   AI_M64P_KIT_PWM_BAD(AI_M64P_KIT_PWM_CH2_POS, AI_M64P_KIT_PWM_CH2_NEG, 2)
-#  error "PWM channel 2 needs pin % 8 == 4 (positive) or 5 (negative)"
+#  if AI_M64P_KIT_PWM_DIFF_END
+#    error "PWM channel 2 needs pin % 8 == 4 (positive) or 5 (negative)"
+#  else
+#    error "PWM channel 2 needs pin % 4 == 2 (no negative pins)"
+#  endif
 #endif
 #if defined(CONFIG_AI_M64P_KIT_PWM_CH3) && \
   AI_M64P_KIT_PWM_BAD(AI_M64P_KIT_PWM_CH3_POS, AI_M64P_KIT_PWM_CH3_NEG, 3)
-#  error "PWM channel 3 needs pin % 8 == 6 (positive) or 7 (negative)"
+#  if AI_M64P_KIT_PWM_DIFF_END
+#    error "PWM channel 3 needs pin % 8 == 6 (positive) or 7 (negative)"
+#  else
+#    error "PWM channel 3 needs pin % 4 == 3 (no negative pins)"
+#  endif
 #endif
 
 #define AI_M64P_KIT_PWM_NCHANNELS                                           \

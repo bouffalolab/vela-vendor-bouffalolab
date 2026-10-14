@@ -91,6 +91,7 @@ struct bl616cl_pwm_test_diag_s
   int last_error;
   uint16_t divider;
   uint16_t period;
+  bool io_sel_diff_end;         /* GLB reg_pwm1_io_sel, 1 for DIFF_END */
   bool pin_acquired;
   bool clock_enabled;
   bool started;

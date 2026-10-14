@@ -194,15 +194,15 @@ static void print_diag(const char *label,
   int ch;
 
   printf("  %s: calls=%lu/%lu/%lu/%lu src=%luHz actual=%luHz "
-         "div=%u period=%u pin=%u clock=%u started=%u last=%d "
-         "errors=%lu\n",
+         "div=%u period=%u io_sel=%u pin=%u clock=%u started=%u "
+         "last=%d errors=%lu\n",
          label, (unsigned long)diag->setup_calls,
          (unsigned long)diag->start_calls,
          (unsigned long)diag->stop_calls,
          (unsigned long)diag->shutdown_calls,
          (unsigned long)diag->source_frequency,
          (unsigned long)diag->actual_frequency, diag->divider, diag->period,
-         diag->pin_acquired, diag->clock_enabled, diag->started,
+         diag->io_sel_diff_end, diag->pin_acquired, diag->clock_enabled, diag->started,
          diag->last_error, (unsigned long)diag->error_count);
 
   for (ch = 0; ch < BL616CL_PWM_TEST_NCHANNELS; ch++)
@@ -1228,6 +1228,42 @@ static int expect_pins_owned(const struct bl616cl_pwm_test_diag_s *diag)
   return 0;
 }
 
+/* The GLB pin layout must be differential exactly when some channel has a
+ * negative pin. Positive-only boards get the single-ended layout, which
+ * offers twice as many pins per channel.
+ */
+
+static int expect_pin_layout(void)
+{
+  struct bl616cl_pwm_test_diag_s diag;
+  bool diff_end = false;
+  int ch;
+
+  if (get_diag(&diag) < 0)
+    {
+      return -EIO;
+    }
+
+  for (ch = 0; ch < BL616CL_PWM_TEST_NCHANNELS; ch++)
+    {
+      if (diag.channels[ch].configured && diag.channels[ch].neg_pin >= 0)
+        {
+          diff_end = true;
+        }
+    }
+
+  if (diag.io_sel_diff_end != diff_end)
+    {
+      printf("  FAIL: pin layout io_sel=%u, expected %u\n",
+             diag.io_sel_diff_end, diff_end);
+      return -EIO;
+    }
+
+  printf("  pin layout: %s\n", diff_end ? "differential (pin % 8)" :
+                                          "single-ended (pin % 4)");
+  return 0;
+}
+
 static int run_case_008(const struct app_config_s *cfg)
 {
   /* clang-format off */
@@ -1253,7 +1289,7 @@ static int run_case_008(const struct app_config_s *cfg)
   if (get_diag(&diag) < 0 || expect_missing("/dev/pwm1") < 0 ||
       expect_pins_owned(&diag) < 0 ||
       set_start_verify(fd, &point, false, cfg->verbose) < 0 ||
-      pwm_stop(fd) < 0)
+      expect_pin_layout() < 0 || pwm_stop(fd) < 0)
     {
       (void)pwm_stop(fd);
       close(fd);

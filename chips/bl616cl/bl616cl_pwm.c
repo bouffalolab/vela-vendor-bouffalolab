@@ -38,6 +38,7 @@
 #include "bflb_name.h"
 #include "bflb_peri.h"
 #include "bflb_pwm_v2.h"
+#include "hardware/glb_reg.h"
 #include "hardware/pwm_v2_reg.h"
 #include "bl616cl_pwm.h"
 #ifdef CONFIG_BL616CL_PWM_TEST
@@ -54,13 +55,16 @@
 #define BL616CL_PWM_MIN_PERIOD  2
 #define BL616CL_PWM_MAX_PERIOD  UINT16_MAX
 
-/* PWM_IO_SEL_DIFF_END maps GPIO n to channel (n % 8) / 2, with the positive
- * output on an even n % 8 and the negative output on the odd one. The reset
- * layout puts only positive outputs on n % 4.
+/* GLB reg_pwm1_io_sel selects the pin layout. PWM_IO_SEL_DIFF_END maps
+ * GPIO n to channel (n % 8) / 2, with the positive output on an even n % 8
+ * and the negative output on the odd one. PWM_IO_SEL_SINGLE_END (the reset
+ * value) has positive outputs only and maps GPIO n to channel n % 4, so each
+ * channel has twice as many pins to choose from. The lower half uses the
+ * single-ended layout when no channel has a negative pin.
  */
 
-#define BL616CL_PWM_POS_SLOT(ch) ((ch) * 2)
-#define BL616CL_PWM_NEG_SLOT(ch) ((ch) * 2 + 1)
+#define BL616CL_PWM_IO_SEL_DIFF_END() \
+  ((getreg32(GLB_BASE + GLB_PWM_CFG0_OFFSET) & GLB_REG_PWM1_IO_SEL_MSK) != 0)
 
 /* Per-channel bits in PWM_MC0_CONFIG1 and the threshold registers */
 
@@ -140,6 +144,7 @@ struct bl616cl_pwm_lowerhalf_s
   uint16_t divider;
   uint16_t period;
   bool initialized;
+  bool diff_end;      /* PWM_IO_SEL_DIFF_END: some channel has a negative pin */
   bool pin_acquired;
   bool clock_enabled;
   bool started;
@@ -510,8 +515,9 @@ static int bl616cl_pwm_enable_clock(
  * Name: bl616cl_pwm_acquire
  *
  * Description:
- *   Enable the PWM clock and select the per-channel pin layout. The pins are
- *   routed to the PWM function later, by bl616cl_pwm_configure().
+ *   Enable the PWM clock and select the pin layout: differential when some
+ *   channel has a negative pin, single-ended otherwise. The pins are routed
+ *   to the PWM function later, by bl616cl_pwm_configure().
  *
  * Input Parameters:
  *   priv - PWM lower-half state
@@ -532,7 +538,8 @@ static int bl616cl_pwm_acquire(struct bl616cl_pwm_lowerhalf_s *priv)
     }
 
   ret = bflb_pwm_v2_feature_control(priv->dev, PWM_CMD_IO_SEL,
-                                    PWM_IO_SEL_DIFF_END);
+                                    priv->diff_end ? PWM_IO_SEL_DIFF_END :
+                                                     PWM_IO_SEL_SINGLE_END);
   if (ret < 0)
     {
       return ret;
@@ -913,9 +920,10 @@ static void bl616cl_pwm_configure(struct bl616cl_pwm_lowerhalf_s *priv,
  * Name: bl616cl_pwm_readback
  *
  * Description:
- *   Read back the PWM registers and check that they match the computed
- *   solution and the requested setting of every channel. Updates the cached
- *   divider, period and actual frequency.
+ *   Read back the PWM registers and the GLB pin layout and check that they
+ *   match the computed solution, the selected layout and the requested
+ *   setting of every channel. Updates the cached divider, period and actual
+ *   frequency.
  *
  * Input Parameters:
  *   priv     - PWM lower-half state
@@ -953,7 +961,8 @@ static int bl616cl_pwm_readback(
 
   if (divider != solution->divider || period != solution->period ||
       ((config0 & PWM_REG_CLK_SEL_MASK) >> PWM_REG_CLK_SEL_SHIFT) != 1 ||
-      (config0 & PWM_CENTER_ALIGNED_EN) != 0)
+      (config0 & PWM_CENTER_ALIGNED_EN) != 0 ||
+      BL616CL_PWM_IO_SEL_DIFF_END() != priv->diff_end)
     {
       return -EIO;
     }
@@ -1291,20 +1300,21 @@ static int bl616cl_pwm_ioctl(struct pwm_lowerhalf_s *lower, int cmd,
  *
  * Description:
  *   Check that a board output pin is unused (negative) or a GPIO that
- *   carries the given channel output slot.
+ *   carries the given channel output slot in the selected pin layout.
  *
  * Input Parameters:
- *   pin  - GPIO pin number, negative when the output is not used
- *   slot - Required pin % 8
+ *   pin     - GPIO pin number, negative when the output is not used
+ *   modulus - 8 for PWM_IO_SEL_DIFF_END, 4 for PWM_IO_SEL_SINGLE_END
+ *   slot    - Required pin % modulus
  *
  * Returned Value:
  *   true if the pin is usable for the slot; false otherwise.
  *
  ****************************************************************************/
 
-static bool bl616cl_pwm_pin_valid(int pin, int slot)
+static bool bl616cl_pwm_pin_valid(int pin, int modulus, int slot)
 {
-  return pin < 0 || (pin < BL616CL_PWM_NPINS && pin % 8 == slot);
+  return pin < 0 || (pin < BL616CL_PWM_NPINS && pin % modulus == slot);
 }
 
 /****************************************************************************
@@ -1318,8 +1328,10 @@ static bool bl616cl_pwm_pin_valid(int pin, int slot)
  *   Get the PWM0 lower half for the given channel outputs and look up the
  *   PWM and GPIO devices. Each channel may use a positive output, a
  *   negative output or both; the negative output is the complement of the
- *   positive one. Without CONFIG_PWM_MULTICHAN exactly one channel must be
- *   given.
+ *   positive one. If any channel has a negative pin, positive pins need
+ *   pin % 8 == 2 * channel and negative pins pin % 8 == 2 * channel + 1;
+ *   otherwise positive pins need pin % 4 == channel. Without
+ *   CONFIG_PWM_MULTICHAN exactly one channel must be given.
  *
  * Input Parameters:
  *   outputs  - Channel outputs, one entry per channel
@@ -1352,6 +1364,15 @@ bl616cl_pwm_initialize(const struct bl616cl_pwm_output_s *outputs,
       return NULL;
     }
 
+  priv->diff_end = false;
+  for (i = 0; i < noutputs; i++)
+    {
+      if (outputs[i].neg_pin >= 0)
+        {
+          priv->diff_end = true;
+        }
+    }
+
   memset(priv->chan, 0, sizeof(priv->chan));
   for (i = 0; i < noutputs; i++)
     {
@@ -1359,10 +1380,11 @@ bl616cl_pwm_initialize(const struct bl616cl_pwm_output_s *outputs,
       if (output->channel >= BL616CL_PWM_NCHANNELS ||
           priv->chan[output->channel].configured ||
           (output->pos_pin < 0 && output->neg_pin < 0) ||
-          !bl616cl_pwm_pin_valid(output->pos_pin,
-                                 BL616CL_PWM_POS_SLOT(output->channel)) ||
-          !bl616cl_pwm_pin_valid(output->neg_pin,
-                                 BL616CL_PWM_NEG_SLOT(output->channel)))
+          !bl616cl_pwm_pin_valid(output->pos_pin, priv->diff_end ? 8 : 4,
+                                 priv->diff_end ? output->channel * 2 :
+                                                  output->channel) ||
+          !bl616cl_pwm_pin_valid(output->neg_pin, 8,
+                                 output->channel * 2 + 1))
         {
           memset(priv->chan, 0, sizeof(priv->chan));
           return NULL;
@@ -1494,6 +1516,7 @@ int bl616cl_pwm_test_get_diag(struct bl616cl_pwm_test_diag_s *diag)
   diag->last_error = g_bl616cl_pwm.last_error;
   diag->divider = g_bl616cl_pwm.divider;
   diag->period = g_bl616cl_pwm.period;
+  diag->io_sel_diff_end = BL616CL_PWM_IO_SEL_DIFF_END();
   diag->pin_acquired = g_bl616cl_pwm.pin_acquired;
   diag->clock_enabled = g_bl616cl_pwm.clock_enabled;
   diag->started = g_bl616cl_pwm.started;
