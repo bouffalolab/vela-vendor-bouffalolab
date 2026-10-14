@@ -6,8 +6,8 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd -P)
 TOOLS_DIR=$(cd "$SCRIPT_DIR/.." && pwd -P)
-POST_TOOL_DIR="$TOOLS_DIR/bflb_fw_post_proc"
-FLASH_TOOL_DIR="$TOOLS_DIR/bouffalo_flash_cube"
+POST_TOOL_DIR="$TOOLS_DIR/bflb_flash_tools/bflb_fw_post_proc"
+FLASH_TOOL_DIR="$TOOLS_DIR/bflb_flash_tools/bouffalo_flash_cube"
 FLASH_CONFIG="$SCRIPT_DIR/flash_factory_cfg.ini"
 FLASH_SIZE=$((0x400000))
 IMAGE=

@@ -8,19 +8,16 @@ Bouffalo Lab 维护的 openvela 适配层，是 BL Vela SDK 中的 `vendor/bouff
 
 ## 获取代码
 
-需要 Linux x86-64 主机，并预先安装 `repo` 和 `git-lfs`（安装后执行一次
-`git lfs install`）。
+需要 Linux x86-64 主机，并预先安装 `repo`。
 
 ```bash
 mkdir bl_vela_sdk && cd bl_vela_sdk
 repo init -u https://github.com/bouffalolab/vela-manifest.git \
           -b main -m manifests/bl-vela-sdk-release.xml
 repo sync -j8
-git -C vendor/bouffalolab lfs pull bouffalo
 ```
 
-`repo sync` 不会下载 LFS 对象。不执行最后一步时，固件后处理和烧录工具仍是 LFS
-指针文件，构建会在后处理阶段失败。对外清单跟踪各仓的开发分支，暂未提供固定版本。
+对外清单跟踪各仓的开发分支，暂未提供固定版本。
 
 有内部源码权限的开发者使用 `manifests/bl-vela-sdk.xml`，Wi-Fi core 从源码构建；
 对外清单使用本仓中的预编译包，见下文“Wi-Fi 与 BLE”。
@@ -89,7 +86,7 @@ shell 补全：`./vela completion install`，或 `./vela completion <bash|zsh|fi
 | `apps/` | 测试与示例 app：`mcu_peripheral_tests`、`os_feature_tests`、`perf_tools`、`wireless_tests` | 自动发现 |
 | `cmake/` | 构建辅助（驱动 wrapper、组件 helper、Wi-Fi 源码/预编译选择） | 顶层 `CMakeLists.txt` include |
 | `docs/` | BL616CL 功能文档 | — |
-| `tools/` | 宿主侧工具（固件后处理、FlashCube、性能工具），不编入固件 | 无 `CMakeLists.txt` |
+| `tools/` | 宿主侧工具（后处理 wrapper、性能工具），不编入固件；固件后处理和 FlashCube 在 `tools/bflb_flash_tools`，是 Bouffalo SDK `tools/bflb_tools/` 的只读镜像，独立仓 | 无 `CMakeLists.txt` |
 
 ## 接入 openvela 的三条路径
 

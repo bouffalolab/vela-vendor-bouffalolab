@@ -533,9 +533,14 @@ def flash_tool_name(system: Optional[str] = None, machine: Optional[str] = None)
     raise RuntimeError(f"unsupported host platform: {system}")
 
 
+def flash_cube_dir(root: Path) -> Path:
+    """FlashCube tree from the bflb_flash_tools project in the manifest."""
+    return root / "vendor" / "bouffalolab" / "tools" / "bflb_flash_tools" / "bouffalo_flash_cube"
+
+
 def flash_chips(root: Path) -> list:
     """List chip names supported by the bundled FlashCube tool."""
-    chips_dir = root / "vendor" / "bouffalolab" / "tools" / "bouffalo_flash_cube" / "chips"
+    chips_dir = flash_cube_dir(root) / "chips"
     if not chips_dir.is_dir():
         return []
     return sorted(entry.name for entry in chips_dir.iterdir() if entry.is_dir())
@@ -543,7 +548,7 @@ def flash_chips(root: Path) -> list:
 
 def stage_flash_tool(root: Path, stage: Path, chip: str) -> Path:
     """Stage the FlashCube binary and chip assets into the given directory."""
-    flash_tool_dir = root / "vendor" / "bouffalolab" / "tools" / "bouffalo_flash_cube"
+    flash_tool_dir = flash_cube_dir(root)
     tool_name = flash_tool_name()
     flash_tool = flash_tool_dir / tool_name
     chip_dir = flash_tool_dir / "chips" / chip

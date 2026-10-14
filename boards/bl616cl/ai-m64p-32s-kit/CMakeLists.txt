@@ -52,15 +52,15 @@ set(BL616CL_POSTPROCESS_INPUTS
     ${NUTTX_BOARD_ABS_DIR}/config/partition_cfg_4M.toml
     ${BL616CL_PARTITION_SIZE_TOOL}
     ${BOUFFALOLAB_VENDOR_DIR}/tools/bl616cl/flash_factory_cfg.ini
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_fw_post_proc/bflb_fw_post_proc-ubuntu
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_fw_post_proc/bflb_fw_post_proc-macos
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_fw_post_proc/bflb_fw_post_proc.exe
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bouffalo_flash_cube/BLFlashCommand-ubuntu
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bouffalo_flash_cube/BLFlashCommand-macos
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bouffalo_flash_cube/BLFlashCommand.exe
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bouffalo_flash_cube/chips/bl616cl/eflash_loader/eflash_loader_cfg.conf
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bouffalo_flash_cube/chips/bl616cl/efuse_bootheader/efuse_bootheader_cfg.conf
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bouffalo_flash_cube/chips/bl616cl/efuse_bootheader/flash_para.bin
+    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bflb_fw_post_proc/bflb_fw_post_proc-ubuntu
+    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bflb_fw_post_proc/bflb_fw_post_proc-macos
+    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bflb_fw_post_proc/bflb_fw_post_proc.exe
+    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bouffalo_flash_cube/BLFlashCommand-ubuntu
+    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bouffalo_flash_cube/BLFlashCommand-macos
+    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bouffalo_flash_cube/BLFlashCommand.exe
+    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bouffalo_flash_cube/chips/bl616cl/eflash_loader/eflash_loader_cfg.conf
+    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bouffalo_flash_cube/chips/bl616cl/efuse_bootheader/efuse_bootheader_cfg.conf
+    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bouffalo_flash_cube/chips/bl616cl/efuse_bootheader/flash_para.bin
 )
 
 add_custom_command(
