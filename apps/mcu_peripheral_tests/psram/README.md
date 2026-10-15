@@ -27,8 +27,9 @@ NSH 可能先返回提示符，再输出异步 app 的结果，验收应等待�
   64 KiB 重试（TLSF 会把请求向上取整到所在档位，2～4 MiB 每档 64 KiB，最大
   空闲块离档位边界很近时差 64 KiB 仍分配不到），不少于容量的一半。
 - 四轮地址相关模式写入后 clean，通过 uncached alias 核对整个分配区。
-- 预热 1 KiB cache 后从 uncached alias 改写；确认 invalidate 前仍读到旧值，
-  invalidate 后读到新值，避免仅因 cache 命中而误判。
+- 预热 1 KiB cache 后从 uncached alias 改写；确认 invalidate 前仍有字读到旧值，
+  invalidate 后 1 KiB 全部读到新值，避免仅因 cache 命中而误判。预热期间的中断
+  可能把其中几行挤出 cache，所以对照只要求有旧值，个数打印在每轮结果里。
 - 释放内存后可以重复执行，测试不访问未分配区域，不自动在启动脚本中运行。
 
 ## 范围与限制

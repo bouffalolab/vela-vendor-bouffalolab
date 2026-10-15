@@ -44,6 +44,7 @@ int main(int argc, char *argv[])
   size_t bytes;
   size_t words;
   size_t i;
+  size_t stale;
   unsigned int pass;
   uint32_t expected;
   uint32_t actual;
@@ -115,6 +116,8 @@ int main(int argc, char *argv[])
 
       /* Fill cache lines, change physical memory, then invalidate. Missing
        * PSRAM support in the range API must fail this small-buffer check.
+       * Interrupts during the fill may evict any of the lines, so the
+       * control only needs some words that still read the old data.
        */
 
       for (i = 0; i < 256; i++)
@@ -125,8 +128,16 @@ int main(int argc, char *argv[])
         }
 
       UP_DSB();
-      actual = cached[0];
-      if (actual != psram_pattern(0, pass))
+      stale = 0;
+      for (i = 0; i < 256; i++)
+        {
+          if (cached[i] == psram_pattern(i, pass))
+            {
+              stale++;
+            }
+        }
+
+      if (stale == 0)
         {
           printf("PSRAM FAIL: stale cache control pass=%u\n", pass);
           goto out;
@@ -146,7 +157,8 @@ int main(int argc, char *argv[])
             }
         }
 
-      printf("PSRAM pass=%u bytes=%zu clean/invalidate PASS\n", pass, bytes);
+      printf("PSRAM pass=%u bytes=%zu stale=%zu/256 clean/invalidate PASS\n",
+             pass, bytes, stale);
     }
 
   ret = EXIT_SUCCESS;
