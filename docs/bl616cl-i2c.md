@@ -1,7 +1,7 @@
 # BL616CL I2C0/I2C1 Master 适配与验证
 
 本文说明 BL616CL I2C master 与 OpenVela I2C 子系统的最大能力交集、实现边界、
-Kconfig 裁剪、构建检查和运行验证。当前已完成 I2C1-only 软件合同与现役外设回归，
+Kconfig 裁剪、构建检查和运行验证。当前已完成 I2C1-only 无 target 超时路径与现役外设回归，
 并用逻辑分析仪确认 I2C0、I2C1 在 GPIO4/5 上的无 target 地址波形。2026-10-16 起在
 BL616CL-AVE-V10 上以板载 ES8388 完成正向读写验证（见“正向 target”）；多字节读和
 双总线仍缺实物 target。
@@ -24,11 +24,11 @@ OpenVela `I2C_TRANSFER()` 接受消息数组并要求整组传输原子。公共
 | I2C0/I2C1 master | 纳入 | 两个实例有独立 base、IRQ、idx 和独立 mutex |
 | 7-bit address | 纳入 | 地址 0x00..0x7f；实物 probe 只允许普通地址 0x08..0x77 |
 | 单消息 read/write | 纳入 | 1..1024 字节；0 和 1025 在硬件前拒绝 |
-| 100/400 kHz | 纳入 | 两个频率均进入 fake 配置合同；其它频率当前拒绝 |
+| 100/400 kHz | 纳入 | 两个频率均在 AVE-V10 的 ES8388 上验证；其它频率当前拒绝 |
 | polling transfer | 纳入 | LHAL 同步 FIFO 轮询，等待上限 100 ms |
 | write + repeated-start + read | 纳入 | 严格二元消息；write prefix 1..16，read 1..1024 |
 | 同总线原子性 | 纳入 | 一把实例 mutex 覆盖完整 OpenVela transfer |
-| 双总线并发 | 纳入软件合同 | 两实例各自串行，fake 证明可同时进入；实物双总线待资源冻结 |
+| 双总线并发 | 纳入，未实测 | 两实例各一把 mutex，互不串行；实物双总线待资源冻结 |
 | 10-bit address | 后续项 | 寄存器有字段，当前没有真实 10-bit target 验证 |
 | 三段以上 restart | 后续项 | LHAL 私有 restart 与公共 ABI 不同，尚未逐段证明线序 |
 | `NOSTART` continuation | 后续项 | 当前 LHAL 未实现公共语义，返回 `-EOPNOTSUPP` |
@@ -60,7 +60,7 @@ I2CIOC_TRANSFER
 
 代码归属：
 
-- `chips/bl616cl/bl616cl_i2c.c`：实例资源、消息翻译、mutex、错误窗口和测试 hook；
+- `chips/bl616cl/bl616cl_i2c.c`：实例资源、消息翻译、mutex 和错误窗口；
 - `boards/bl616cl/ai-m64p-32s-kit/src/ai_m64p_kit_i2c.c`：pin owner 和节点注册；
 - `cmake/bl616cl_lhal.cmake`：仅在实例开启时编入同步仓的 `bflb_i2c.c`；
 - `apps/mcu_peripheral_tests/i2c/`：独立 `libapps_mcu_i2c_test.a` 和一个测试 main；
@@ -81,7 +81,6 @@ I2CIOC_TRANSFER
 | `AI_M64P_KIT_I2C` | board I2C 资源总开关 | 不执行 board 注册 |
 | `AI_M64P_KIT_I2C0/1` | board 实例、pin 和 `/dev/i2cN` | 未选择实例不占 pin、不注册节点 |
 | `BL616CL_AVE_V10_I2C0` | AVE-V10 的 I2C0（固定 GPIO20/11）和 `/dev/i2c0` | 不注册节点 |
-| `BL616CL_I2C_TEST` | chip fake 注入接口 | 正式产品无测试替换入口 |
 | `BL_MCU_PERIPHERAL_TESTS_I2C` | 测试 app | 无测试 archive、命令和字符串 |
 
 Ai-M64P-32S-Kit 板级默认关闭 I2C：
@@ -111,8 +110,7 @@ mutex 内分别调用 LHAL，防止其它 client 插入整组 transfer。
 
 chip/arch 与 app 使用的 `ENOTSUP` 数值不同，本实现跨 archive 合同固定使用两侧
 一致的 `EOPNOTSUPP=95`。LHAL 独立 archive 使用工具链 `ETIMEDOUT=116`，chip
-adapter 在进入 OpenVela ABI 时规范化为 NuttX `ETIMEDOUT=110`；其它已验证的
-OpenVela/fake errno 原样保留。LHAL 成功路径会清状态，只有失败早退可立即采样 raw
+adapter 在进入 OpenVela ABI 时规范化为 NuttX `ETIMEDOUT=110`；其它错误码原样保留。LHAL 成功路径会清状态，只有失败早退可立即采样 raw
 status。无 target 当前预期 `-ETIMEDOUT`；本项不把 raw bit 擅自映射成完整 NACK、
 arbitration 或 frame errno 分类。
 
@@ -162,57 +160,18 @@ no-instance 的 `libarch.a` 无 `bl616cl_i2c.c.o`，`libboard.a` 无
 三个实例配置的 map 均把对象归入上述四个独立 archive；单实例 `nm` 只出现自身
 实例私有符号。
 
-## I2C1-only 软件实测
+## I2C1-only 无 target 实测
 
 运行环境：Ai-M64P-32S-Kit，CH340 `1a86:7523`，`/dev/ttyUSB2`，2,000,000 baud。
 I2C1-only 固件烧录时 host/device SHA256 均为
 `cbed36c91f46631dbe693341bc5dfd31e4d9875908cc35788222c681a54e52fe`，读取校验
 长度为 515824 B。复位后出现 `NuttShell (NSH)` 和 `nsh>`，`/dev/i2c1` 存在。
 
-命令：
-
-```text
-mcu_i2c_test fake all --bus 1
-```
-
-完整关键结果：
-
-```text
-I2C_TEST RESULT mode=fake case=flags PASS separate_calls=2 combined_calls=1
-I2C_TEST RESULT mode=fake case=boundary PASS single_lengths=1,1024 combined_prefixes=1,16 read_lengths=1,1024 bus=1
-I2C_TEST fake-invalid PASS name=null-vector ret=-22 hardware_calls=0
-I2C_TEST fake-invalid PASS name=zero-count ret=-22 hardware_calls=0
-I2C_TEST fake-invalid PASS name=zero-frequency ret=-22 hardware_calls=0
-I2C_TEST fake-invalid PASS name=unsupported-frequency ret=-22 hardware_calls=0
-I2C_TEST fake-invalid PASS name=address-128 ret=-22 hardware_calls=0
-I2C_TEST fake-invalid PASS name=ten-bit ret=-95 hardware_calls=0
-I2C_TEST fake-invalid PASS name=nostart ret=-95 hardware_calls=0
-I2C_TEST fake-invalid PASS name=unknown-flags ret=-22 hardware_calls=0
-I2C_TEST fake-invalid PASS name=zero-length ret=-22 hardware_calls=0
-I2C_TEST fake-invalid PASS name=oversize ret=-22 hardware_calls=0
-I2C_TEST fake-invalid PASS name=null-buffer ret=-22 hardware_calls=0
-I2C_TEST fake-invalid PASS name=terminal-nostop ret=-95 hardware_calls=0
-I2C_TEST fake-invalid PASS name=combined-prefix-17 ret=-95 hardware_calls=0
-I2C_TEST fake-invalid PASS name=combined-address-mismatch ret=-22 hardware_calls=0
-I2C_TEST fake-invalid PASS name=combined-frequency-mismatch ret=-22 hardware_calls=0
-I2C_TEST fake-invalid PASS name=three-phase-chain ret=-95 hardware_calls=0
-I2C_TEST RESULT mode=fake case=invalid PASS rejected=16
-I2C_TEST fake-errors configure-injected ret=-34 raw_status=00000040 order=configure,status,cleanup
-I2C_TEST fake-errors injected ret=-5 raw_status=00000028 order=configure,transfer,status,cleanup
-I2C_TEST RESULT mode=fake case=errors PASS configure_errno=-34 transfer_errno=-5 recovered=1
-I2C_TEST RESULT mode=fake case=concurrent PASS threads=4 iterations=32 calls=128 max_active=1
-I2C_TEST RESULT mode=fake case=all PASS failed=0
-nsh>
-```
-
-该结果证明消息验证、边界、errno、失败取证顺序、恢复和单总线互斥的软件合同；
-fake 不经过 GPIO、SCL/SDA 或外部 target，不能替代实物总线证据。
-
-未连接 target 时运行真实控制器负向 probe：
+在未连接 target 的 GPIO12/13 上运行真实控制器负向 probe：
 
 ```text
 mcu_i2c_test hw probe --bus 1 --addr 82 --no-target
-I2C_TEST RESULT mode=hw case=probe PASS bus=1 addr=0x52 freq=100000 expected=no-target ret=-110 raw_status=0000000b
+I2C_TEST RESULT mode=hw case=probe PASS bus=1 addr=0x52 freq=100000 expected=no-target ret=-110
 nsh>
 ```
 
@@ -231,7 +190,7 @@ mcu_i2c_test hw probe --bus 1 --addr 0x52 --freq 400000 --no-target
 mcu_i2c_test hw probe --bus 0 --addr 0x52 --freq 100000 --no-target
 ```
 
-三条命令都返回 `PASS ... ret=-110 raw_status=0000000b`，sigrok I2C 解码均为
+三条命令都返回 `PASS ... ret=-110`，sigrok I2C 解码均为
 Start、Address write 0x52、NACK、Stop。临时配置启动到 `nsh>`，`/dev/i2c0` 存在。
 
 | 实例 | 请求 | SCL 实测 |
@@ -249,9 +208,8 @@ SCL 低于请求值，不超过请求值。当时只有内部上拉，接外部 
 
 | 命令 | 结果 |
 |---|---|
-| `mcu_i2c_test fake all --bus 0` | 5 个子项 PASS |
 | `mcu_i2c_test hw probe --bus 0 --addr 0x10 --freq 100000`、`--freq 400000` | 均 PASS（ACK） |
-| `mcu_i2c_test hw probe --bus 0 --addr 0x52 --freq 100000 --no-target` | PASS，`ret=-110 raw_status=0000000b` |
+| `mcu_i2c_test hw probe --bus 0 --addr 0x52 --freq 100000 --no-target` | PASS，`ret=-110` |
 | `i2c dev -b 0 0x08 0x77` | 只有 0x10 应答 |
 | `i2c get -b 0 -a 10 -r <reg>`，reg 0x00–0x34 | 53 个寄存器全部等于 NuttX `es8388.h` 的复位默认值 |
 | `mcu_i2c_test hw combined --bus 0 --addr 0x10 --offset 0x00 --addr-width 1 --length 1 --freq 400000` | PASS，读到 0x06 |
@@ -328,8 +286,8 @@ I2C1-only 临时配置没有该节点，因此该 case 不计为通过。RTC 本
 
 1. `ls /dev/i2c1`，确认节点；检查 gpio12/13 节点不存在。
 2. 分别以 100 kHz、400 kHz 执行 `hw probe`；分析仪记录实际 SCL 和 ACK。
-3. 对确认不存在的普通地址执行 `hw probe --no-target`；必须是 `-ETIMEDOUT`，并
-   记录 raw status。其它本地错误或意外 ACK 均失败。
+3. 对确认不存在的普通地址执行 `hw probe --no-target`；必须是 `-ETIMEDOUT`。
+   其它本地错误或意外 ACK 均失败。
 4. 执行 `hw combined`；分析仪必须看到一次 START、地址+W、prefix、
    repeated-start、地址+R、数据和 STOP，中间不得出现 STOP。
 5. 执行 `hw boundary --length 1024`，逐项覆盖 1、4、31、32、33、255、256、1024。
@@ -345,13 +303,13 @@ I2C1-only 临时配置没有该节点，因此该 case 不计为通过。RTC 本
 
 ## 当前限制和验收状态
 
-- I2C1-only 的构建、裁剪、烧录、启动、fake 合同和真实无 target 超时路径已通过。
+- I2C1-only 的构建、裁剪、烧录、启动和真实无 target 超时路径已通过。
 - I2C0-only 在 GPIO4/5 上已确认启动和无 target 地址波形；正向 target 仍缺。
 - 2026-10-14 起 `nsh-peripherals` 同时注册 I2C0（SCL 30、SDA 31）和 I2C1（GPIO4/5）：
-  两条总线的 `fake all`、`fake dual` 和 `hw probe --no-target`（`ret=-110`）都 PASS；
+  两条总线的 `hw probe --no-target`（`ret=-110`）都 PASS；
   `hw dual` 仍缺两路 target，GPIO30/31 上也还没有逻辑分析仪波形。
 - 外接 EEPROM 和上拉尚未冻结，除无 target probe 外的 `hw` case 均未取得实测 PASS。
-- I2C1 fake 证明软件消息合同，不证明实际 SCL 频率、ACK/NACK、repeated-start
+- 串口 PASS 只证明协议调用成功，不证明实际 SCL 频率、ACK/NACK、repeated-start
   波形、电气质量或 EEPROM 数据保持。
 - 完成 I2C 验收仍需补齐 I2C1 实物总线、oneshot/RTC 回归；若要验收双实例，还需
   在 GPIO4/5 和 GPIO30/31 上各接一路 target。

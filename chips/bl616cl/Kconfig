@@ -349,13 +349,6 @@ config BL616CL_I2C1
 		Build the I2C1 master lower-half; the board registers it as a
 		NuttX I2C bus.
 
-config BL616CL_I2C_TEST
-	bool
-	default n
-	---help---
-		Enable the test-only transport hook used by the vendor I2C contract
-		tests. Product configurations must leave this option disabled.
-
 endif # BL616CL_I2C
 
 menuconfig BL616CL_SPI

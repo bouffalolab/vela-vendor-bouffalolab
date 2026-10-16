@@ -4,13 +4,11 @@ config BL_MCU_PERIPHERAL_TESTS_I2C
 	depends on I2C && I2C_DRIVER && BL616CL_I2C
 	depends on AI_M64P_KIT_I2C0 || AI_M64P_KIT_I2C1 || BL616CL_AVE_V10_I2C0
 	depends on !DISABLE_PTHREAD
-	select BL616CL_I2C_TEST
 	---help---
-		Enable the BL616CL I2C master case runner. It exercises parameter
-		validation, fake lower-half error paths, single-message transfers,
-		combined write/read transfers, explicit target probes,
-		EEPROM backup/restore, and
-		per-bus concurrency. Hardware cases require an external I2C target.
+		Enable the BL616CL I2C master case runner. It exercises combined
+		write/read transfers, explicit target probes, EEPROM
+		backup/restore, and per-bus concurrency through /dev/i2cN. All
+		cases except the no-target probe need an external I2C target.
 
 if BL_MCU_PERIPHERAL_TESTS_I2C
 

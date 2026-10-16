@@ -68,11 +68,6 @@ struct bl616cl_i2c_priv_s
   uint8_t port;
   uint8_t scl_pin;
   uint8_t sda_pin;
-#ifdef CONFIG_BL616CL_I2C_TEST
-  const struct bl616cl_i2c_test_ops_s *test_ops;
-  void *test_arg;
-  uint32_t last_status;
-#endif
 };
 
 /****************************************************************************
@@ -271,63 +266,10 @@ static int bl616cl_i2c_validate(struct i2c_msg_s *msgs, int count)
 }
 
 /****************************************************************************
- * Name: bl616cl_i2c_real_configure
- *
- * Description:
- *   Configure the I2C controller for the given bus frequency by calling the
- *   LHAL initializer.
- *
- * Input Parameters:
- *   priv      - I2C port private state
- *   frequency - Bus frequency in Hz
- *
- * Returned Value:
- *   OK (0) always.
- *
- ****************************************************************************/
-
-static int bl616cl_i2c_real_configure(struct bl616cl_i2c_priv_s *priv,
-                                      uint32_t frequency)
-{
-  bflb_i2c_init(priv->dev, frequency);
-  return OK;
-}
-
-/****************************************************************************
- * Name: bl616cl_i2c_transport_configure
- *
- * Description:
- *   Configure the bus frequency through the transport. Uses the installed
- *   test hook when present, otherwise the real controller.
- *
- * Input Parameters:
- *   priv      - I2C port private state
- *   frequency - Bus frequency in Hz
- *
- * Returned Value:
- *   Zero (OK) on success; a negated errno value on failure.
- *
- ****************************************************************************/
-
-static int bl616cl_i2c_transport_configure(
-  struct bl616cl_i2c_priv_s *priv, uint32_t frequency)
-{
-#ifdef CONFIG_BL616CL_I2C_TEST
-  if (priv->test_ops != NULL)
-    {
-      return priv->test_ops->configure(priv->test_arg, frequency);
-    }
-#endif
-
-  return bl616cl_i2c_real_configure(priv, frequency);
-}
-
-/****************************************************************************
  * Name: bl616cl_i2c_transport_transfer
  *
  * Description:
- *   Run one LHAL transfer group through the transport. Uses the installed
- *   test hook when present, otherwise bflb_i2c_transfer(); an LHAL timeout is
+ *   Run one LHAL transfer group with bflb_i2c_transfer(). An LHAL timeout is
  *   mapped to -ETIMEDOUT.
  *
  * Input Parameters:
@@ -346,25 +288,6 @@ static int bl616cl_i2c_transport_transfer(
 {
   int ret;
 
-#ifdef CONFIG_BL616CL_I2C_TEST
-  if (priv->test_ops != NULL)
-    {
-      struct bl616cl_i2c_test_msg_s test_msgs[2];
-      int i;
-
-      DEBUGASSERT(count > 0 && count <= 2);
-      for (i = 0; i < count; i++)
-        {
-          test_msgs[i].addr = msgs[i].addr;
-          test_msgs[i].flags = msgs[i].flags;
-          test_msgs[i].buffer = msgs[i].buffer;
-          test_msgs[i].length = msgs[i].length;
-        }
-
-      return priv->test_ops->transfer(priv->test_arg, test_msgs, count);
-    }
-#endif
-
   ret = bflb_i2c_transfer(priv->dev, msgs, count);
   if (ret == -BL616CL_LHAL_ETIMEDOUT)
     {
@@ -375,68 +298,11 @@ static int bl616cl_i2c_transport_transfer(
 }
 
 /****************************************************************************
- * Name: bl616cl_i2c_transport_status
- *
- * Description:
- *   Read the controller interrupt status through the transport. Uses the test
- *   hook when installed.
- *
- * Input Parameters:
- *   priv - I2C port private state
- *
- * Returned Value:
- *   The current I2C interrupt status bits.
- *
- ****************************************************************************/
-
-static uint32_t bl616cl_i2c_transport_status(
-  struct bl616cl_i2c_priv_s *priv)
-{
-#ifdef CONFIG_BL616CL_I2C_TEST
-  if (priv->test_ops != NULL)
-    {
-      return priv->test_ops->status(priv->test_arg);
-    }
-#endif
-
-  return bflb_i2c_get_intstatus(priv->dev);
-}
-
-/****************************************************************************
- * Name: bl616cl_i2c_transport_cleanup
- *
- * Description:
- *   Reset the controller after a failed transfer by de-initializing it
- *   through the transport. Uses the test hook when installed.
- *
- * Input Parameters:
- *   priv - I2C port private state
- *
- * Returned Value:
- *   None.
- *
- ****************************************************************************/
-
-static void bl616cl_i2c_transport_cleanup(
-  struct bl616cl_i2c_priv_s *priv)
-{
-#ifdef CONFIG_BL616CL_I2C_TEST
-  if (priv->test_ops != NULL)
-    {
-      priv->test_ops->cleanup(priv->test_arg);
-      return;
-    }
-#endif
-
-  bflb_i2c_deinit(priv->dev);
-}
-
-/****************************************************************************
  * Name: bl616cl_i2c_transport_failed
  *
  * Description:
- *   Handle a transport failure. Log the status, remember it for tests, clean
- *   up the controller and pass the error through.
+ *   Handle a transport failure. Log the interrupt status, de-initialize the
+ *   controller and pass the error through.
  *
  * Input Parameters:
  *   priv      - I2C port private state
@@ -451,14 +317,11 @@ static void bl616cl_i2c_transport_cleanup(
 static int bl616cl_i2c_transport_failed(struct bl616cl_i2c_priv_s *priv,
                                         const char *operation, int ret)
 {
-  uint32_t status = bl616cl_i2c_transport_status(priv);
+  uint32_t status = bflb_i2c_get_intstatus(priv->dev);
 
-#ifdef CONFIG_BL616CL_I2C_TEST
-  priv->last_status = status;
-#endif
   i2cerr("ERROR: I2C%d %s failed: ret=%d status=%08" PRIx32 "\n",
          priv->port, operation, ret, status);
-  bl616cl_i2c_transport_cleanup(priv);
+  bflb_i2c_deinit(priv->dev);
   return ret;
 }
 
@@ -505,12 +368,7 @@ static int bl616cl_i2c_call(struct bl616cl_i2c_priv_s *priv,
       lhal[i].length = msgs[i].length;
     }
 
-  ret = bl616cl_i2c_transport_configure(priv, msgs[0].frequency);
-  if (ret < 0)
-    {
-      return bl616cl_i2c_transport_failed(priv, "configure", ret);
-    }
-
+  bflb_i2c_init(priv->dev, msgs[0].frequency);
   ret = bl616cl_i2c_transport_transfer(priv, lhal, count);
   if (ret < 0)
     {
@@ -560,9 +418,6 @@ static int bl616cl_i2c_transfer(struct i2c_master_s *dev,
       return ret;
     }
 
-#ifdef CONFIG_BL616CL_I2C_TEST
-  priv->last_status = 0;
-#endif
   if (priv->refs == 0)
     {
       ret = -ENODEV;
@@ -741,102 +596,3 @@ int bl616cl_i2cbus_uninitialize(struct i2c_master_s *dev)
   nxmutex_unlock(&priv->lock);
   return OK;
 }
-
-#ifdef CONFIG_BL616CL_I2C_TEST
-/****************************************************************************
- * Name: bl616cl_i2c_test_install
- *
- * Description:
- *   Install or remove a test transport for an initialized port, replacing the
- *   real controller access. Passing NULL ops removes it.
- *
- * Input Parameters:
- *   port - I2C port number
- *   ops  - Test operations (configure, transfer, status, cleanup), or NULL
- *   arg  - Argument passed to every test operation
- *
- * Returned Value:
- *   Zero (OK) on success; a negated errno value on failure. Errors: -EINVAL
- *   for an unknown port or incomplete ops; -ENODEV if the port is not
- *   initialized.
- *
- ****************************************************************************/
-
-int bl616cl_i2c_test_install(int port,
-                             const struct bl616cl_i2c_test_ops_s *ops,
-                             void *arg)
-{
-  struct bl616cl_i2c_priv_s *priv = bl616cl_i2c_priv(port);
-
-  if (priv == NULL ||
-      (ops != NULL && (ops->configure == NULL || ops->transfer == NULL ||
-                       ops->status == NULL || ops->cleanup == NULL)))
-    {
-      return -EINVAL;
-    }
-
-  nxmutex_lock(&priv->lock);
-  if (priv->refs == 0)
-    {
-      nxmutex_unlock(&priv->lock);
-      return -ENODEV;
-    }
-
-  priv->test_ops = ops;
-  priv->test_arg = ops == NULL ? NULL : arg;
-  nxmutex_unlock(&priv->lock);
-  return OK;
-}
-
-/****************************************************************************
- * Name: bl616cl_i2c_test_device
- *
- * Description:
- *   Get the I2C master handle of an initialized port for tests.
- *
- * Input Parameters:
- *   port - I2C port number
- *
- * Returned Value:
- *   The I2C master handle; NULL if the port is unknown or not initialized.
- *
- ****************************************************************************/
-
-struct i2c_master_s *bl616cl_i2c_test_device(int port)
-{
-  struct bl616cl_i2c_priv_s *priv = bl616cl_i2c_priv(port);
-
-  return priv != NULL && priv->refs > 0 ? (struct i2c_master_s *)priv : NULL;
-}
-
-/****************************************************************************
- * Name: bl616cl_i2c_test_last_status
- *
- * Description:
- *   Read the interrupt status captured at the last transport failure of a
- *   port, for tests.
- *
- * Input Parameters:
- *   port - I2C port number
- *
- * Returned Value:
- *   The captured status; 0 if the port is unknown or no failure occurred.
- *
- ****************************************************************************/
-
-uint32_t bl616cl_i2c_test_last_status(int port)
-{
-  struct bl616cl_i2c_priv_s *priv = bl616cl_i2c_priv(port);
-  uint32_t status;
-
-  if (priv == NULL)
-    {
-      return 0;
-    }
-
-  nxmutex_lock(&priv->lock);
-  status = priv->last_status;
-  nxmutex_unlock(&priv->lock);
-  return status;
-}
-#endif

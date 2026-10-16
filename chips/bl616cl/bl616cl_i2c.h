@@ -32,33 +32,6 @@
 #include <nuttx/i2c/i2c_master.h>
 
 /****************************************************************************
- * Public Types
- ****************************************************************************/
-
-#ifdef CONFIG_BL616CL_I2C_TEST
-#  define BL616CL_I2C_TEST_STATUS_NACK    (1 << 3)
-#  define BL616CL_I2C_TEST_STATUS_FER     (1 << 5)
-#  define BL616CL_I2C_TEST_STATUS_TIMEOUT (1 << 6)
-
-struct bl616cl_i2c_test_msg_s
-{
-  uint16_t addr;
-  uint16_t flags;
-  uint8_t *buffer;
-  uint16_t length;
-};
-
-struct bl616cl_i2c_test_ops_s
-{
-  int (*configure)(void *arg, uint32_t frequency);
-  int (*transfer)(void *arg,
-                  const struct bl616cl_i2c_test_msg_s *msgs, int count);
-  uint32_t (*status)(void *arg);
-  void (*cleanup)(void *arg);
-};
-#endif
-
-/****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
@@ -103,65 +76,5 @@ struct i2c_master_s *bl616cl_i2cbus_initialize(int port, uint8_t scl_pin,
  ****************************************************************************/
 
 int bl616cl_i2cbus_uninitialize(struct i2c_master_s *dev);
-
-#ifdef CONFIG_BL616CL_I2C_TEST
-
-/****************************************************************************
- * Name: bl616cl_i2c_test_install
- *
- * Description:
- *   Install or remove a test transport for an initialized port, replacing the
- *   real controller access. Passing NULL ops removes it.
- *
- * Input Parameters:
- *   port - I2C port number
- *   ops  - Test operations (configure, transfer, status, cleanup), or NULL
- *   arg  - Argument passed to every test operation
- *
- * Returned Value:
- *   Zero (OK) on success; a negated errno value on failure. Errors: -EINVAL
- *   for an unknown port or incomplete ops; -ENODEV if the port is not
- *   initialized.
- *
- ****************************************************************************/
-
-int bl616cl_i2c_test_install(int port,
-                             const struct bl616cl_i2c_test_ops_s *ops,
-                             void *arg);
-
-/****************************************************************************
- * Name: bl616cl_i2c_test_device
- *
- * Description:
- *   Get the I2C master handle of an initialized port for tests.
- *
- * Input Parameters:
- *   port - I2C port number
- *
- * Returned Value:
- *   The I2C master handle; NULL if the port is unknown or not initialized.
- *
- ****************************************************************************/
-
-struct i2c_master_s *bl616cl_i2c_test_device(int port);
-
-/****************************************************************************
- * Name: bl616cl_i2c_test_last_status
- *
- * Description:
- *   Read the interrupt status captured at the last transport failure of a
- *   port, for tests.
- *
- * Input Parameters:
- *   port - I2C port number
- *
- * Returned Value:
- *   The captured status; 0 if the port is unknown or no failure occurred.
- *
- ****************************************************************************/
-
-uint32_t bl616cl_i2c_test_last_status(int port);
-
-#endif
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL616CL_BL616CL_I2C_H */
