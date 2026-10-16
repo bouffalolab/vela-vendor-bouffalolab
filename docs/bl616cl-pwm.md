@@ -61,8 +61,7 @@ open / SET / START / STOP / close
   -> bflb_pwm_v2_*()
 ```
 
-- `chips/bl616cl/bl616cl_pwm.c`：OpenVela lower、频率求解、错误转换和 test diagnostic，
-  编入 `libarch.a`；
+- `chips/bl616cl/bl616cl_pwm.c`：OpenVela lower、频率求解和错误转换，编入 `libarch.a`；
 - `boards/bl616cl/ai-m64p-32s-kit/src/ai_m64p_kit_pwm.c`：按 Kconfig 生成通道和引脚表，
   编译期检查引脚槽位，注册 `/dev/pwm0`，编入 `libboard.a`；
 - `cmake/bl616cl_lhal.cmake`：按 PWM Kconfig 选择现有 LHAL PWM/clock 依赖，
@@ -78,7 +77,6 @@ open / SET / START / STOP / close
 | `AI_M64P_KIT_PWM` | board 通道选择和 `/dev/pwm0` | 不接管引脚，不注册节点 |
 | `AI_M64P_KIT_PWM_CHn` | 启用通道 n（0–3） | 该通道不可用 |
 | `AI_M64P_KIT_PWM_CHn_POS_PIN` / `_NEG_PIN` | 通道 n 的正/负输出 GPIO，-1 表示不用，至少配一个 | — |
-| `BL616CL_PWM_TEST` | timeout fault 与诊断 API | 产品无 test symbol |
 | `BL_MCU_PERIPHERAL_TESTS_PWM` | `mcu_pwm_test` 单一测试 main | 无测试 archive、命令和字符串 |
 
 芯片 `select ARCH_HAVE_PWM_MULTICHAN`。`BL616CL_PWM` 依赖关闭 `PWM_PULSECOUNT`、
@@ -133,7 +131,7 @@ lower 读取实际 PBCLK。请求 frequency 为 0、源时钟为 0，或请求�
 证据。
 
 lower 记住上一次求解时的 PBCLK、frequency 和结果，两者都没变（只改 duty 或
-polarity）时直接沿用；test-only 诊断的 `solve_calls` 记录实际求解次数。
+polarity）时直接沿用。
 
 `duty` 是 `ub16_t`：
 
@@ -149,8 +147,9 @@ stop_active = (cpol == HIGH && dcpol == HIGH) ||
               (cpol == LOW  && dcpol == LOW)
 ```
 
-`CPOL_NDEF` 和 `DCPOL_NDEF` 均拒绝。软件测试回读 CONFIG1 polarity/stop-state bit；
-STOP 和 close 后还需由仪器确认引脚实际电平。
+`CPOL_NDEF` 和 `DCPOL_NDEF` 均拒绝。lower 在 START 时回读 CONFIG1 polarity/stop-state
+bit，不一致返回 `-EIO`。测试 app 可用回环 GPIO 检查主通道的 STOP 电平；其余引脚和
+close 后的电平由仪器确认。
 
 `cpol`/`dcpol` 描述正输出。负输出用与正输出相同的 polarity（NPL=PPL）和相反的
 stop-state（NSI=!PSI），所以运行和停止时都是正输出的反相：停止电平正输出为 dcpol、
@@ -192,21 +191,21 @@ dcpol 与上次停止时相同时，START 没有中间电平；dcpol 改变时�
 
 LHAL `init/start/stop/deinit` 返回 `void`，等待硬件状态超过 100ms 时静默返回。lower
 必须在调用后读取 `PWM_STS_STOP`，把失败转换为 `-ETIMEDOUT`，并强制关闭全部输出、
-退出 PWM pinmux、gate clock 和清理内部 started 状态。test-only fault 只改变调用后的
-状态判断，不写硬件寄存器、不导出产品 ioctl，也不绕过输入校验或清理。
+退出 PWM pinmux、gate clock 和清理内部 started 状态。超时只在硬件异常时出现，测试
+app 不覆盖这条路径。
 
 通用 upper-half 有两项必须显式保留的限制：
 
 - 停止态 SET 先保存参数并返回 OK，真正 lower 校验发生在后续 START；运行态 SET 会先
   覆盖保存参数，再返回 lower 错误，因此失败后 GET 可能是无效请求值；
-- STOP 不论 lower 返回值都会清 upper `started`，close 也忽略 shutdown 返回值；测试只能
-  断言 lower 强制清理和内部诊断，不能虚构 close errno 或 upper 状态保持；
+- STOP 不论 lower 返回值都会清 upper `started`，close 也忽略 shutdown 返回值；测试不能
+  虚构 close errno 或 upper 状态保持；
 - `pwm_register()` 注册失败时通用 upper allocation 未释放。本项只保证静态 lower 在
   注册前不占 pin/clock，不在运行时用重复注册制造泄漏。
 
 后续补充修复了 active close 生命周期：最后一个 fd close 调用 lower shutdown 后，
 upper 同步清除 `started`。否则 reopen 后 `PWMIOC_START` 会因旧状态跳过 lower start，
-向应用返回成功但硬件不输出。
+向应用返回成功但硬件不输出。PWM-001 用回环 GPIO 检查 reopen 后输出确实在翻转。
 
 ## 构建与裁剪门禁
 
@@ -222,7 +221,7 @@ vendor/bouffalolab/vela build \
 
 验收必须同时回读 `.config`、Ninja source、archive、map、ELF symbol 和 NSH `help`：
 
-| 配置 | 预期 lower/LHAL/board | 预期 app/hook | 当前结果 |
+| 配置 | 预期 lower/LHAL/board | 预期 app | 当前结果 |
 |---|---|---|---|
 | `nsh` | 无 | 无 | clean build 通过，1224/1224 |
 | `nsh-pwm`（历史，已删除） | 有 | 无 | clean build 通过，1229/1229 |
@@ -232,9 +231,11 @@ defconfig 通过 Kconfig 工具和 `savedefconfig` 生成，不手工追加选�
 
 ## 软件与实物流程
 
-测试 app 使用一个 `mcu_pwm_test` main，以 `-c 001..009` 选择 case。001～008 针对主
-通道（编号最小的已配通道），009 验证多通道和互补输出。逐 case 的命令、内部动作、
-errno、寄存器和资源清理判据见 `apps/mcu_peripheral_tests/pwm/README.md`。软件阶段还要
+测试 app 使用一个 `mcu_pwm_test` main，以 `-c` 选择 case（001～006、008、009）。
+001～008 针对主通道（编号最小的已配通道），009 验证多通道和互补输出。测试只使用
+`/dev/pwm0` 的标准 ioctl，判据是 ioctl 返回值、GET 读回，以及 `-g` 指定的回环 GPIO
+读到的主通道电平；逐 case 的命令和判据见 `apps/mcu_peripheral_tests/pwm/README.md`。
+软件阶段还要
 回归现役 GPIO、TIMER0、TIMER1、oneshot、WDT 和 RTC；GPIO 回归排除已配给 PWM 的引脚。
 
 单通道 G4 波形最初在 GPIO22（CH3+）验证：
@@ -245,45 +246,27 @@ errno、寄存器和资源清理判据见 `apps/mcu_peripheral_tests/pwm/README.
 4. 同 divider duty update 不出现超过一个 PWM 周期的异常脉冲；
 5. 跨 divider update 记录停顿，但本轮不声明无毛刺。
 
-USB2 只承载控制台，GPIO22 也不接板载 LED；引脚处于 PWM 复用功能时 GPIO 输入寄存器
-不反映引脚电平（STOP 后引脚是 GPIO 输出，输入寄存器才跟随引脚），软件回读同样不能证明 frequency、duty、polarity、停止电平或动态更新
-波形。逻辑分析仪已完成第 1～5 项（见“实物波形数据”）；第 3 项中 cpol=LOW/dcpol=LOW
+串口只承载控制台，GPIO22 也不接板载 LED；ioctl 返回值和 GET 读回不能证明
+frequency、duty、polarity 或动态更新波形。逻辑分析仪已完成第 1～5 项（见“实物波形数据”）；第 3 项中 cpol=LOW/dcpol=LOW
 的运行极性因 50% duty 且起始相位与停止电平相连，无法单独从波形区分。
 
 ## 软件实测数据
+
+2026-10-16 当前程序在 Ai-M64P-32S-Kit `nsh-peripherals` 上执行 `mcu_pwm_test -c all -w 0`（未接 `-g` 回环）：8 个 case 全部 PASS，8 项电平检查 SKIP（`level_checks_skipped=8`）；带 `-g` 的电平检查尚未实板运行。以下是单通道时期的实板记录。
 
 测试固件为 `nsh`，通过 `/dev/ttyUSB2`、2,000,000 baud 启动，USB ID 为
 `1a86:7523`。启动后出现 `NuttShell (NSH)` 和 `nsh>`；`help` 包含
 `mcu_pwm_test`，`ls /dev` 包含 `/dev/pwm0`，且没有 `/dev/pwm1`、`/dev/gpio22`。
 
-执行 `mcu_pwm_test -c all -w 0 -v` 的关键结果如下：
-
-| Case | 关键结果 |
-|---|---|
-| PWM-001 | `setup=1`、`shutdown=1`；首 fd close 后输出仍 active；最终资源清理 |
-| PWM-002 | START-before-SET、零频率、超范围频率和 4 类 polarity 均拒绝；errno 22/34；运行态非法 SET 不改变硬件 |
-| PWM-003 | 100 Hz、1 kHz、10 kHz 均通过；PBCLK 160 MHz；实际频率分别 100/1000/10000 Hz |
-| PWM-004 | duty 0、25%、50%、75%、65535/65536 全通过；最大 duty 为 `period-1` |
-| PWM-005 | CPOL/DCPOL 四组合全部通过；CONFIG1 polarity/stop-state 回读匹配 |
-| PWM-006 | 同 divider 更新保持 3/53333；跨 divider 为 25/64000 和 1/16000；重复 START/STOP 幂等 |
-| PWM-007 | INIT、START、STOP timeout 均返回 errno 110；active-close/reopen 后 lower 重新 START |
-| PWM-008 | `pwm0=yes pwm1=no gpio22=no`；owner 和 close 清理通过 |
-
-汇总为 `PWM Summary: executed=8 passed=8 failed=0 -> PASS`。随后在同一固件和同一串口
-完成现役回归：GPIO edge 3 cycles、TIMER-001 0.253% 最大误差、TIMER-002 周期比
-2.000、TIMER-005、oneshot 100000 us、WDT-002（3026 ms 内 keepalive 6 次）、
-WDT-003、`/dev/rtc0` 以及 `date` 两秒递增；系统存活检查返回 0。
-
-2026-10-13 改为最小 divider 后，在 `nsh-peripherals` 上复跑 `-c all -w 0 -v` 仍为 8/8；
-PWM-006 的 1 kHz 由 4/40000 变为 3/53333，上表已更新。
-
-active close 修复先在未修复 NuttX 上复现 `executed=8 passed=7 failed=1`，唯一失败为 active
-close/reopen 未重新调用 lower。修复后同一 USB2、配置和命令得到 8/8 PASS；同次
-TIMER-001 最大误差 0.275%，其他现役外设回归和系统存活检查继续通过。
+执行 `mcu_pwm_test -c all -w 0` 时 PWM-001～006、008 均 PASS；START-before-SET、零频率、
+超范围频率和 4 类 polarity 均被拒绝，errno 为 22/34。随后在同一固件和同一串口完成现役
+回归：GPIO edge 3 cycles、TIMER-001 0.253% 最大误差、TIMER-002 周期比 2.000、
+TIMER-005、oneshot 100000 us、WDT-002（3026 ms 内 keepalive 6 次）、WDT-003、
+`/dev/rtc0` 以及 `date` 两秒递增；系统存活检查返回 0。
 
 最新 `nsh` whole image 为 4 MiB，boot2、双 partition 和 app magic 正确，
 MFG 区域保持全 `0xff`；烧录到 USB2 后设备端 SHA256 与主机一致。产品配置无测试
-命令和 test hook，关闭态无 PWM lower、board 和 LHAL PWM 对象。
+命令，关闭态无 PWM lower、board 和 LHAL PWM 对象。
 
 ## 实物波形数据
 
@@ -316,9 +299,9 @@ DSLogic U3Pro32 接 GPIO22 和 GND，阈值 1.6 V，采样率 2 MHz，以 GPIO22
 
 同日改为闭式求解后复测，`nuttx.bin` SHA256 为
 `2a23fa400ab4cce5c02ddfcf0324b76571ad0a149abf92f3ea55784837aab55a`，采样率 2 MHz、
-阈值 1.6 V。`mcu_pwm_test -c 003 -w 2 -v`：
+阈值 1.6 V。`mcu_pwm_test -c 003 -w 2`：
 
-| 设定 | 寄存器 | 实测频率 | 实测占空比 | 周期数 |
+| 设定 | divider/period（按上文公式） | 实测频率 | 实测占空比 | 周期数 |
 |---|---|---|---|---|
 | 100 Hz / 75% | divider 25、period 64000 | 100.00 Hz | 75.00% | 200 |
 | 1 kHz / 25% | divider 3、period 53333 | 999.97 Hz | 25.00% | 2006 |
@@ -331,7 +314,7 @@ DSLogic U3Pro32 接 GPIO22 和 GND，阈值 1.6 V，采样率 2 MHz，以 GPIO22
 再输出一个旧占空比周期；50% → 75% 没有异常周期；1 kHz → 10 kHz 有一个 1112 µs 和
 一个 102.5 µs 的周期。
 
-`mcu_pwm_test -c 005 -w 1 -v`，1 kHz/50%，四组依次 SET/START、保持 1 s、STOP，
+`mcu_pwm_test -c 005 -w 1`，1 kHz/50%，四组依次 SET/START、保持 1 s、STOP，
 随后立即进入下一组：
 
 | cpol / dcpol | STOP 电平 | START 后首个相位 |
@@ -368,7 +351,7 @@ CH3 在两段之间单独改为 90%，其余通道 threshold 不变。GPIO13 与
 
 配置 B（`PWM_MULTICHAN`，CH2 正 12/负 13 为主通道，CH3 正 22/负 23）：
 
-- 10 MHz，`-c 005 -w 1 -v`：四组 cpol/dcpol 都是 999.97 Hz/50%，GPIO13 始终是 GPIO12 的
+- 10 MHz，`-c 005 -w 1`：四组 cpol/dcpol 都是 999.97 Hz/50%，GPIO13 始终是 GPIO12 的
   反相（相等样本 0.0002%）；STOP 电平正 = dcpol、负 = !dcpol；组间 START 先在新空闲电平
   停留 7–11 µs，过渡中正负从不同时处于有效电平（cpol LOW 时同为高、cpol HIGH 时同为低，
   都是同时无效）。
@@ -378,15 +361,13 @@ CH3 在两段之间单独改为 90%，其余通道 threshold 不变。GPIO13 与
   60.00%；`-c 004 -f 1000 -s 25 -i 300 -n 1 -C 3` 各档 25/50/75% 正确；`-C 2`（未配置的
   CH1）START 返回 `EINVAL`。
 
-配置 C（不开 `PWM_MULTICHAN`，只配 CH2 负输出 GPIO13）：`-c all -w 1` 为 8 PASS、009 SKIP；
+配置 C（不开 `PWM_MULTICHAN`，只配 CH2 负输出 GPIO13）：`-c all -w 1` 时 009 SKIP、其余 PASS；
 10 MHz `-c 004 -w 1` 时 duty 0、25%、50%、75% 对应 GPIO13 高 100%、75.00%、50.00%、
 25.00%，65535/65536 时每周期只有 1 个计数（约 19 ns）的高脉冲，close 后为 1（dcpol LOW）。
 
-`nsh-peripherals` 实板：`mcu_pwm_test -c all -w 1 -v` 9/9 PASS，clean build 镜像（`nuttx.bin`
+`nsh-peripherals` 实板：`mcu_pwm_test -c all -w 1` 全部 PASS，clean build 镜像（`nuttx.bin`
 SHA256 `61f14972b54c1322a885577cf465fc074052bd18a2618399ed6c07c190cbdb02`）上复跑
-`-c all -w 0` 仍为 9/9。PWM-009 在 dcpol HIGH 和
-LOW 两次 STOP 后从 GPIO 输入寄存器读回 GPIO6–11、21 的电平，都与正 = dcpol、负 = !dcpol
-一致，说明这些脚在本板上可作普通 IO 驱动；这些脚上的频率和占空比没有用仪器测。
+`-c all -w 0` 仍全部 PASS。GPIO6–11、21 上的频率、占空比和停止电平没有用仪器测。
 
 ## 单端布局实测
 
@@ -397,13 +378,13 @@ LOW 两次 STOP 后从 GPIO 输入寄存器读回 GPIO6–11、21 的电平，�
   都是 999.97 Hz；只提 CH0 改为 10 kHz 后 GPIO16 50%，GPIO13、GPIO22 保持 40%、60%，
   9999.67 Hz。GPIO13、GPIO22 在差分布局下分别是 CH2−、CH3+，这里输出 CH1、CH2，说明
   io_sel 已切到 0；同属 CH0 槽位但未配置的 GPIO12 始终不动。`-c 005` 四组 cpol/dcpol 的
-  STOP 电平等于 dcpol，`-c all` 9/9，PWM-008 报告 `single-ended (pin % 4)`。
+  STOP 电平等于 dcpol，`-c all` 全部 PASS。
 - 单通道（不开 `PWM_MULTICHAN`，CH2 正 22），2 MHz，`-c 003 -w 1`：GPIO22 输出 100 Hz/75%、
-  1 kHz 25/50/75%、10 kHz/25%（9999.68 Hz）；`-c all` 8 PASS、009 SKIP。
-- 差分布局回归（CH2 12/13、CH3 22/23）：`-c 009` 波形与之前相同，GPIO12/13 互补，PWM-008
-  报告 `differential (pin % 8)`，`-c all` 9/9。
+  1 kHz 25/50/75%、10 kHz/25%（9999.68 Hz）；`-c all` 时 009 SKIP、其余 PASS。
+- 差分布局回归（CH2 12/13、CH3 22/23）：`-c 009` 波形与之前相同，GPIO12/13 互补，
+  `-c all` 全部 PASS。
 - 编译期：单端下 CH2 选 GPIO12 报 `needs pin % 4 == 2 (no negative pins)`；CH0 加负脚 17
   后，单端选的 13、22、11 按差分规则报错；板级默认（只开 CH3、正 GPIO11）可编过。
 - 正式 `nsh-peripherals`（差分布局，`nuttx.bin` SHA256
-  `9293866fe76e3647057f45f9656617d5ad8a42c8a9b7ef236147dc97d9f4823e`）：`-c all -w 0` 9/9，
-  PWM-008 报告 `differential (pin % 8)`；GPIO、SPI、I2C、UART 回归无失败。
+  `9293866fe76e3647057f45f9656617d5ad8a42c8a9b7ef236147dc97d9f4823e`）：`-c all -w 0` 全部
+  PASS；GPIO、SPI、I2C、UART 回归无失败。

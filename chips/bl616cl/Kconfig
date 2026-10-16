@@ -387,17 +387,6 @@ config BL616CL_PWM
 		channel. Pulse count, fixed-point frequency and dead-time ABIs are
 		not supported.
 
-if BL616CL_PWM
-
-config BL616CL_PWM_TEST
-	bool
-	default n
-	---help---
-		Enable test-only timeout injection and diagnostic hooks. Product
-		configurations must leave this option disabled.
-
-endif # BL616CL_PWM
-
 menuconfig BL616CL_RTC
 	bool "Real-time clock (RTC)"
 	default n

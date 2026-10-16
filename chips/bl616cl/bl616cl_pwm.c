@@ -41,9 +41,6 @@
 #include "hardware/glb_reg.h"
 #include "hardware/pwm_v2_reg.h"
 #include "bl616cl_pwm.h"
-#ifdef CONFIG_BL616CL_PWM_TEST
-#include <arch/chip/bl616cl_pwm.h>
-#endif
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -97,15 +94,6 @@ struct bl616cl_pwm_solution_s
   uint32_t actual;
 };
 
-enum bl616cl_pwm_operation_e
-{
-  BL616CL_PWM_OPERATION_NONE = 0,
-  BL616CL_PWM_OPERATION_INIT,
-  BL616CL_PWM_OPERATION_START,
-  BL616CL_PWM_OPERATION_STOP,
-  BL616CL_PWM_OPERATION_DEINIT,
-};
-
 /* Requested output of one channel. cpol and dcpol describe the positive
  * output; the negative output is always its complement.
  */
@@ -136,28 +124,15 @@ struct bl616cl_pwm_lowerhalf_s
   struct bflb_device_s *dev;
   struct bflb_device_s *gpio;
   uint32_t source_frequency;
-  uint32_t actual_frequency;
   uint32_t solved_source;
   uint32_t solved_frequency;
   struct bl616cl_pwm_solution_s solved;
   struct bl616cl_pwm_chan_s chan[BL616CL_PWM_NCHANNELS];
   uint16_t divider;
-  uint16_t period;
   bool initialized;
   bool diff_end;      /* PWM_IO_SEL_DIFF_END: some channel has a negative pin */
-  bool pin_acquired;
   bool clock_enabled;
   bool started;
-#ifdef CONFIG_BL616CL_PWM_TEST
-  enum bl616cl_pwm_test_fault_e fault;
-  uint32_t setup_calls;
-  uint32_t start_calls;
-  uint32_t stop_calls;
-  uint32_t shutdown_calls;
-  uint32_t solve_calls;
-  uint32_t error_count;
-  int last_error;
-#endif
 };
 
 /****************************************************************************
@@ -197,37 +172,6 @@ static struct bl616cl_pwm_lowerhalf_s g_bl616cl_pwm =
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
-
-/****************************************************************************
- * Name: bl616cl_pwm_record_error
- *
- * Description:
- *   Remember the last result and count failures for the test diagnostics.
- *   Does nothing when CONFIG_BL616CL_PWM_TEST is disabled.
- *
- * Input Parameters:
- *   priv - PWM lower-half state
- *   error - Result to record (OK or a negated errno value)
- *
- * Returned Value:
- *   None.
- *
- ****************************************************************************/
-
-static void bl616cl_pwm_record_error(
-  struct bl616cl_pwm_lowerhalf_s *priv, int error)
-{
-#ifdef CONFIG_BL616CL_PWM_TEST
-  priv->last_error = error;
-  if (error < 0)
-    {
-      priv->error_count++;
-    }
-#else
-  UNUSED(priv);
-  UNUSED(error);
-#endif
-}
 
 /****************************************************************************
  * Name: bl616cl_pwm_solve
@@ -298,31 +242,17 @@ static int bl616cl_pwm_solve(uint32_t source, uint32_t frequency,
  *
  * Description:
  *   Check whether the PWM counter has stopped by reading the STOP status bit.
- *   With the test fault injection, a matching fault forces the result.
  *
  * Input Parameters:
  *   priv - PWM lower-half state
- *   operation - Operation being checked, used for test fault injection
  *
  * Returned Value:
  *   true if the counter is stopped; false otherwise.
  *
  ****************************************************************************/
 
-static bool bl616cl_pwm_stopped(
-  struct bl616cl_pwm_lowerhalf_s *priv,
-  enum bl616cl_pwm_operation_e operation)
+static bool bl616cl_pwm_stopped(struct bl616cl_pwm_lowerhalf_s *priv)
 {
-#ifdef CONFIG_BL616CL_PWM_TEST
-  if (operation != BL616CL_PWM_OPERATION_NONE &&
-      (int)priv->fault == (int)operation)
-    {
-      return operation == BL616CL_PWM_OPERATION_START;
-    }
-#else
-  UNUSED(operation);
-#endif
-
   return (getreg32(priv->dev->reg_base + PWM_MC0_CONFIG0_OFFSET) &
           PWM_STS_STOP) != 0;
 }
@@ -474,8 +404,6 @@ static void bl616cl_pwm_drive_stopped_pins(
 
       chan->routed = false;
     }
-
-  priv->pin_acquired = false;
 }
 
 /****************************************************************************
@@ -545,7 +473,6 @@ static int bl616cl_pwm_acquire(struct bl616cl_pwm_lowerhalf_s *priv)
       return ret;
     }
 
-  priv->pin_acquired = true;
   return OK;
 }
 
@@ -594,7 +521,6 @@ static void bl616cl_pwm_release(struct bl616cl_pwm_lowerhalf_s *priv)
  *
  * Input Parameters:
  *   priv - PWM lower-half state
- *   operation - Operation being performed, used for test fault injection
  *
  * Returned Value:
  *   Zero (OK) on success; a negated errno value on failure. -ETIMEDOUT if the
@@ -602,8 +528,7 @@ static void bl616cl_pwm_release(struct bl616cl_pwm_lowerhalf_s *priv)
  *
  ****************************************************************************/
 
-static int bl616cl_pwm_force_stop(struct bl616cl_pwm_lowerhalf_s *priv,
-                                  enum bl616cl_pwm_operation_e operation)
+static int bl616cl_pwm_force_stop(struct bl616cl_pwm_lowerhalf_s *priv)
 {
   uintptr_t config1;
   uint32_t enable = 0;
@@ -626,7 +551,7 @@ static int bl616cl_pwm_force_stop(struct bl616cl_pwm_lowerhalf_s *priv,
       config1 = priv->dev->reg_base + PWM_MC0_CONFIG1_OFFSET;
       putreg32(getreg32(config1) & ~enable, config1);
       bflb_pwm_v2_stop(priv->dev);
-      stop_stopped = bl616cl_pwm_stopped(priv, operation);
+      stop_stopped = bl616cl_pwm_stopped(priv);
 
       /* The outputs now hold the idle levels. Hand the pins to GPIO before
        * the deinit below resets the output polarity and stop states.
@@ -634,12 +559,10 @@ static int bl616cl_pwm_force_stop(struct bl616cl_pwm_lowerhalf_s *priv,
 
       bl616cl_pwm_drive_stopped_pins(priv);
       bflb_pwm_v2_deinit(priv->dev);
-      deinit_stopped = bl616cl_pwm_stopped(
-        priv, BL616CL_PWM_OPERATION_DEINIT);
+      deinit_stopped = bl616cl_pwm_stopped(priv);
       bl616cl_pwm_release(priv);
       if (!stop_stopped || !deinit_stopped)
         {
-          bl616cl_pwm_record_error(priv, -ETIMEDOUT);
           pwmerr("ERROR: PWM stop timed out: stop=%u deinit=%u\n",
                  stop_stopped, deinit_stopped);
           return -ETIMEDOUT;
@@ -650,7 +573,6 @@ static int bl616cl_pwm_force_stop(struct bl616cl_pwm_lowerhalf_s *priv,
       bl616cl_pwm_release(priv);
     }
 
-  bl616cl_pwm_record_error(priv, OK);
   return OK;
 }
 
@@ -922,8 +844,7 @@ static void bl616cl_pwm_configure(struct bl616cl_pwm_lowerhalf_s *priv,
  * Description:
  *   Read back the PWM registers and the GLB pin layout and check that they
  *   match the computed solution, the selected layout and the requested
- *   setting of every channel. Updates the cached divider, period and actual
- *   frequency.
+ *   setting of every channel. Updates the cached divider.
  *
  * Input Parameters:
  *   priv     - PWM lower-half state
@@ -1000,9 +921,12 @@ static int bl616cl_pwm_readback(
 
   denominator = (uint64_t)divider * period;
   priv->divider = divider;
-  priv->period = period;
-  priv->actual_frequency = priv->source_frequency / denominator;
-  return priv->actual_frequency == solution->actual ? OK : -EIO;
+  if (priv->source_frequency / denominator != solution->actual)
+    {
+      return -EIO;
+    }
+
+  return OK;
 }
 
 /****************************************************************************
@@ -1027,9 +951,6 @@ static int bl616cl_pwm_setup(struct pwm_lowerhalf_s *lower)
     (struct bl616cl_pwm_lowerhalf_s *)lower;
   int ret;
 
-#ifdef CONFIG_BL616CL_PWM_TEST
-  priv->setup_calls++;
-#endif
   if (priv->initialized)
     {
       return OK;
@@ -1038,18 +959,16 @@ static int bl616cl_pwm_setup(struct pwm_lowerhalf_s *lower)
   ret = bl616cl_pwm_enable_clock(priv);
   if (ret < 0)
     {
-      bl616cl_pwm_record_error(priv, ret);
       return ret;
     }
 
-  ret = bl616cl_pwm_force_stop(priv, BL616CL_PWM_OPERATION_NONE);
+  ret = bl616cl_pwm_force_stop(priv);
   if (ret < 0)
     {
       return ret;
     }
 
   priv->initialized = true;
-  bl616cl_pwm_record_error(priv, OK);
   return OK;
 }
 
@@ -1075,10 +994,7 @@ static int bl616cl_pwm_shutdown(struct pwm_lowerhalf_s *lower)
     (struct bl616cl_pwm_lowerhalf_s *)lower;
   int ret;
 
-#ifdef CONFIG_BL616CL_PWM_TEST
-  priv->shutdown_calls++;
-#endif
-  ret = bl616cl_pwm_force_stop(priv, BL616CL_PWM_OPERATION_STOP);
+  ret = bl616cl_pwm_force_stop(priv);
   priv->initialized = false;
   return ret;
 }
@@ -1117,13 +1033,9 @@ static int bl616cl_pwm_start(struct pwm_lowerhalf_s *lower,
   int ret;
   int ch;
 
-#ifdef CONFIG_BL616CL_PWM_TEST
-  priv->start_calls++;
-#endif
   ret = bl616cl_pwm_request(priv, info, next);
   if (ret < 0)
     {
-      bl616cl_pwm_record_error(priv, ret);
       return ret;
     }
 
@@ -1141,14 +1053,10 @@ static int bl616cl_pwm_start(struct pwm_lowerhalf_s *lower,
     }
   else
     {
-#ifdef CONFIG_BL616CL_PWM_TEST
-      priv->solve_calls++;
-#endif
       ret = bl616cl_pwm_solve(priv->source_frequency, info->frequency,
                               &solution);
       if (ret < 0)
         {
-          bl616cl_pwm_record_error(priv, ret);
           return ret;
         }
 
@@ -1162,7 +1070,6 @@ static int bl616cl_pwm_start(struct pwm_lowerhalf_s *lower,
       ret = bl616cl_pwm_acquire(priv);
       if (ret < 0)
         {
-          bl616cl_pwm_record_error(priv, ret);
           return ret;
         }
 
@@ -1179,8 +1086,7 @@ static int bl616cl_pwm_start(struct pwm_lowerhalf_s *lower,
     {
       if (priv->started)
         {
-          ret = bl616cl_pwm_force_stop(
-            priv, BL616CL_PWM_OPERATION_STOP);
+          ret = bl616cl_pwm_force_stop(priv);
           if (ret < 0)
             {
               return ret;
@@ -1190,7 +1096,6 @@ static int bl616cl_pwm_start(struct pwm_lowerhalf_s *lower,
       ret = bl616cl_pwm_acquire(priv);
       if (ret < 0)
         {
-          bl616cl_pwm_record_error(priv, ret);
           return ret;
         }
 
@@ -1199,24 +1104,18 @@ static int bl616cl_pwm_start(struct pwm_lowerhalf_s *lower,
       config.clk_div = solution.divider;
       config.period = solution.period;
       bflb_pwm_v2_init(priv->dev, &config);
-      if (!bl616cl_pwm_stopped(priv,
-                               BL616CL_PWM_OPERATION_INIT))
+      if (!bl616cl_pwm_stopped(priv))
         {
-          bl616cl_pwm_force_stop(
-            priv, BL616CL_PWM_OPERATION_NONE);
-          bl616cl_pwm_record_error(priv, -ETIMEDOUT);
+          bl616cl_pwm_force_stop(priv);
           pwmerr("ERROR: PWM initialization timed out\n");
           return -ETIMEDOUT;
         }
 
       bl616cl_pwm_configure(priv, next, solution.period);
       bflb_pwm_v2_start(priv->dev);
-      if (bl616cl_pwm_stopped(priv,
-                              BL616CL_PWM_OPERATION_START))
+      if (bl616cl_pwm_stopped(priv))
         {
-          bl616cl_pwm_force_stop(
-            priv, BL616CL_PWM_OPERATION_NONE);
-          bl616cl_pwm_record_error(priv, -ETIMEDOUT);
+          bl616cl_pwm_force_stop(priv);
           pwmerr("ERROR: PWM start timed out\n");
           return -ETIMEDOUT;
         }
@@ -1225,8 +1124,7 @@ static int bl616cl_pwm_start(struct pwm_lowerhalf_s *lower,
   ret = bl616cl_pwm_readback(priv, next, &solution);
   if (ret < 0)
     {
-      bl616cl_pwm_force_stop(priv, BL616CL_PWM_OPERATION_NONE);
-      bl616cl_pwm_record_error(priv, ret);
+      bl616cl_pwm_force_stop(priv);
       pwmerr("ERROR: PWM configuration readback failed\n");
       return ret;
     }
@@ -1237,7 +1135,6 @@ static int bl616cl_pwm_start(struct pwm_lowerhalf_s *lower,
     }
 
   priv->started = true;
-  bl616cl_pwm_record_error(priv, OK);
   return OK;
 }
 
@@ -1262,11 +1159,7 @@ static int bl616cl_pwm_stop(struct pwm_lowerhalf_s *lower)
   struct bl616cl_pwm_lowerhalf_s *priv =
     (struct bl616cl_pwm_lowerhalf_s *)lower;
 
-#ifdef CONFIG_BL616CL_PWM_TEST
-  priv->stop_calls++;
-#endif
-  return bl616cl_pwm_force_stop(priv,
-                                BL616CL_PWM_OPERATION_STOP);
+  return bl616cl_pwm_force_stop(priv);
 }
 
 /****************************************************************************
@@ -1408,155 +1301,3 @@ bl616cl_pwm_initialize(const struct bl616cl_pwm_output_s *outputs,
 
   return (struct pwm_lowerhalf_s *)priv;
 }
-
-#ifdef CONFIG_BL616CL_PWM_TEST
-/****************************************************************************
- * Name: bl616cl_pwm_test_reset
- *
- * Description:
- *   Clear the test fault, call counters, last error and the cached
- *   divider/period solution.
- *
- * Input Parameters:
- *   None
- *
- * Returned Value:
- *   None.
- *
- ****************************************************************************/
-
-void bl616cl_pwm_test_reset(void)
-{
-  g_bl616cl_pwm.fault = BL616CL_PWM_TEST_FAULT_NONE;
-  g_bl616cl_pwm.setup_calls = 0;
-  g_bl616cl_pwm.start_calls = 0;
-  g_bl616cl_pwm.stop_calls = 0;
-  g_bl616cl_pwm.shutdown_calls = 0;
-  g_bl616cl_pwm.solve_calls = 0;
-  g_bl616cl_pwm.solved_frequency = 0;
-  g_bl616cl_pwm.error_count = 0;
-  g_bl616cl_pwm.last_error = OK;
-}
-
-/****************************************************************************
- * Name: bl616cl_pwm_test_set_fault
- *
- * Description:
- *   Select the fault to inject into later operations.
- *
- * Input Parameters:
- *   fault - Fault to inject, BL616CL_PWM_TEST_FAULT_NONE to disable
- *
- * Returned Value:
- *   Zero (OK) on success; a negated errno value on failure. -EINVAL if the
- *   fault value is out of range.
- *
- ****************************************************************************/
-
-int bl616cl_pwm_test_set_fault(enum bl616cl_pwm_test_fault_e fault)
-{
-  if (fault < BL616CL_PWM_TEST_FAULT_NONE ||
-      fault > BL616CL_PWM_TEST_FAULT_DEINIT_TIMEOUT)
-    {
-      return -EINVAL;
-    }
-
-  g_bl616cl_pwm.fault = fault;
-  return OK;
-}
-
-/****************************************************************************
- * Name: bl616cl_pwm_test_get_diag
- *
- * Description:
- *   Copy the call counters, last error, cached settings and the per-channel
- *   state to a diagnostics structure. Output enables, polarity and stop
- *   states are read from the registers while the clock is enabled; the pin
- *   levels are read from the GPIO input register, which follows the pin
- *   only while it is a plain GPIO output (after STOP).
- *
- * Input Parameters:
- *   diag - Location that receives the diagnostics
- *
- * Returned Value:
- *   Zero (OK) on success; a negated errno value on failure. -EINVAL if diag
- *   is NULL.
- *
- ****************************************************************************/
-
-int bl616cl_pwm_test_get_diag(struct bl616cl_pwm_test_diag_s *diag)
-{
-  const struct bl616cl_pwm_chan_s *chan;
-  struct bl616cl_pwm_test_channel_s *out;
-  uint32_t config1 = 0;
-  bool registers;
-  int ch;
-
-  if (diag == NULL)
-    {
-      return -EINVAL;
-    }
-
-  memset(diag, 0, sizeof(*diag));
-  registers = g_bl616cl_pwm.dev != NULL && g_bl616cl_pwm.clock_enabled;
-  if (registers)
-    {
-      config1 = getreg32(g_bl616cl_pwm.dev->reg_base +
-                         PWM_MC0_CONFIG1_OFFSET);
-    }
-
-  diag->setup_calls = g_bl616cl_pwm.setup_calls;
-  diag->start_calls = g_bl616cl_pwm.start_calls;
-  diag->stop_calls = g_bl616cl_pwm.stop_calls;
-  diag->shutdown_calls = g_bl616cl_pwm.shutdown_calls;
-  diag->solve_calls = g_bl616cl_pwm.solve_calls;
-  diag->source_frequency = g_bl616cl_pwm.source_frequency;
-  diag->actual_frequency = g_bl616cl_pwm.actual_frequency;
-  diag->error_count = g_bl616cl_pwm.error_count;
-  diag->last_error = g_bl616cl_pwm.last_error;
-  diag->divider = g_bl616cl_pwm.divider;
-  diag->period = g_bl616cl_pwm.period;
-  diag->io_sel_diff_end = BL616CL_PWM_IO_SEL_DIFF_END();
-  diag->pin_acquired = g_bl616cl_pwm.pin_acquired;
-  diag->clock_enabled = g_bl616cl_pwm.clock_enabled;
-  diag->started = g_bl616cl_pwm.started;
-
-  for (ch = 0; ch < BL616CL_PWM_NCHANNELS; ch++)
-    {
-      chan = &g_bl616cl_pwm.chan[ch];
-      out = &diag->channels[ch];
-      out->pos_pin = chan->pos_pin;
-      out->neg_pin = chan->neg_pin;
-      out->threshold_low = chan->threshold_low;
-      out->threshold_high = chan->threshold_high;
-      out->cpol = chan->set.cpol;
-      out->dcpol = chan->set.dcpol;
-      out->configured = chan->configured;
-      out->active = chan->set.active;
-      out->enabled = chan->enabled;
-      if (registers)
-        {
-          out->pos_output = (config1 & BL616CL_PWM_PEN(ch)) != 0;
-          out->neg_output = (config1 & BL616CL_PWM_NEN(ch)) != 0;
-          out->pos_polarity_high = (config1 & BL616CL_PWM_PPL(ch)) != 0;
-          out->neg_polarity_high = (config1 & BL616CL_PWM_NPL(ch)) != 0;
-          out->pos_stop_active = (config1 & BL616CL_PWM_PSI(ch)) != 0;
-          out->neg_stop_active = (config1 & BL616CL_PWM_NSI(ch)) != 0;
-        }
-
-      if (g_bl616cl_pwm.gpio != NULL && chan->pos_pin >= 0)
-        {
-          out->pos_level = bflb_gpio_read(g_bl616cl_pwm.gpio,
-                                          chan->pos_pin);
-        }
-
-      if (g_bl616cl_pwm.gpio != NULL && chan->neg_pin >= 0)
-        {
-          out->neg_level = bflb_gpio_read(g_bl616cl_pwm.gpio,
-                                          chan->neg_pin);
-        }
-    }
-
-  return OK;
-}
-#endif

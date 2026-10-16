@@ -4,11 +4,12 @@ config BL_MCU_PERIPHERAL_TESTS_PWM
 	depends on AI_M64P_KIT_PWM && BL616CL_PWM
 	depends on !PWM_PULSECOUNT
 	depends on !PWM_FREQUENCY_FIXED && !PWM_DEADTIME
-	select BL616CL_PWM_TEST
 	---help---
-		Enable the BL616CL PWM contract and hardware test runner. This is a
-		test-only application and also enables the lower-half diagnostics and
-		fault-injection hooks. Keep it disabled in product configurations.
+		Enable the BL616CL PWM test runner. It drives /dev/pwm0 through
+		the standard PWM ioctls and checks their results. With a GPIO
+		input wired to the primary channel output (-g) it also checks the
+		idle level after STOP. Waveform frequency and duty are measured
+		with a logic analyzer.
 
 if BL_MCU_PERIPHERAL_TESTS_PWM
 
