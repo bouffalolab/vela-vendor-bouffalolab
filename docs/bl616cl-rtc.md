@@ -195,7 +195,9 @@ cancel、重复 cancel、replace、active query、过去 absolute、zero/negativ
 relative、2038 absolute、settime reprogram、200 ms 重复通知静默检查和再次
 布防均通过。
 
-### 频率与 48 位回绕
+### 频率误差
+
+以下五轮数据是旧版 RTC-004 用 chip 内部 counter 对比得到的输出：
 
 ```text
 RC32K model: 32768 / 1 Hz
@@ -210,9 +212,12 @@ wrap: 0xfffffffffff5 -> 0x000000000005, elapsed=16 ticks
 RTC test PASS (0 failures)
 ```
 
-测量参考是由 MTimer 提供的 `CLOCK_MONOTONIC`，所以 ppm 只表示相对 MTimer
-的频率差，不是绝对校准结果。DIG32K 在相同条件下明显优于 RC32K，因此选择为
-正式默认；RC32K 保留为 Kconfig 可选项。
+现在的 RTC-004 以 `RTC_RD_TIME` 的亚秒时间对照由 MTimer 提供的
+`CLOCK_MONOTONIC`，所以 ppm 只表示相对 MTimer 的频率差，不是绝对校准结果。
+2026-10-16 在 BL616CL-AVE-V10（DIG32K）上连续六轮为 18、4、4、9、7、2 ppm；
+亚秒分辨率约 30.5 µs，5 秒采样的两端量化最多带来约 12 ppm，单轮会有跳动。
+HBN 48 位 counter 的回绕算术不经标准接口暴露，已不在测试范围内。DIG32K 在
+相同条件下明显优于 RC32K，因此选择为正式默认；RC32K 保留为 Kconfig 可选项。
 
 ### warm reset 与 unlink
 

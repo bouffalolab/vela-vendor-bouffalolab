@@ -4,7 +4,7 @@
 
 该目录提供一个 RTC 测试入口 `mcu_rtc_test`，通过 `-c` 选择场景，不拆分
 多个 main。测试经 `/dev/rtc0` 的 OpenVela 标准 ioctl 验证 UTC 日历、亚秒、
-单路 Alarm 和设备生命周期；RTC-004 直接读取 chip 公开的 48 位 HBN counter。
+单路 Alarm 和设备生命周期；RTC-004 用 `RTC_RD_TIME` 的亚秒时间对照 `CLOCK_MONOTONIC` 测时钟频率误差。
 
 测试 app 由 `CONFIG_BL_MCU_PERIPHERAL_TESTS_RTC` 独立控制，默认关闭，并依赖
 `CONFIG_BL616CL_RTC`。统一外设配置 `nsh-peripherals` 自 2026-10-14 起编入该 app
@@ -284,7 +284,7 @@ RTC test PASS (0 failures)
 DIG32K 的 replace/re-arm 耗时为 1999/2000 ms，短 Alarm 为 2 ms，顺序检查
 差值为 282500 ns。短 Alarm 收到 value 516 后还通过 200 ms 重复通知静默检查。
 
-## RTC-004：48 位 counter 与频率模型
+## RTC-004：时钟频率误差
 
 命令：
 
@@ -294,27 +294,31 @@ mcu_rtc_test -c 004
 
 流程：
 
-1. 读取 raw counter，以 `CLOCK_MONOTONIC` 测量约 5 秒后再次读取。
-2. 用 48 位 mask 计算 delta，输出模型频率、相对观测频率和误差。
-3. 验证 `0xfffffffffff5 -> 0x000000000005` 的软件回绕结果为 16 ticks，
-   并验证正反向差值。
-4. 连续运行五轮，每轮必须看到 counter 前进、回绕通过和统一 PASS。
+1. 记录 `CLOCK_MONOTONIC`，再用 `RTC_RD_TIME` 读取带亚秒的 RTC 时间。
+2. 睡眠约 5 秒，按同样顺序再读一次 `CLOCK_MONOTONIC` 和 RTC 时间。两端顺序一致，
+   RTC 读取耗时才会抵消，否则约 100 µs 的读取耗时会多算进 5 秒区间，偏出约 20 ppm。
+3. 以两者经过时间之差计算相对误差。RTC 时间没有前进，或误差超过 DIG32K 的
+   1000 ppm（RC32K 为 20000 ppm），即失败。
+4. 连续运行五轮，每轮必须看到统一 PASS。
 
-五轮关键数据：
+RC32K 按 32768 Hz、DIG32K 按 40000000/1221 Hz 换算时间。五轮关键数据：
 
 ```text
-RC32K model: 32768 / 1 Hz
-observed: 32977948, 32977330, 32978032, 32977972, 32977002 mHz
-error:    6407, 6388, 6409, 6407, 6378 ppm
-
-DIG32K model: 40000000 / 1221 Hz (32760032 mHz)
-observed: 32759956, 32759864, 32759851, 32759772, 32759761 mHz
-error:    2, 5, 5, 7, 8 ppm
-
-wrap: 0xfffffffffff5 -> 0x000000000005, elapsed=16 ticks
+RC32K error:  6407, 6388, 6409, 6407, 6378 ppm
+DIG32K error: 2, 5, 5, 7, 8 ppm
 RTC test PASS (0 failures)
 ```
 
+这组数据是此前用 chip 内部 counter 与 `CLOCK_MONOTONIC` 对比得到的。改用
+`RTC_RD_TIME` 后，2026-10-16 在 BL616CL-AVE-V10（DIG32K）上连续六轮：
+
+```text
+error=18, 4, 4, 9, 7, 2 ppm
+RTC test PASS (0 failures)
+```
+
+亚秒分辨率约 30.5 µs，两端量化在 5 秒内最多带来约 12 ppm 误差，所以单轮结果有
+跳动；多数轮次与旧方法的 2~8 ppm 同量级。
 `CLOCK_MONOTONIC` 由当前 MTimer 路径提供，所以这些数字只证明两种 RTC
 时钟相对 MTimer 的频率差。它们不是校准仪表给出的绝对 ppm。基于同板同流程的
 相对结果，正式配置选择 DIG32K。
@@ -424,6 +428,8 @@ rtc_product_alive
 - 当前产品 `CONFIG_SYSTEM_TIME64=n`，只验证到 2038 年 32 位边界。
 - 仅验证 `SIGEV_SIGNAL`；`CONFIG_SIG_EVTHREAD=n`，没有验证
   `SIGEV_THREAD` 或 `SIGEV_NONE`。
+- HBN 48 位 counter 的回绕算术和时钟换算分子/分母不经标准 RTC 接口暴露，
+  测试不覆盖；RTC-004 只能通过 `RTC_RD_TIME` 观察整体频率误差。
 - 未实现 `RTC_PERIODIC`、多 Alarm、rate adjustment、PDS/HBN wakeup、
   外部 XTAL32K 和断电保持。
 - NuttX RTC upper-half 的参数校验、通知 work 和并发销毁需由独立上游任务修复；

@@ -28,8 +28,6 @@
 
 #include <nuttx/timers/rtc.h>
 
-#include "bl616cl_rtc.h"
-
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
@@ -51,7 +49,7 @@
 #define ALARM_LATE_TOLERANCE_MS   300
 #define ALARM_QUERY_TOLERANCE_MS  200
 #define CLOCK_MATCH_TOLERANCE_NS  200000000LL
-#define COUNTER_SAMPLE_SECONDS    5
+#define RATE_SAMPLE_SECONDS       5
 #define FRESH_BOOT_MAX_SECONDS    30
 #define SUBSECOND_SAMPLE_US       1000
 #define SUBSECOND_TIMEOUT_MS      2000
@@ -64,8 +62,6 @@
 #else
 #define CLOCK_MAX_ERROR_PPM 20000
 #endif
-
-#define RTC_COUNTER_MASK          UINT64_C(0x0000ffffffffffff)
 
 #define ALARM_VALUE_RELATIVE      0x101
 #define ALARM_VALUE_REARM         0x102
@@ -1714,93 +1710,65 @@ static int run_case_005(const char *devpath)
 #endif
 }
 
-static int run_case_004(void)
+#ifdef CONFIG_ARCH_HAVE_RTC_SUBSECONDS
+static int run_case_004(int fd)
 {
-  uint64_t before_wrap = RTC_COUNTER_MASK - 10;
-  uint64_t after_wrap = 5;
-  uint64_t counter_before;
-  uint64_t counter_after;
-  uint64_t counter_delta;
-  uint64_t elapsed;
-  uint64_t error_millihertz;
-  uint64_t error_ppm;
-  uint64_t millihertz;
-  uint64_t observed_millihertz;
-  uint64_t sample_nanoseconds;
-  uint32_t denominator;
-  uint32_t numerator;
-  struct timespec start;
-  struct timespec end;
+  struct timespec mono_start;
+  struct timespec mono_end;
+  struct rtc_time rtc_start;
+  struct rtc_time rtc_end;
+  int64_t mono_ns;
+  int64_t rtc_ns;
+  int64_t error_ns;
+  int64_t error_ppm;
+  int ret;
 
-  printf("[RTC-004] raw counter and 48-bit wrap arithmetic\n");
-  numerator = bl616cl_rtc_clock_numerator();
-  denominator = bl616cl_rtc_clock_denominator();
-  millihertz = (uint64_t)numerator * 1000 / denominator;
-  if (clock_gettime(CLOCK_MONOTONIC, &start) < 0)
+  printf("[RTC-004] RTC clock rate against CLOCK_MONOTONIC\n");
+  if (clock_gettime(CLOCK_MONOTONIC, &mono_start) < 0)
     {
       printf("  FAIL: CLOCK_MONOTONIC start errno=%d\n", errno);
       return -errno;
     }
 
-  counter_before = bl616cl_rtc_counter();
-  sleep(COUNTER_SAMPLE_SECONDS);
-  counter_after = bl616cl_rtc_counter();
-  if (clock_gettime(CLOCK_MONOTONIC, &end) < 0)
+  ret = rtc_read_time(fd, &rtc_start);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  sleep(RATE_SAMPLE_SECONDS);
+
+  /* Same read order as the start sample, so the RTC read latency cancels
+   * out instead of adding to the monotonic interval.
+   */
+
+  if (clock_gettime(CLOCK_MONOTONIC, &mono_end) < 0)
     {
       printf("  FAIL: CLOCK_MONOTONIC end errno=%d\n", errno);
       return -errno;
     }
 
-  counter_delta = (counter_after - counter_before) & RTC_COUNTER_MASK;
-  if (counter_delta == 0)
+  ret = rtc_read_time(fd, &rtc_end);
+  if (ret < 0)
     {
-      printf("  FAIL: raw RTC counter did not advance\n");
+      return ret;
+    }
+
+  mono_ns = ((int64_t)mono_end.tv_sec - (int64_t)mono_start.tv_sec) *
+            1000000000LL + mono_end.tv_nsec - mono_start.tv_nsec;
+  if (rtc_elapsed_ns(&rtc_start, &rtc_end, &rtc_ns) < 0 || rtc_ns <= 0 ||
+      mono_ns <= 0)
+    {
+      printf("  FAIL: RTC time did not advance\n");
+      print_time("start", &rtc_start);
+      print_time("end", &rtc_end);
       return -EIO;
     }
 
-  sample_nanoseconds = ((uint64_t)end.tv_sec - (uint64_t)start.tv_sec) *
-                       1000000000ULL;
-  if (end.tv_nsec < start.tv_nsec)
-    {
-      sample_nanoseconds -= (uint64_t)start.tv_nsec - end.tv_nsec;
-    }
-  else
-    {
-      sample_nanoseconds += (uint64_t)end.tv_nsec - start.tv_nsec;
-    }
-
-  observed_millihertz = counter_delta * 1000000000000ULL /
-                        sample_nanoseconds;
-  error_millihertz = observed_millihertz > millihertz ?
-                       observed_millihertz - millihertz :
-                       millihertz - observed_millihertz;
-  error_ppm = error_millihertz * 1000000 / millihertz;
-
-  elapsed = (after_wrap - before_wrap) & RTC_COUNTER_MASK;
-  if (elapsed != 16 ||
-      ((UINT64_C(7) - UINT64_C(3)) & RTC_COUNTER_MASK) != 4 ||
-      ((UINT64_C(3) - UINT64_C(7)) & RTC_COUNTER_MASK) !=
-        RTC_COUNTER_MASK - 3)
-    {
-      printf("  FAIL: 48-bit modulo arithmetic mismatch\n");
-      return -EIO;
-    }
-
-  printf("  raw: 0x%012llx -> 0x%012llx, delta=%llu ticks\n",
-         (unsigned long long)counter_before,
-         (unsigned long long)counter_after,
-         (unsigned long long)counter_delta);
-  printf("  clock model: %lu / %lu Hz (%llu mHz)\n",
-         (unsigned long)numerator, (unsigned long)denominator,
-         (unsigned long long)millihertz);
-  printf("  sample: %llu ns, observed=%llu mHz, error=%llu ppm\n",
-         (unsigned long long)sample_nanoseconds,
-         (unsigned long long)observed_millihertz,
-         (unsigned long long)error_ppm);
-  printf("  wrap: 0x%012llx -> 0x%012llx, elapsed=%llu ticks\n",
-         (unsigned long long)before_wrap, (unsigned long long)after_wrap,
-         (unsigned long long)elapsed);
-
+  error_ns = rtc_ns > mono_ns ? rtc_ns - mono_ns : mono_ns - rtc_ns;
+  error_ppm = error_ns * 1000000 / mono_ns;
+  printf("  sample: monotonic=%lld ns, rtc=%lld ns, error=%lld ppm\n",
+         (long long)mono_ns, (long long)rtc_ns, (long long)error_ppm);
   if (error_ppm > CLOCK_MAX_ERROR_PPM)
     {
       printf("  FAIL: clock error exceeds %u ppm\n", CLOCK_MAX_ERROR_PPM);
@@ -1809,6 +1777,14 @@ static int run_case_004(void)
 
   return 0;
 }
+#else
+static int run_case_004(int fd)
+{
+  (void)fd;
+  printf("[RTC-004] SKIP: RTC subsecond time is unavailable\n");
+  return RTC_TEST_SKIPPED;
+}
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -1822,14 +1798,6 @@ int main(int argc, char *argv[])
   if (ret != 0)
     {
       return ret < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
-    }
-
-  if (strcmp(cfg.case_id, CASE_004) == 0)
-    {
-      ret = run_case_004();
-      printf("RTC test %s (%d failure%s)\n", ret == 0 ? "PASS" : "FAIL",
-             ret == 0 ? 0 : 1, ret == 0 ? "s" : "");
-      return ret == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
   if (strcmp(cfg.case_id, CASE_005) == 0)
@@ -1887,12 +1855,21 @@ int main(int argc, char *argv[])
         }
     }
 
-  if (rtc_close(fd) < 0)
+  if (strcmp(cfg.case_id, CASE_004) == 0 ||
+      strcmp(cfg.case_id, CASE_ALL) == 0)
     {
-      failures++;
+      ret = run_case_004(fd);
+      if (ret < 0)
+        {
+          failures++;
+        }
+      else if (ret == RTC_TEST_SKIPPED)
+        {
+          skipped++;
+        }
     }
 
-  if (strcmp(cfg.case_id, CASE_ALL) == 0 && run_case_004() < 0)
+  if (rtc_close(fd) < 0)
     {
       failures++;
     }
