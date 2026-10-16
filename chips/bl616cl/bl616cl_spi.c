@@ -57,6 +57,14 @@
  * Private Types
  ****************************************************************************/
 
+enum bl616cl_spi_feature_e
+{
+  BL616CL_SPI_FEATURE_FREQUENCY = 0,
+  BL616CL_SPI_FEATURE_MODE,
+  BL616CL_SPI_FEATURE_BITS,
+  BL616CL_SPI_FEATURE_BITORDER,
+};
+
 struct bl616cl_spi_priv_s
 {
   struct spi_dev_s spi;
@@ -66,8 +74,6 @@ struct bl616cl_spi_priv_s
   void *board_arg;
   uint32_t frequency;
   uint32_t actual;
-  uint32_t error_count;
-  int last_error;
   uint8_t config_error;
   uint16_t refs;
   uint8_t port;
@@ -77,10 +83,6 @@ struct bl616cl_spi_priv_s
   bool selected;
   bool selection_error;
   uint32_t selected_devid;
-#ifdef CONFIG_BL616CL_SPI_TEST
-  const struct bl616cl_spi_test_ops_s *test_ops;
-  void *test_arg;
-#endif
 };
 
 /****************************************************************************
@@ -254,28 +256,6 @@ static struct bl616cl_spi_priv_s *bl616cl_spi_from_dev(
 }
 
 /****************************************************************************
- * Name: bl616cl_spi_failed
- *
- * Description:
- *   Record an error: store it as the last error and increment the error
- *   counter.
- *
- * Input Parameters:
- *   priv - Pointer to the SPI driver state.
- *   error - Negated errno value to record.
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-static void bl616cl_spi_failed(struct bl616cl_spi_priv_s *priv, int error)
-{
-  priv->last_error = error;
-  priv->error_count++;
-}
-
-/****************************************************************************
  * Name: bl616cl_spi_normalize_error
  *
  * Description:
@@ -341,62 +321,11 @@ static int bl616cl_spi_clock_configure(struct bl616cl_spi_priv_s *priv,
 }
 
 /****************************************************************************
- * Name: bl616cl_spi_config_failed
- *
- * Description:
- *   Mark a configuration item as failed in config_error and record the
- *   error.
- *
- * Input Parameters:
- *   priv - Pointer to the SPI driver state.
- *   config - BL616CL_SPI_CONFIG_* bit of the failed item.
- *   error - Negated errno value to record.
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-static void bl616cl_spi_config_failed(struct bl616cl_spi_priv_s *priv,
-                                      uint8_t config, int error)
-{
-  priv->config_error |= config;
-  bl616cl_spi_failed(priv, error);
-}
-
-/****************************************************************************
- * Name: bl616cl_spi_config_succeeded
- *
- * Description:
- *   Clear the failure bit of a configuration item. When no configuration
- *   item remains failed, the last error is reset to OK.
- *
- * Input Parameters:
- *   priv - Pointer to the SPI driver state.
- *   config - BL616CL_SPI_CONFIG_* bit of the succeeded item.
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-static void bl616cl_spi_config_succeeded(struct bl616cl_spi_priv_s *priv,
-                                         uint8_t config)
-{
-  priv->config_error &= ~config;
-  if (priv->config_error == 0)
-    {
-      priv->last_error = OK;
-    }
-}
-
-/****************************************************************************
  * Name: bl616cl_spi_transport_feature
  *
  * Description:
  *   Apply a frequency, mode, data width or bit order setting to the hardware
- *   via bflb_spi_feature_control(), or through the test hook when one is
- *   installed.
+ *   via bflb_spi_feature_control().
  *
  * Input Parameters:
  *   priv - Pointer to the SPI driver state.
@@ -412,26 +341,19 @@ static void bl616cl_spi_config_succeeded(struct bl616cl_spi_priv_s *priv,
 
 static int bl616cl_spi_transport_feature(
   struct bl616cl_spi_priv_s *priv,
-  enum bl616cl_spi_test_feature_e feature, uint32_t value)
+  enum bl616cl_spi_feature_e feature, uint32_t value)
 {
-#ifdef CONFIG_BL616CL_SPI_TEST
-  if (priv->test_ops != NULL)
-    {
-      return priv->test_ops->feature(priv->test_arg, feature, value);
-    }
-#endif
-
   switch (feature)
     {
-      case BL616CL_SPI_TEST_FREQUENCY:
+      case BL616CL_SPI_FEATURE_FREQUENCY:
         return bflb_spi_feature_control(priv->dev, SPI_CMD_SET_FREQ, value);
-      case BL616CL_SPI_TEST_MODE:
+      case BL616CL_SPI_FEATURE_MODE:
         return bflb_spi_feature_control(priv->dev, SPI_CMD_SET_MODE, value);
-      case BL616CL_SPI_TEST_BITS:
+      case BL616CL_SPI_FEATURE_BITS:
         return bflb_spi_feature_control(priv->dev, SPI_CMD_SET_DATA_WIDTH,
                                         value == 8 ? SPI_DATA_WIDTH_8BIT :
                                                      SPI_DATA_WIDTH_16BIT);
-      case BL616CL_SPI_TEST_BITORDER:
+      case BL616CL_SPI_FEATURE_BITORDER:
         return bflb_spi_feature_control(priv->dev, SPI_CMD_SET_BIT_ORDER,
                                         value ? SPI_BIT_LSB : SPI_BIT_MSB);
       default:
@@ -444,8 +366,7 @@ static int bl616cl_spi_transport_feature(
  *
  * Description:
  *   Perform a polled full-duplex exchange of nbytes bytes using
- *   bflb_spi_poll_exchange(), or the test hook when installed. LHAL timeouts
- *   are mapped to -ETIMEDOUT.
+ *   bflb_spi_poll_exchange(). LHAL timeouts are mapped to -ETIMEDOUT.
  *
  * Input Parameters:
  *   priv - Pointer to the SPI driver state.
@@ -464,15 +385,6 @@ static int bl616cl_spi_transport_exchange(
 {
   int ret;
 
-#ifdef CONFIG_BL616CL_SPI_TEST
-  if (priv->test_ops != NULL)
-    {
-      ret = priv->test_ops->exchange(priv->test_arg, txbuffer, rxbuffer,
-                                     nbytes);
-      return bl616cl_spi_normalize_error(ret);
-    }
-#endif
-
   ret = bflb_spi_poll_exchange(priv->dev, txbuffer, rxbuffer, nbytes);
   return bl616cl_spi_normalize_error(ret);
 }
@@ -481,8 +393,7 @@ static int bl616cl_spi_transport_exchange(
  * Name: bl616cl_spi_transport_select
  *
  * Description:
- *   Assert or deassert chip select through the board select callback, or the
- *   test hook when installed.
+ *   Assert or deassert chip select through the board select callback.
  *
  * Input Parameters:
  *   priv - Pointer to the SPI driver state.
@@ -498,13 +409,6 @@ static int bl616cl_spi_transport_exchange(
 static bool bl616cl_spi_transport_select(
   struct bl616cl_spi_priv_s *priv, uint32_t devid, bool selected)
 {
-#ifdef CONFIG_BL616CL_SPI_TEST
-  if (priv->test_ops != NULL)
-    {
-      return priv->test_ops->select(priv->test_arg, devid, selected);
-    }
-#endif
-
   return priv->board_ops != NULL && priv->board_ops->select != NULL &&
          priv->board_ops->select(priv->board_arg, devid, selected);
 }
@@ -528,14 +432,6 @@ static bool bl616cl_spi_transport_select(
 static void bl616cl_spi_recover(struct bl616cl_spi_priv_s *priv)
 {
   struct bflb_spi_config_s config;
-
-#ifdef CONFIG_BL616CL_SPI_TEST
-  if (priv->test_ops != NULL)
-    {
-      priv->test_ops->recover(priv->test_arg);
-      return;
-    }
-#endif
 
   bflb_spi_feature_control(priv->dev, SPI_CMD_CLEAR_TX_FIFO, 0);
   bflb_spi_feature_control(priv->dev, SPI_CMD_CLEAR_RX_FIFO, 0);
@@ -642,8 +538,8 @@ static int bl616cl_spi_lock(struct spi_dev_s *dev, bool lock)
  * Description:
  *   Implement the spi_ops_s select operation. Assert or deassert chip select
  *   through the board callback. Selecting a different device first deselects
- *   the previously selected one. A rejected select is recorded as -ENODEV
- *   and blocks further exchanges until a select succeeds.
+ *   the previously selected one. A rejected select blocks further exchanges
+ *   until a select succeeds.
  *
  * Input Parameters:
  *   dev - Pointer to the SPI device instance.
@@ -670,7 +566,6 @@ static void bl616cl_spi_select(struct spi_dev_s *dev, uint32_t devid,
       if (!accepted)
         {
           priv->selection_error = true;
-          bl616cl_spi_failed(priv, -ENODEV);
           return;
         }
     }
@@ -692,7 +587,6 @@ static void bl616cl_spi_select(struct spi_dev_s *dev, uint32_t devid,
   else if (selected)
     {
       priv->selection_error = true;
-      bl616cl_spi_failed(priv, -ENODEV);
     }
 }
 
@@ -751,14 +645,14 @@ static uint32_t bl616cl_spi_setfrequency(struct spi_dev_s *dev,
 
   if (frequency == 0)
     {
-      bl616cl_spi_config_failed(priv, BL616CL_SPI_CONFIG_FREQUENCY, -EINVAL);
+      priv->config_error |= BL616CL_SPI_CONFIG_FREQUENCY;
       return 0;
     }
 
   actual = bl616cl_spi_actual_frequency(priv, frequency);
   if (actual == 0)
     {
-      bl616cl_spi_config_failed(priv, BL616CL_SPI_CONFIG_FREQUENCY, -EIO);
+      priv->config_error |= BL616CL_SPI_CONFIG_FREQUENCY;
       return 0;
     }
 
@@ -768,17 +662,17 @@ static uint32_t bl616cl_spi_setfrequency(struct spi_dev_s *dev,
       return actual;
     }
 
-  ret = bl616cl_spi_transport_feature(priv, BL616CL_SPI_TEST_FREQUENCY,
+  ret = bl616cl_spi_transport_feature(priv, BL616CL_SPI_FEATURE_FREQUENCY,
                                       actual);
   if (ret < 0)
     {
-      bl616cl_spi_config_failed(priv, BL616CL_SPI_CONFIG_FREQUENCY, ret);
+      priv->config_error |= BL616CL_SPI_CONFIG_FREQUENCY;
       return 0;
     }
 
   priv->frequency = frequency;
   priv->actual = actual;
-  bl616cl_spi_config_succeeded(priv, BL616CL_SPI_CONFIG_FREQUENCY);
+  priv->config_error &= ~BL616CL_SPI_CONFIG_FREQUENCY;
   return actual;
 }
 
@@ -808,7 +702,7 @@ static void bl616cl_spi_setmode(struct spi_dev_s *dev,
 
   if (mode < SPIDEV_MODE0 || mode > SPIDEV_MODE3)
     {
-      bl616cl_spi_config_failed(priv, BL616CL_SPI_CONFIG_MODE, -EINVAL);
+      priv->config_error |= BL616CL_SPI_CONFIG_MODE;
       return;
     }
 
@@ -818,15 +712,15 @@ static void bl616cl_spi_setmode(struct spi_dev_s *dev,
       return;
     }
 
-  ret = bl616cl_spi_transport_feature(priv, BL616CL_SPI_TEST_MODE, mode);
+  ret = bl616cl_spi_transport_feature(priv, BL616CL_SPI_FEATURE_MODE, mode);
   if (ret < 0)
     {
-      bl616cl_spi_config_failed(priv, BL616CL_SPI_CONFIG_MODE, ret);
+      priv->config_error |= BL616CL_SPI_CONFIG_MODE;
       return;
     }
 
   priv->mode = mode;
-  bl616cl_spi_config_succeeded(priv, BL616CL_SPI_CONFIG_MODE);
+  priv->config_error &= ~BL616CL_SPI_CONFIG_MODE;
 }
 
 /****************************************************************************
@@ -854,7 +748,7 @@ static void bl616cl_spi_setbits(struct spi_dev_s *dev, int nbits)
 
   if (nbits != 8 && nbits != 16)
     {
-      bl616cl_spi_config_failed(priv, BL616CL_SPI_CONFIG_BITS, -EINVAL);
+      priv->config_error |= BL616CL_SPI_CONFIG_BITS;
       return;
     }
 
@@ -864,15 +758,15 @@ static void bl616cl_spi_setbits(struct spi_dev_s *dev, int nbits)
       return;
     }
 
-  ret = bl616cl_spi_transport_feature(priv, BL616CL_SPI_TEST_BITS, nbits);
+  ret = bl616cl_spi_transport_feature(priv, BL616CL_SPI_FEATURE_BITS, nbits);
   if (ret < 0)
     {
-      bl616cl_spi_config_failed(priv, BL616CL_SPI_CONFIG_BITS, ret);
+      priv->config_error |= BL616CL_SPI_CONFIG_BITS;
       return;
     }
 
   priv->nbits = nbits;
-  bl616cl_spi_config_succeeded(priv, BL616CL_SPI_CONFIG_BITS);
+  priv->config_error &= ~BL616CL_SPI_CONFIG_BITS;
 }
 
 #ifdef CONFIG_SPI_HWFEATURES
@@ -908,7 +802,7 @@ static int bl616cl_spi_hwfeatures(struct spi_dev_s *dev,
   if (features != 0)
 #endif
     {
-      bl616cl_spi_config_failed(priv, BL616CL_SPI_CONFIG_BITORDER, -ENOSYS);
+      priv->config_error |= BL616CL_SPI_CONFIG_BITORDER;
       return -ENOSYS;
     }
 
@@ -923,16 +817,16 @@ static int bl616cl_spi_hwfeatures(struct spi_dev_s *dev,
       return OK;
     }
 
-  ret = bl616cl_spi_transport_feature(priv, BL616CL_SPI_TEST_BITORDER,
+  ret = bl616cl_spi_transport_feature(priv, BL616CL_SPI_FEATURE_BITORDER,
                                       lsbfirst);
   if (ret < 0)
     {
-      bl616cl_spi_config_failed(priv, BL616CL_SPI_CONFIG_BITORDER, ret);
+      priv->config_error |= BL616CL_SPI_CONFIG_BITORDER;
       return ret;
     }
 
   priv->lsbfirst = lsbfirst;
-  bl616cl_spi_config_succeeded(priv, BL616CL_SPI_CONFIG_BITORDER);
+  priv->config_error &= ~BL616CL_SPI_CONFIG_BITORDER;
   return OK;
 }
 #endif
@@ -1005,9 +899,8 @@ static int bl616cl_spi_cmddata(struct spi_dev_s *dev, uint32_t devid,
  * Description:
  *   Implement the spi_ops_s exchange operation. Perform a polled exchange of
  *   nwords words. The call is skipped if a configuration or select error is
- *   pending; misaligned buffers or an invalid width are recorded as -EINVAL.
- *   On a transfer failure the error is recorded and the controller is
- *   recovered.
+ *   pending, the width is invalid or the buffers are misaligned. On a
+ *   transfer failure the error is logged and the controller is recovered.
  *
  * Input Parameters:
  *   dev - Pointer to the SPI device instance.
@@ -1037,7 +930,6 @@ static void bl616cl_spi_exchange(struct spi_dev_s *dev,
 
   if (priv->nbits != 8 && priv->nbits != 16)
     {
-      bl616cl_spi_failed(priv, -EINVAL);
       return;
     }
 
@@ -1057,7 +949,6 @@ static void bl616cl_spi_exchange(struct spi_dev_s *dev,
        (((uintptr_t)txbuffer & (word_size - 1)) != 0 ||
         ((uintptr_t)rxbuffer & (word_size - 1)) != 0)))
     {
-      bl616cl_spi_failed(priv, -EINVAL);
       return;
     }
 
@@ -1066,12 +957,10 @@ static void bl616cl_spi_exchange(struct spi_dev_s *dev,
   if (ret < 0)
     {
       spierr("ERROR: SPI%d polling exchange failed: %d\n", priv->port, ret);
-      bl616cl_spi_failed(priv, ret);
       bl616cl_spi_recover(priv);
       return;
     }
 
-  priv->last_error = OK;
   priv->config_error = 0;
 }
 
@@ -1191,8 +1080,6 @@ struct spi_dev_s *bl616cl_spibus_initialize(
   priv->board_arg = board_arg;
   priv->frequency = BL616CL_SPI_DEFAULT_FREQUENCY;
   priv->actual = bl616cl_spi_actual_frequency(priv, priv->frequency);
-  priv->last_error = OK;
-  priv->error_count = 0;
   priv->config_error = 0;
   priv->mode = SPIDEV_MODE0;
   priv->nbits = 8;
@@ -1211,7 +1098,7 @@ struct spi_dev_s *bl616cl_spibus_initialize(
  * Description:
  *   Release a reference to an SPI port. On the last reference, deselect any
  *   selected device, deinitialize the controller, disable the clocks and
- *   clear the board and test hooks.
+ *   clear the board callbacks.
  *
  * Input Parameters:
  *   dev - Pointer to the SPI device instance.
@@ -1249,11 +1136,7 @@ int bl616cl_spibus_uninitialize(struct spi_dev_s *dev)
 
   if (priv->selected)
     {
-      if (!bl616cl_spi_transport_select(priv, priv->selected_devid, false))
-        {
-          bl616cl_spi_failed(priv, -ENODEV);
-        }
-
+      bl616cl_spi_transport_select(priv, priv->selected_devid, false);
       priv->selected = false;
     }
 
@@ -1262,10 +1145,6 @@ int bl616cl_spibus_uninitialize(struct spi_dev_s *dev)
   priv->dev = NULL;
   priv->board_ops = NULL;
   priv->board_arg = NULL;
-#ifdef CONFIG_BL616CL_SPI_TEST
-  priv->test_ops = NULL;
-  priv->test_arg = NULL;
-#endif
   nxmutex_unlock(&priv->lock);
   nxmutex_unlock(&g_bl616cl_spi_init_lock);
   return OK;
@@ -1332,222 +1211,3 @@ int bl616cl_spi_configure_pins(int port, uint8_t miso_pin,
   nxmutex_unlock(&g_bl616cl_spi_init_lock);
   return ret == SUCCESS ? OK : -EIO;
 }
-
-#ifdef CONFIG_BL616CL_SPI_TEST
-/****************************************************************************
- * Name: bl616cl_spi_test_select
- *
- * Description:
- *   Test-build board select callback that rejects every request.
- *
- * Input Parameters:
- *   arg - Unused.
- *   devid - Unused.
- *   selected - Unused.
- *
- * Returned Value:
- *   False is always returned.
- *
- ****************************************************************************/
-
-static bool bl616cl_spi_test_select(void *arg, uint32_t devid,
-                                    bool selected)
-{
-  (void)arg;
-  (void)devid;
-  (void)selected;
-  return false;
-}
-
-static const struct bl616cl_spi_board_ops_s
-g_bl616cl_spi_test_board_ops =
-{
-  .select = bl616cl_spi_test_select,
-};
-
-/****************************************************************************
- * Name: bl616cl_spi_test_initialize
- *
- * Description:
- *   Test helper: initialize a port using a board select callback that
- *   rejects every request.
- *
- * Input Parameters:
- *   port - SPI port number (0 or 1).
- *
- * Returned Value:
- *   Zero (OK) on success; a negated errno value on failure. -ENODEV if
- *   initialization fails.
- *
- ****************************************************************************/
-
-int bl616cl_spi_test_initialize(int port)
-{
-  return bl616cl_spibus_initialize(port, &g_bl616cl_spi_test_board_ops,
-                                   NULL) == NULL ?
-           -ENODEV :
-           OK;
-}
-
-/****************************************************************************
- * Name: bl616cl_spi_test_addref
- *
- * Description:
- *   Test helper: add a reference to an already initialized port.
- *
- * Input Parameters:
- *   port - SPI port number (0 or 1).
- *
- * Returned Value:
- *   Zero (OK) on success; a negated errno value on failure. -ENODEV if the
- *   port is invalid, not initialized, or the reference count is exhausted.
- *
- ****************************************************************************/
-
-int bl616cl_spi_test_addref(int port)
-{
-  struct bl616cl_spi_priv_s *priv = bl616cl_spi_priv(port);
-
-  if (priv == NULL)
-    {
-      return -ENODEV;
-    }
-
-  nxmutex_lock(&g_bl616cl_spi_init_lock);
-  nxmutex_lock(&priv->lock);
-  if (priv->refs == 0 || priv->refs == UINT16_MAX)
-    {
-      nxmutex_unlock(&priv->lock);
-      nxmutex_unlock(&g_bl616cl_spi_init_lock);
-      return -ENODEV;
-    }
-
-  priv->refs++;
-  nxmutex_unlock(&priv->lock);
-  nxmutex_unlock(&g_bl616cl_spi_init_lock);
-  return OK;
-}
-
-/****************************************************************************
- * Name: bl616cl_spi_test_install
- *
- * Description:
- *   Test helper: install or remove (ops is NULL) the test hooks that replace
- *   the hardware transport of an initialized port.
- *
- * Input Parameters:
- *   port - SPI port number (0 or 1).
- *   ops - Test hooks; all callbacks must be set, or NULL to remove.
- *   arg - Argument passed to the test hooks.
- *
- * Returned Value:
- *   Zero (OK) on success; a negated errno value on failure. -EINVAL for an
- *   invalid port or incomplete ops; -ENODEV if the port is not initialized.
- *
- ****************************************************************************/
-
-int bl616cl_spi_test_install(int port,
-                             const struct bl616cl_spi_test_ops_s *ops,
-                             void *arg)
-{
-  struct bl616cl_spi_priv_s *priv = bl616cl_spi_priv(port);
-
-  if (priv == NULL ||
-      (ops != NULL && (ops->select == NULL || ops->feature == NULL ||
-                       ops->exchange == NULL || ops->recover == NULL)))
-    {
-      return -EINVAL;
-    }
-
-  nxmutex_lock(&priv->lock);
-  if (priv->refs == 0)
-    {
-      nxmutex_unlock(&priv->lock);
-      return -ENODEV;
-    }
-
-  priv->test_ops = ops;
-  priv->test_arg = ops == NULL ? NULL : arg;
-  nxmutex_unlock(&priv->lock);
-  return OK;
-}
-
-/****************************************************************************
- * Name: bl616cl_spi_test_device
- *
- * Description:
- *   Test helper: get the SPI device instance of an initialized port without
- *   taking a reference.
- *
- * Input Parameters:
- *   port - SPI port number (0 or 1).
- *
- * Returned Value:
- *   A pointer to the SPI device instance, or NULL if the port is invalid or
- *   not initialized.
- *
- ****************************************************************************/
-
-struct spi_dev_s *bl616cl_spi_test_device(int port)
-{
-  struct bl616cl_spi_priv_s *priv = bl616cl_spi_priv(port);
-  struct spi_dev_s *spi = NULL;
-
-  if (priv != NULL)
-    {
-      nxmutex_lock(&priv->lock);
-      if (priv->refs > 0)
-        {
-          spi = &priv->spi;
-        }
-
-      nxmutex_unlock(&priv->lock);
-    }
-
-  return spi;
-}
-
-/****************************************************************************
- * Name: bl616cl_spi_test_get_diag
- *
- * Description:
- *   Test helper: copy the last error, error count, actual frequency, mode,
- *   word width and bit order of a port into a diagnostics structure.
- *
- * Input Parameters:
- *   port - SPI port number (0 or 1).
- *   diag - Location to return the diagnostics.
- *
- * Returned Value:
- *   Zero (OK) on success; a negated errno value on failure. -EINVAL for an
- *   invalid port or NULL diag; -ENODEV if the port is not initialized.
- *
- ****************************************************************************/
-
-int bl616cl_spi_test_get_diag(int port,
-                              struct bl616cl_spi_test_diag_s *diag)
-{
-  struct bl616cl_spi_priv_s *priv = bl616cl_spi_priv(port);
-
-  if (priv == NULL || diag == NULL)
-    {
-      return -EINVAL;
-    }
-
-  nxmutex_lock(&priv->lock);
-  if (priv->refs == 0)
-    {
-      nxmutex_unlock(&priv->lock);
-      return -ENODEV;
-    }
-
-  diag->last_error = priv->last_error;
-  diag->error_count = priv->error_count;
-  diag->actual_frequency = priv->actual;
-  diag->mode = priv->mode;
-  diag->nbits = priv->nbits;
-  diag->lsbfirst = priv->lsbfirst;
-  nxmutex_unlock(&priv->lock);
-  return OK;
-}
-#endif

@@ -367,13 +367,6 @@ config BL616CL_SPI1
 		four-wire pin mapping is not yet verified, so board registration is
 		intentionally unavailable.
 
-config BL616CL_SPI_TEST
-	bool
-	default n
-	---help---
-		Enable test-only transport and diagnostic hooks. Product
-		configurations must leave this option disabled.
-
 endif # BL616CL_SPI
 
 config BL616CL_PWM

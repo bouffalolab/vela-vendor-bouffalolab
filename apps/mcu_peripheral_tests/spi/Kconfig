@@ -2,15 +2,13 @@ config BL_MCU_PERIPHERAL_TESTS_SPI
 	tristate "MCU peripheral SPI tests"
 	default n
 	depends on SPI && SPI_EXCHANGE && BL616CL_SPI
-	depends on BL616CL_SPI0 || BL616CL_SPI1
+	depends on BL616CL_SPI0
 	depends on ARCH_BOARD_AI_M64P_32S_KIT
-	depends on !DISABLE_PTHREAD
-	select BL616CL_SPI_TEST
 	select SPI_BITORDER
 	---help---
-		Enable the BL616CL SPI master case runner. It exercises fake
-		configuration, timeout recovery, length boundaries, and concurrency.
-		Hardware loopback additionally requires the board /dev/spi0 node.
+		Enable the BL616CL SPI master hardware loopback cases. They use the
+		board /dev/spi0 node and need MISO shorted to MOSI; each case
+		compares the received data with the transmitted data.
 
 if BL_MCU_PERIPHERAL_TESTS_SPI
 
@@ -25,10 +23,5 @@ config BL_MCU_PERIPHERAL_TESTS_SPI_PRIORITY
 config BL_MCU_PERIPHERAL_TESTS_SPI_STACKSIZE
 	int "Stack size"
 	default 6144
-
-config BL_MCU_PERIPHERAL_TESTS_SPI_ITERATIONS
-	int "Concurrent transfer iterations"
-	default 32
-	range 2 256
 
 endif

@@ -1,7 +1,8 @@
 # BL616CL SPI Master 测试
 
-本目录提供一个 NSH 命令 `mcu_spi_test`。同一个 `main` 通过参数选择 fake
-软件合同测试和实物 SPI0 环回测试，不按 case 拆成多个 app。测试 app 编译成独立的
+本目录提供一个 NSH 命令 `mcu_spi_test`，通过参数选择 SPI0 实物环回 case，不按
+case 拆成多个 app。测试只通过 `/dev/spi0` 和标准 `SPIIOC_TRANSFER` 访问驱动，
+判据是短接 MISO/MOSI 后的收发数据逐字节比对。测试 app 编译成独立的
 `libapps_mcu_spi_test.a`；chip adapter 在 `libarch.a`，board 注册在
 `libboard.a`，同步驱动仓的 LHAL 在 `libbl_lhal.a`。
 
@@ -19,9 +20,8 @@ OpenVela 公共 SPI ABI 一致且可验证的闭环：
 - `SPI_DELAY_CONTROL`、`SPI_CMDDATA`、`SPI_TRIGGER` 当前返回 `-ENOSYS`；
 - byte order 没有独立公共配置入口。
 
-因此测试不得把这些项目写成已支持。SPI1 lower-half 可独立编译和执行 fake 测试，
-但 Ai-M64P-32S-Kit 的 SPI1 四线 pin 和模组引出尚未冻结，不注册 `/dev/spi1`，
-也不得把 bus 1 fake PASS 解释为 SPI1 实物总线通过。
+因此测试不得把这些项目写成已支持。Ai-M64P-32S-Kit 的 SPI1 四线 pin 和模组引出
+尚未冻结，板级不注册 `/dev/spi1`，本测试只覆盖 SPI0。
 
 SPI0 当前板级映射如下：
 
@@ -42,62 +42,22 @@ SPI0 当前板级映射如下：
 
 ```text
 CONFIG_BL616CL_SPI=y
-CONFIG_BL616CL_SPI0=y              # SPI0 测试配置
-CONFIG_BL616CL_SPI1=y              # SPI1/dual 测试配置
+CONFIG_BL616CL_SPI0=y
 CONFIG_AI_M64P_KIT_SPI=y           # 只注册所选的 SPI0 board 节点
 CONFIG_BL_MCU_PERIPHERAL_TESTS_SPI=y
 CONFIG_BL_MCU_PERIPHERAL_TESTS_SPI_PROGNAME="mcu_spi_test"
-CONFIG_BL_MCU_PERIPHERAL_TESTS_SPI_ITERATIONS=32
 ```
 
-`CONFIG_BL_MCU_PERIPHERAL_TESTS_SPI` 会选择 test-only transport/diagnostic hook 和
-`SPI_BITORDER`。正式产品配置应关闭该 app；关闭后不会保留 fake 注入入口和测试命令。
+`CONFIG_BL_MCU_PERIPHERAL_TESTS_SPI` 依赖 `BL616CL_SPI0`，并选择 `SPI_BITORDER`
+供 `--lsb` 使用。正式产品配置应关闭该 app。
 
-以下是历史七态裁剪矩阵；当前 fresh build 使用 `nsh-peripherals`：
+构建使用 `nsh-peripherals`：
 
 ```bash
 vendor/bouffalolab/vela clean \
   bl616cl/ai-m64p-32s-kit/configs/nsh-peripherals
 vendor/bouffalolab/vela build \
   bl616cl/ai-m64p-32s-kit/configs/nsh-peripherals -j14
-```
-
-```text
-nsh
-nsh-spi
-nsh
-nsh
-nsh
-nsh
-nsh
-```
-
-2026-08-30 fresh clean build 和裁剪数据：
-
-| 配置 | 构建 | arch SPI | board SPI0 | LHAL SPI | test app | ELF SPI0/SPI1 | `nuttx.bin` |
-|---|---:|---:|---:|---:|---:|---|---:|
-| `nsh` | 1224/1224 | 0 | 0 | 0 | 0 | 0/0 | 479632 B |
-| `nsh-spi`（历史，已删除） | 1234/1234 | 1 | 1 | 1 | 0 | 1/0 | 493312 B |
-| `nsh` | 1236/1236 | 1 | 1 | 1 | 1 | 1/0 | 514448 B |
-| `nsh` | 1232/1232 | 1 | 0 | 1 | 0 | 0/0 | 479632 B |
-| `nsh` | 1234/1234 | 1 | 0 | 1 | 1 | 0/1 | 510624 B |
-| `nsh` | 1234/1234 | 1 | 1 | 1 | 0 | 1/1 | 494016 B |
-| `nsh` | 1236/1236 | 1 | 1 | 1 | 1 | 1/1 | 515360 B |
-
-`nsh` 中 chip/LHAL 对象进入 archive，但没有 board 或 app consumer，最终 ELF
-通过 archive selection/section GC 移除全部 SPI1 代码；这不是 SPI1 lower-half 未编译。
-`nsh` 由测试 app 引用实例 1，最终 ELF 才保留该实例。
-
-对应 SHA256：
-
-```text
-nsh                 8fa89db568cff6dc13e0b4c325ee4eb929eeacff4496936fe4630fc5403e7eb7
-nsh-spi            5533d0417dd5a529190ece9b9d177f95da96fbda2db88966dd7e310cc7749e04
-nsh       53729fa86c06dc139574481418d4ee4820b69ff337b48088345b422b50b18428
-nsh            5067b5024900bfc9fffffe9a04dc2e35428f54ed191b7f2571b3321270a9f072
-nsh       b252dad6312ac3c0a1bb0317ff67f73c9b5ae1878fafc07283e325664f1366ba
-nsh        0e76cffd096c1f5d01f7c97b7f65a85584739e7cb1b848227cac8ba7a1c3dc1b
-nsh   e252b9dfa4782c221166af959073c60c145f2121395421c1ccc499d732e3b48d
 ```
 
 裁剪检查使用 `ar t` 确认对象归属，使用 RISC-V `nm` 检查最终 ELF：
@@ -119,8 +79,6 @@ prebuilts/gcc/linux-x86_64/riscv-none-elf/bin/riscv-none-elf-nm \
 ## 命令入口
 
 ```text
-mcu_spi_test fake <lifecycle|config|exchange|sequence|errors|concurrent|all> --bus N
-mcu_spi_test fake dual
 mcu_spi_test hw <loopback|paths|sequence|boundary> [options]
 ```
 
@@ -135,212 +93,6 @@ mcu_spi_test hw <loopback|paths|sequence|boundary> [options]
 --target N    SPIDEV_USER index，默认 0
 --lsb         使用 LSB first；省略时为 MSB first
 ```
-
-## fake case 完整流程
-
-fake transport 替换 select/config/exchange/recovery 的传输阶段，不访问 GPIO pin 或
-外部 target；test-owned 实例在安装 fake 前仍执行 controller clock、init，并在结束时
-deinit。它用于证明 OpenVela lower-half 的软件合同、错误抑制和并发边界，不能替代
-CLK/CS/MOSI/MISO 波形。
-
-### `fake lifecycle`
-
-命令：
-
-```text
-mcu_spi_test fake lifecycle --bus 0
-```
-
-流程和判据：
-
-1. 取得指定实例，确认 test device 与 lower-half 指针一致。
-2. 对 bus `-1`、bus `2` 初始化，必须返回 `-ENODEV`；对空 device uninitialize，
-   必须返回 `-EINVAL`。
-3. 对已由 board 注册的 bus 增加引用；对 test-owned bus 再次 initialize。
-4. 释放一个引用后 device 必须仍存在，证明引用计数没有提前销毁实例。
-5. 读取 diagnostic，默认必须是 mode 0、8-bit。
-6. 移除并重新安装 fake transport；任一步失败则 case FAIL。
-
-### `fake config`
-
-命令：
-
-```text
-mcu_spi_test fake config --bus 0
-```
-
-流程和判据：
-
-1. 依次设置 mode 0、1、2、3，每次执行一笔 exchange，四个 mode 都必须进入 transport。
-2. 分别设置 8-bit、16-bit并 exchange，两种 word width 都必须被观察到。
-3. 请求 100 kHz、1 MHz、1.1 MHz；返回值必须非零且不得高于请求频率。
-4. 请求 1 Hz 必须返回 0 并记录 `-EIO`；请求 0 Hz 必须返回 0 并记录 `-EINVAL`。
-5. 请求 `UINT32_MAX` 必须返回可实现频率，diagnostic 的 actual frequency 与返回值一致。
-6. 注入 feature `-EIO` 后设置 mode 1；后续 exchange 必须被抑制，transport
-   exchange 计数不得增加，原始 `-EIO` 不得被覆盖。
-7. 清除注入并重新设置 mode 1，随后验证 LSB first 和恢复 MSB first。
-8. mode 4、bits 0/7/24/32 必须被拒绝；最后有效状态仍为 mode 1、16-bit。
-9. mode、bits、frequency、bit-order 覆盖 mask 必须完整，否则 FAIL。
-
-### `fake exchange`
-
-命令：
-
-```text
-mcu_spi_test fake exchange --bus 0
-```
-
-流程和判据：
-
-1. `nwords=0` 不得调用 transport。
-2. 8-bit full-duplex 依次传输 1、31、32、33、128 words，逐字节比较 TX/RX。
-3. 执行 TX-only；随后执行 RX-only，fake filler 必须全部为 `0xff`。
-4. 执行 TX/RX 都为空的一字节 exchange，确认该公共路径不会误访问 buffer。
-5. 切换 16-bit，传输四个 word，并用 `SPI_SEND()` 验证 `0xa55a` 回读。
-6. 对 16-bit 使用奇地址 buffer，必须在 transport 前记录 `-EINVAL`，exchange
-   计数不得增加。
-7. 恢复 8-bit 后下一笔 exchange 必须 PASS，diagnostic 恢复为 0。
-
-### `fake sequence`
-
-命令：
-
-```text
-mcu_spi_test fake sequence --bus 0
-```
-
-流程和判据：
-
-1. 构造两段 `spi_sequence_s`。第一段 `deselect=false` 保持 CS，第二段
-   `deselect=true` 释放 CS，两个 RX word 必须等于 TX。
-2. 将第一段改为 `deselect=true` 重跑，两段结束都释放 CS；select/deselect
-   计数必须与两种 sequence policy 匹配。
-3. 连续两次选中和释放 target 1，确认同一 target 的 CS 调用保持可重复。
-4. 对未知 target 执行 sequence。OpenVela upper-half 可能返回 OK，但 lower-half
-   diagnostic 必须是 `-ENODEV`，且 transport exchange 计数不得增加。
-5. 重新选择 target 0 并释放，确认 selection error 不阻塞后续合法 target。
-
-### `fake errors`
-
-命令：
-
-```text
-mcu_spi_test fake errors --bus 0
-```
-
-流程和判据：
-
-1. 注入 LHAL/newlib `-116` timeout；adapter 必须规范化为 OpenVela
-   `-ETIMEDOUT=-110`，error count 加一，recovery count 为一。
-2. 清除故障，下一笔 exchange 必须回读原字节，diagnostic 恢复为 0。
-3. 注入 `-EIO`；必须保留 `-EIO`，error count 再加一，累计 recovery count 为二。
-4. 再次清除故障，下一笔 exchange 必须 PASS。该结果只证明 recovery hook 与
-   下一笔软件传输，不证明实物 BUSY/INTSTS/FIFO/CS 已恢复。
-
-### `fake concurrent`
-
-命令：
-
-```text
-mcu_spi_test fake concurrent --bus 0
-```
-
-流程和判据：
-
-1. 创建两个线程并用 semaphore 同时放行。
-2. 每个线程循环 32 次；线程 0 使用 mode 0、8-bit、100 kHz，线程 1 使用
-   mode 3、16-bit、1 MHz。
-3. 每轮显式 `SPI_LOCK`，设置配置，执行 16-byte exchange，再解锁并比较数据。
-4. 总 exchange 数必须是 64，单实例 transport 的 `max_active` 必须是 1；两组
-   mode/bits/frequency mask 都必须出现。
-
-### `fake all`
-
-命令：
-
-```text
-mcu_spi_test fake all --bus 0
-mcu_spi_test fake all --bus 1
-```
-
-按 lifecycle、config、exchange、sequence、errors、concurrent 顺序执行。前一项
-FAIL 后不再把后续项伪报为 PASS；最终必须显示 `cases=6` 和 `result=PASS`。
-
-### `fake dual` 与非法 bus
-
-命令：
-
-```text
-mcu_spi_test fake dual
-mcu_spi_test fake all --bus 2
-```
-
-`nsh-peripherals` 自 2026-10-14 起编入 SPI1 lower（不注册板级节点、不占引脚），
-`fake all --bus 1` 和 `fake dual` 均 PASS（`overlap=2`）。
-
-`fake dual` 为 SPI0、SPI1 分别安装 transport，各创建一个 worker 并同时放行。
-每个实例内部仍由自己的 mutex 串行，但跨实例 tracker 的 `overlap` 必须为 2，证明
-两个控制器的软件状态和锁互不串扰。bus 2 必须显示 `reason=no-device` 并以失败退出。
-单实例固件执行 `fake dual` 必须正常返回 FAIL，不得 assert、panic 或销毁未初始化
-mutex；该负测用于确认缺少另一个实例时的清理边界。
-
-## 2026-08-30 USB2 软件实测
-
-环境：Ai-M64P-32S-Kit、CH340 `1a86:7523`、`/dev/ttyUSB2`、2,000,000 baud。
-先烧录 `nsh`，固件 SHA256 为
-`b252dad6312ac3c0a1bb0317ff67f73c9b5ae1878fafc07283e325664f1366ba`，验证单实例
-失败清理：
-
-```text
-nsh> mcu_spi_test fake dual
-SPI_TEST fake dual result=FAIL overlap=0
-nsh> echo $?
-1
-nsh> echo ST023_SPI1_SINGLE_ALIVE
-ST023_SPI1_SINGLE_ALIVE
-```
-
-该负测后控制台继续响应，没有 assert、panic、reset 或 hang。随后烧录
-`nsh`，固件 SHA256 为
-`e252b9dfa4782c221166af959073c60c145f2121395421c1ccc499d732e3b48d`。启动后出现
-`NuttShell (NSH)` 和 `nsh>`；`help` 列出 `mcu_spi_test`。当前 board 只注册 SPI0，
-因此 `/dev/spi0` 存在，`/dev/spi1` 返回 `stat failed: 2`，符合设计边界。
-
-运行命令和完整关键结果：
-
-```text
-nsh> ls /dev/spi0
- /dev/spi0
-nsh> ls /dev/spi1
-nsh: ls: stat failed: 2
-
-nsh> mcu_spi_test fake all --bus 0
-SPI_TEST fake lifecycle bus=0 result=PASS features=0 exchanges=0 recoveries=0
-SPI_TEST fake config bus=0 result=PASS features=15 exchanges=11 recoveries=0
-SPI_TEST fake exchange bus=0 result=PASS features=4 exchanges=11 recoveries=0
-SPI_TEST fake sequence bus=0 result=PASS features=0 exchanges=4 recoveries=0
-SPI_TEST fake errors bus=0 result=PASS features=0 exchanges=4 recoveries=2
-SPI_TEST fake concurrent bus=0 result=PASS features=190 exchanges=64 recoveries=0
-SPI_TEST fake all bus=0 result=PASS cases=6
-
-nsh> mcu_spi_test fake all --bus 1
-SPI_TEST fake lifecycle bus=1 result=PASS features=0 exchanges=0 recoveries=0
-SPI_TEST fake config bus=1 result=PASS features=15 exchanges=11 recoveries=0
-SPI_TEST fake exchange bus=1 result=PASS features=4 exchanges=11 recoveries=0
-SPI_TEST fake sequence bus=1 result=PASS features=0 exchanges=4 recoveries=0
-SPI_TEST fake errors bus=1 result=PASS features=0 exchanges=4 recoveries=2
-SPI_TEST fake concurrent bus=1 result=PASS features=190 exchanges=64 recoveries=0
-SPI_TEST fake all bus=1 result=PASS cases=6
-
-nsh> mcu_spi_test fake dual
-SPI_TEST fake dual result=PASS overlap=2
-
-nsh> mcu_spi_test fake all --bus 2
-SPI_TEST fake FAIL bus=2 reason=no-device
-```
-
-上述结果证明两个 lower-half 的软件合同、实例隔离和错误诊断。USB2 仅是控制台，
-不经过 SPI pin，不能证明 SPI0/SPI1 的实际数据、频率、mode 或 CS 波形。
 
 ## 实物 SPI0 环回准备
 
@@ -358,9 +110,8 @@ CS 波形通过。
 mcu_spi_test hw loopback --bus 0 --freq 100000 --mode 0 --bits 8 --length 32 --target 0
 ```
 
-流程：打开 `/dev/spi0`，生成确定性 pattern，执行一段 `SPIIOC_TRANSFER`，读取
-lower diagnostic，再逐字节比较 TX/RX。PASS 必须同时满足 ioctl 成功、diagnostic
-为 0、数据完全一致。分别覆盖 mode 0..3、8/16-bit、100 kHz/400 kHz/1 MHz 和
+流程：打开 `/dev/spi0`，生成确定性 pattern，执行一段 `SPIIOC_TRANSFER`，再逐字节
+比较 TX/RX。PASS 必须同时满足 ioctl 成功、数据完全一致。分别覆盖 mode 0..3、8/16-bit、100 kHz/400 kHz/1 MHz 和
 MSB/LSB；分析仪确认实际频率不高于请求值以及 CPOL/CPHA、bit order 正确。
 
 ### `hw paths`
@@ -370,8 +121,9 @@ mcu_spi_test hw paths --bus 0 --freq 400000 --mode 0 --bits 8 --length 33 --targ
 ```
 
 依次执行 full-duplex、TX-only 和 RX-only。full-duplex 必须逐字节回环；TX-only
-必须无 diagnostic；RX-only 由 controller 发送 filler，短接下应全部读回 `0xff`。
-每段都重新检查 diagnostic，任一段失败则整个 case FAIL。
+（`rxbuffer` 为 NULL）本身没有回读数据，它的波形由逻辑分析仪在 MOSI/CLK 上确认；
+RX-only 由 controller 发送 filler，短接下应全部读回 `0xff`，TX-only 若在 RX FIFO
+留下数据，这里会读到旧数据而 FAIL。任一段失败则整个 case FAIL。
 
 ### `hw sequence`
 
@@ -390,8 +142,8 @@ mcu_spi_test hw boundary --bus 0 --freq 400000 --target 0
 ```
 
 自动执行 mode 0..3、8/16-bit 和 1、31、32、33、256、1024 words 的笛卡尔积，
-共 48 次环回。每一行都必须 PASS；测试中出现 assert、panic、hang、数据错位或
-diagnostic 非零都判失败。随后以 `--lsb` 对同一集合重跑，补齐 bit order 边界。
+共 48 次环回。每一行都必须 PASS；测试中出现 assert、panic、hang 或数据错位都判
+失败。随后以 `--lsb` 对同一集合重跑，补齐 bit order 边界。
 
 ## 实物验收顺序
 
@@ -408,7 +160,7 @@ diagnostic 非零都判失败。随后以 `--lsb` 对同一集合重跑，补齐
 
 ## 已完成回归与当前限制
 
-dual-test 固件上的回归关键结果：
+SPI 测试固件上其它外设的回归关键结果：
 
 ```text
 [TIMER-001] PASS accuracy within tolerance
@@ -429,6 +181,7 @@ MSB/LSB 共 96 组、`hw loopback`（100 kHz、1 MHz、mode 1..3）、`hw paths`
 `hw sequence` 全部 PASS；断开短接时 `hw loopback` 按预期 FAIL。逻辑分析仪确认了
 MOSI 方向、sequence 的 CS 保持/释放、实际频率和 CPOL，数据见
 `docs/bl616cl-spi.md` 的“实物实测数据”。同日补测 mode 0..3 × MSB/LSB 的 CPHA 和
-bit order，波形与请求一致；SPI1 的四线 pin、板级注册和实物验证也尚未冻结。OpenVela `spi_transfer()` 不能传播
-`exchange(void)` 内部错误，当前测试通过 chip diagnostic 读取 timeout/config/select
-结果；普通 consumer 不能据 ioctl 返回值推断所有 lower-half 错误。
+bit order，波形与请求一致；SPI1 的四线 pin、板级注册和实物验证尚未冻结。OpenVela
+`spi_transfer()` 不能传播 `exchange(void)` 内部错误，timeout、配置失败或 target
+选择失败时 ioctl 仍可能返回成功；这类传输不会正确写入 RX，因此测试以数据比对判定，
+不依赖 ioctl 返回值推断 lower-half 结果。
