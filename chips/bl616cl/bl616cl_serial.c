@@ -28,6 +28,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/param.h>
 #include <sys/types.h>
 
 #ifdef CONFIG_SERIAL_TERMIOS
@@ -92,6 +93,10 @@ static void bl616cl_send(struct uart_dev_s *dev, int ch);
 static void bl616cl_txint(struct uart_dev_s *dev, bool enable);
 static bool bl616cl_txready(struct uart_dev_s *dev);
 static bool bl616cl_txempty(struct uart_dev_s *dev);
+static ssize_t bl616cl_recvbuf(struct uart_dev_s *dev, void *buf,
+                               size_t len);
+static ssize_t bl616cl_sendbuf(struct uart_dev_s *dev, const void *buf,
+                               size_t len);
 #endif
 
 /****************************************************************************
@@ -113,6 +118,8 @@ static const struct uart_ops_s g_uart_ops =
   .txint       = bl616cl_txint,
   .txready     = bl616cl_txready,
   .txempty     = bl616cl_txempty,
+  .recvbuf     = bl616cl_recvbuf,
+  .sendbuf     = bl616cl_sendbuf,
 };
 
 #ifdef CONFIG_BL616CL_UART0
@@ -360,6 +367,10 @@ static int bl616cl_setup(struct uart_dev_s *dev)
     {
       return ret;
     }
+
+  /* bl616cl_txready() would always be true with a zero TX threshold. */
+
+  DEBUGASSERT(priv->tx_fifo_th > 0);
 
   ret = bl616cl_lowputc_config(priv);
   if (ret < 0)
@@ -846,21 +857,30 @@ static void bl616cl_txint(struct uart_dev_s *dev, bool enable)
  * Name: bl616cl_txready
  *
  * Description:
- *   Implement the uart_ops_s txready method.
+ *   Implement the uart_ops_s txready method. The UART is ready when the TX
+ *   FIFO has at least tx_fifo_th free entries, not just one. A single
+ *   uart_xmitchars() call then stops once bl616cl_sendbuf() has refilled
+ *   the FIFO, and the TX FIFO interrupt resumes when it drains again,
+ *   instead of the call following the drain byte by byte with interrupts
+ *   disabled.
  *
  * Input Parameters:
  *   dev - An instance of the internal, device-specific UART structure.
  *
  * Returned Value:
- *   true if the UART can accept another character; false otherwise.
+ *   true if the TX FIFO has at least tx_fifo_th free entries; false
+ *   otherwise.
  *
  ****************************************************************************/
 
 static bool bl616cl_txready(struct uart_dev_s *dev)
 {
   struct bl616cl_uart_s *priv = dev->priv;
+  uint32_t regval;
 
-  return bflb_uart_txready(priv->device);
+  regval = getreg32(priv->device->reg_base + UART_FIFO_CONFIG_1_OFFSET);
+  return ((regval & UART_TX_FIFO_CNT_MASK) >> UART_TX_FIFO_CNT_SHIFT) >=
+         priv->tx_fifo_th;
 }
 
 /****************************************************************************
@@ -885,6 +905,86 @@ static bool bl616cl_txempty(struct uart_dev_s *dev)
   return bflb_uart_txempty(priv->device) &&
          (getreg32(priv->device->reg_base + UART_STATUS_OFFSET) &
           UART_STS_UTX_BUS_BUSY) == 0;
+}
+
+/****************************************************************************
+ * Name: bl616cl_recvbuf
+ *
+ * Description:
+ *   Implement the uart_ops_s recvbuf method. Read the RX FIFO count once
+ *   and copy that many characters, up to len, straight from the FIFO data
+ *   register. uart_recvchars() then moves the FIFO contents in one call
+ *   instead of calling rxavailable and receive for every character.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *   buf - Buffer for the received characters.
+ *   len - Size of buf.
+ *
+ * Returned Value:
+ *   The number of characters read; zero if the RX FIFO is empty.
+ *
+ ****************************************************************************/
+
+static ssize_t bl616cl_recvbuf(struct uart_dev_s *dev, void *buf, size_t len)
+{
+  struct bl616cl_uart_s *priv = dev->priv;
+  uintptr_t base = priv->device->reg_base;
+  uint8_t *data = buf;
+  uint32_t regval;
+  size_t count;
+  size_t i;
+
+  regval = getreg32(base + UART_FIFO_CONFIG_1_OFFSET);
+  count = (regval & UART_RX_FIFO_CNT_MASK) >> UART_RX_FIFO_CNT_SHIFT;
+  count = MIN(count, len);
+
+  for (i = 0; i < count; i++)
+    {
+      data[i] = getreg8(base + UART_FIFO_RDATA_OFFSET);
+    }
+
+  return count;
+}
+
+/****************************************************************************
+ * Name: bl616cl_sendbuf
+ *
+ * Description:
+ *   Implement the uart_ops_s sendbuf method. Read the number of free TX
+ *   FIFO entries once and write that many characters, up to len, straight
+ *   to the FIFO data register.
+ *
+ * Input Parameters:
+ *   dev - An instance of the internal, device-specific UART structure.
+ *   buf - Characters to send.
+ *   len - Number of characters in buf.
+ *
+ * Returned Value:
+ *   The number of characters written; zero if the TX FIFO is full.
+ *
+ ****************************************************************************/
+
+static ssize_t bl616cl_sendbuf(struct uart_dev_s *dev, const void *buf,
+                               size_t len)
+{
+  struct bl616cl_uart_s *priv = dev->priv;
+  uintptr_t base = priv->device->reg_base;
+  const uint8_t *data = buf;
+  uint32_t regval;
+  size_t count;
+  size_t i;
+
+  regval = getreg32(base + UART_FIFO_CONFIG_1_OFFSET);
+  count = (regval & UART_TX_FIFO_CNT_MASK) >> UART_TX_FIFO_CNT_SHIFT;
+  count = MIN(count, len);
+
+  for (i = 0; i < count; i++)
+    {
+      putreg8(data[i], base + UART_FIFO_WDATA_OFFSET);
+    }
+
+  return count;
 }
 #endif
 
