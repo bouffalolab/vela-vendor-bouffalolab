@@ -536,7 +536,7 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | ID | 能力 | 状态 | 裁剪和资源边界 | 验证要求 |
 |---|---|---|---|---|
 | E01 | WDT interrupt/capture、automonitor | 已验证 | `BL616CL_WDT` 控制 lower-half；`BL616CL_WDT_CAPTURE` 控制 ISR/capture，并在 BY_CAPTURE 时由 Kconfig 自动联动；生产 automonitor 使用 BY_WDOG | WDT-001~005 覆盖边界、live timeout、双 fd、capture handler、automonitor 接管和 `SYS_RWDT` 复位；关闭态裁剪成立 |
-| E02 | TIMER1 普通 timer | 已验证 | `BL616CL_TIMER1` 控制实例并依赖 `!BL616CL_ONESHOT`；`BL616CL_TIMER_TEST` 仅测试 hook；独立 `/dev/timer1` | USB2 实测周期、tick、poll/单 waiter、多 fd、双实例、raw callback；off/TIMER0/TIMER1/dual/oneshot 五配置裁剪通过 |
+| E02 | TIMER1 普通 timer | 已验证 | `BL616CL_TIMER1` 控制实例并依赖 `!BL616CL_ONESHOT`；独立 `/dev/timer1` | USB2 实测周期、tick、poll/单 waiter、多 fd、双实例；off/TIMER0/TIMER1/dual/oneshot 五配置裁剪通过 |
 | E03 | TIMER0 input capture | 需要适配，P2 | device table 有 capture IRQ；对接 NuttX capture lower-half并配置输入 pin | 频率、占空比、边沿、溢出和无信号超时 |
 | E04 | GPIO multipin batch | 需要适配，P2 | 当前 ioexpander multipin ops 为 `NULL`；仅 `IOEXPANDER_MULTIPIN` 时编译 | 跨 pin 原子性边界、输入/输出混合、与 IRQ 并发 |
 | E05 | GPIO debounce/wakeup | 延后 | 需要区分硬件能力、软件 worker 和 PDS/HBN 唤醒域 | 抖动波形、丢边沿、睡眠唤醒和功耗 |
@@ -553,10 +553,10 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | P02 | TRNG `/dev/random` | 已验证 | `BL616CL_TRNG`；测试 app 独立关闭；可选 `DEV_URANDOM_ARCH` | chip adapter 直接实现 `devrandom_register()`；USB2 已验证任意长度、非对齐、标准 API、基本统计、多线程、裁剪和外设回归 |
 | P03 | RTC/Alarm | 已验证；upper-half ioctl 已补全 | `BL616CL_RTC`、`BL616CL_RTC_ALARM`；ioctl 测试 app 独立关闭；RC32K/DIG32K 二选一 | 48 位 HBN RTC lower-half 与 `/dev/rtc0`；UTC/亚秒、absolute/relative Alarm、取消/替换/re-arm、回绕、warm reset、unlink 和裁剪已验证；九个标准 ioctl 的 NULL/ID/ENOSYS 合同已在 debug/release fake lower 实测 |
 | P04 | I2C0/I2C1 master | 软件闭环已通过；正向单字节读写已验证（AVE-V10）；多字节读、双实例待资源 | 每实例选项、SCL/SDA pin、频率 | polling lower-half、裁剪和无 target 负向路径已验证；I2C0、I2C1 在 GPIO4/5 的无 target 地址波形已用逻辑分析仪确认；BL616CL-AVE-V10 的 I2C0 对板载 ES8388 完成 probe、repeated-start 读、单消息写回读恢复和并发读（100/400 kHz，见 `bl616cl-i2c.md`）；多字节读（EEPROM）和双实例仍待资源 |
-| P05 | SPI0/SPI1 master | SPI0 已验证；SPI1 blocked | 每实例选项、pin、mode、CS policy | polling lower-half、裁剪和 fake 合同已验证；SPI0 短接环回、CS/CLK、CPOL/CPHA、bit order 和 MISO/MOSI 对调已实测；SPI1 pin/target 仍待资源 |
-| P06 | PWM | 软件闭环与 G4 波形已通过，P1 | `BL616CL_PWM`、`AI_M64P_KIT_PWM`（按通道选正/负引脚）、test hook/app 独立裁剪；`PWM_MULTICHAN` 可选，排除 pulse/fixed/deadtime | PWM0 CH0–CH3 正/负输出（负输出为正输出反相，无死区；全是正输出时自动用单端引脚布局）、continuous、整数频率、duty、cpol/dcpol、live update 和 multi-fd 已完成三态构建、裁剪和现役回归；`nsh-peripherals` 4 通道 9/9 实机软件合同；逻辑分析仪已测单通道 100 Hz～10 kHz 的 frequency/duty、STOP/close 电平和更新毛刺，以及多通道同频、各通道 duty、逐样本互补、只配负输出和启停电平 |
+| P05 | SPI0/SPI1 master | SPI0 已验证；SPI1 blocked | 每实例选项、pin、mode、CS policy | polling lower-half 和裁剪已验证；SPI0 短接环回、CS/CLK、CPOL/CPHA、bit order 和 MISO/MOSI 对调已实测；SPI1 pin/target 仍待资源 |
+| P06 | PWM | 软件闭环与 G4 波形已通过，P1 | `BL616CL_PWM`、`AI_M64P_KIT_PWM`（按通道选正/负引脚）、测试 app 独立裁剪；`PWM_MULTICHAN` 可选，排除 pulse/fixed/deadtime | PWM0 CH0–CH3 正/负输出（负输出为正输出反相，无死区；全是正输出时自动用单端引脚布局）、continuous、整数频率、duty、cpol/dcpol、live update 和 multi-fd 已完成三态构建、裁剪和现役回归；`nsh-peripherals` 4 通道实机用例曾全部 PASS（旧版 9 个 case；去掉超时注入后现行 8 个 case 于 2026-10-16 全部 PASS，`-g` 回环电平检查未跑）；逻辑分析仪已测单通道 100 Hz～10 kHz 的 frequency/duty、STOP/close 电平和更新毛刺，以及多通道同频、各通道 duty、逐样本互补、只配负输出和启停电平 |
 | P07 | ADC | 需要适配，P2 | ADC、channel/pin、poll/DMA 分层 | analog lower-half；校准、量程、连续采样、溢出；外部基准电压 |
-| P08 | DMA0 | 已验证 | `BL616CL_DMA0` 默认关闭；test hook/app 独立；首版依赖 `!DMA_LINK` | 八通道 fixed-ident、1/2/4-byte mem2mem、TC/error 状态机、stop/residual、cache ownership 和并发生命周期；外设 consumer/LLI/cyclic 延后 |
+| P08 | DMA0 | 已验证 | `BL616CL_DMA0` 默认关闭；测试 app 独立；首版依赖 `!DMA_LINK` | 八通道 fixed-ident、1/2/4-byte mem2mem、TC 完成、cache ownership 和并发生命周期；error 注入和完成前 stop 原依赖已删除的测试钩子，当前未覆盖；外设 consumer/LLI/cyclic 延后 |
 | P09 | AES/SHA `/dev/crypto` 与 mbedTLS ALT；GMAC、PKA、CRC32 | AES/SHA 已验证；GMAC/PKA 延后；CRC32 不支持 | `BL616CL_CRYPTO`、`_AES`、`_SHA` 分别裁剪；bounce 大小与直连可配；软件驱动关闭；ALT 逐项开 | AES-CBC/CTR/XTS、SHA-1/2 经 `hwcr_init()` 注册；cmocka、`mcu_crypto_test`、`mbedselftest` 在直连开/关两种 KASAN 构建通过；超时恢复实测；CRC32 硬件语义不符；`wifi` 实测 ALT 不缩短连接时间（SHA1 ALT 使 WPA2 慢约 1.6 s），AES/SHA ALT 不开；用到 mbedTLS 时默认打开熵源 ALT（读 `/dev/random`）。见 [bl616cl-crypto.md](bl616cl-crypto.md) |
 | P10 | EFUSE/unique ID | 需要适配，P2 | read 与 irreversible program 分离；默认只读 | 明确 NuttX ABI；只读实测、越界/权限；烧写需单独授权和治具 |
 | P11 | SPI flash MTD | 需要适配，P2 | `BL616CL_FLASH_MTD`、partition/fs 独立 | XIP 并发、擦写临界区、cache、边界、掉电恢复；不得覆盖 boot/app/MFG |
@@ -588,8 +588,8 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
   最大误差 337us（0.337%）；006 向上量化 1001us 为 2 ticks、3 ticks 转
   3000us，零值/溢出分别返回 `EINVAL`/`ERANGE`；007 的 poll 返回 `POLLIN`
   （0x1），第二 waiter 返回 `POLLERR`（0x8）；008 关闭 fd1 后 fd2 仍保持
-  ACTIVE；009 的 30ms/50ms 双实例更新和 timer0 停止隔离通过；010 callback
-  计数 2、next=30000us、最终 inactive。每个 case 均返回 `nsh>`。
+  ACTIVE；009 的 30ms/50ms 双实例更新和 timer0 停止隔离通过。每个 case 均返回
+  `nsh>`。原 010 依赖 chip 测试钩子，已删除。
 - TIMER0 回归：002 的 div39/div79 周期分别 0.0998s/0.1999s，比值 2.002；
   005 的非法 timeout/divider、重复 start/stop、live timeout 和恢复流程全部
   PASS。oneshot 配置实测 `oneshot -d 100000 /dev/oneshot` 输出 `Finished`，
@@ -605,18 +605,16 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 - 最大能力交集：DMA0 CH0..CH7、共享 raw IRQ 31、1/2/4-byte width、地址固定或按
   width 递增、TC/error status 和 12-bit TransferSize 与 OpenVela generic DMA 的
   channel、mem2mem one-shot、callback、stop/residual 合同形成首版交集。
-- 配置与裁剪：`BL616CL_DMA0` 默认关闭并依赖 `DMA && !DMA_LINK`；test hook 和
-  `mcu_dma_test` 独立关闭。off/product/test clean build 为 1224/1224、1227/1227、
-  1229/1229；关闭态无 adapter/LHAL DMA/test，产品态有强
-  `riscv_dma_initialize` 而没有 test symbol。
-- USB2 实测：DMA-001..008 全部 PASS，覆盖 1/2/4-byte width、固定/递增 step、逐字节
-  数据、4095 units 和 4096 `E2BIG`、无效请求原子拒绝、八通道 TC、NULL callback、
-  stop/residual、cache alias、owner wait、并发 put 和 callback drain；最终汇总为
-  `passed=8 failed=0`。
-- error 边界：同 channel 的 TC+error 软件注入证明 adapter error 优先、单 callback、
-  `-EIO` 和 residual 合同，但不构成硬件 error IRQ 注入证据。
-- stop/cache 边界：test-only hold 证明 programmed-but-not-enabled stop 和 byte residual，
-  不声明线速取消；cached/non-cache alias 只证明调用方执行 clean/invalidate 后的可见性，
+- 配置与裁剪：`BL616CL_DMA0` 默认关闭并依赖 `DMA && !DMA_LINK`；`mcu_dma_test`
+  独立关闭，只用公共 DMA API 和 `bl616cl_dma0_device()`。关闭态无 adapter/LHAL
+  DMA，打开时有强 `riscv_dma_initialize`。
+- USB2 实测（旧版 8 个 case）：DMA-001..008 全部 PASS，覆盖 1/2/4-byte width、
+  固定/递增 step、逐字节数据、4095 units 和 4096 `E2BIG`、无效请求原子拒绝、八通道
+  TC、NULL callback、stop/residual、cache alias、owner wait、并发 put 和 callback
+  drain；最终汇总为 `passed=8 failed=0`。其中 TC+error 优先级和 stop/residual
+  依赖 chip 测试钩子（软件注入 IRQ、enable 前挂起），已随钩子删除；现行 DMA-001..007
+  只用公共接口，2026-10-16 在 BL616CL-AVE-V10 上为 `passed=7 failed=0`。
+- cache 边界：cached/non-cache alias 只证明调用方执行 clean/invalidate 后的可见性，
   DMA adapter 不代替 client 维护 cache。
 - 外设 consumer、pause/resume、cyclic、LLI/link/insert 保持延后；后续必须按 UART、
   I2C、SPI、ADC、MTD 或 crypto 分别建立 owner、request、cache 和实物验证闭环。
@@ -679,9 +677,11 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
   absolute/relative Alarm、active query、cancel、replace、re-arm、settime
   重编程、0.5 ms 短 absolute Alarm 和 200 ms 重复通知静默检查。RC32K 常规 Alarm 为
   1986~1987 ms，DIG32K 为 1998~2000 ms；DIG32K 短 Alarm 实测 2 ms。
-- RTC-004 五轮以 MTimer `CLOCK_MONOTONIC` 为参考：RC32K 相对误差为
+- 旧版 RTC-004 五轮以 MTimer `CLOCK_MONOTONIC` 为参考：RC32K 相对误差为
   6378~6409 ppm，最新 DIG32K 为 2~8 ppm；软件验证 48 位回绕差值 16 ticks。
-  该结果是相对比较而非绝对校准，正式默认据此选择 DIG32K。
+  该结果是相对比较而非绝对校准，正式默认据此选择 DIG32K。现行 RTC-004 改用
+  `RTC_RD_TIME` 对照，不再读 chip 内部 counter、不测回绕；2026-10-16 在
+  BL616CL-AVE-V10（DIG32K）上六轮为 2~18 ppm，与旧结果同量级。
 - 两种时钟各完成三轮 active Alarm warm reset：每轮复位后 3 秒无旧通知，
   `RTC_HAVE_SET_TIME=0`、Alarm inactive，并可重新布防。RTC-005 验证当前
   `SIGEV_SIGNAL` 下双 fd unlink/最后关闭取消流程；正式固件的 `/dev/rtc0`、

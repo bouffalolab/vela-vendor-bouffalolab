@@ -30,7 +30,7 @@
 - [BL616CL UBSAN](bl616cl-ubsan.md)：配置和验证局部未定义行为插桩、runtime
   闭包、裁剪和外设回归。
 - [BL616CL SPI0/SPI1 Master](bl616cl-spi.md)：说明 polling master 最大能力交集、
-  双实例裁剪、GPIO CS、软件合同、构建证据和实物环回验收边界。
+  双实例裁剪、GPIO CS、构建和实物环回验收边界。
 - [BL616CL PWM](bl616cl-pwm.md)：说明 PWM controller 与 OpenVela upper-half 的
   最大能力交集、CH0–CH3 多通道与互补输出、引脚 owner、频率和极性合同、裁剪及波形
   验收边界。
@@ -49,5 +49,5 @@
 - [BL616CL DMA0](bl616cl-dma.md)：说明 OpenVela generic DMA adapter、八通道
   mem2mem、共享 IRQ、cache ownership、裁剪、实板验证和后续 consumer 边界。
 - [BL616CL 普通 Timer 与 TIMER1 验证](bl616cl-timer.md)：说明 TIMER0/TIMER1
-  最大能力交集、oneshot owner 互斥、tick/poll/multi-fd/raw callback 测试、
+  最大能力交集、oneshot owner 互斥、tick/poll/multi-fd 测试、
   五配置裁剪和 USB2 实测边界。
