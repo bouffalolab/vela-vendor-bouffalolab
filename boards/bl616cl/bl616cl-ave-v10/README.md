@@ -71,6 +71,7 @@ picocom 要加 `--lower-rts`，否则模组一直处于复位。FlashCube 自动
 ```text
 i2c dev -b 0 0x08 0x77
 i2c get -b 0 -a 10 -r 0
+i2c set -b 0 -a 10 -r 1a c4
 mcu_i2c_test hw probe --bus 0 --addr 0x10 --freq 400000
 mcu_i2c_test hw eeprom --addr 16 --offset 26 --addr-width 1 --capacity 53 --length 1 --page-size 1 --allow-write
 ```
@@ -79,6 +80,7 @@ mcu_i2c_test hw eeprom --addr 16 --offset 26 --addr-width 1 --capacity 53 --leng
 NuttX `drivers/audio/es8388.h` 的复位默认值。ES8388 读操作不自动递增寄存器地址，
 `i2c dump` 只有首字节有效，要逐个 `i2c get`。
 
-NuttX `i2c set` 写不了寄存器：它用 `NOSTOP` + `NOSTART` 两条消息拼接写，BL616CL I2C
-驱动不支持 `NOSTART`。写寄存器用单条消息，上面的 `hw eeprom` 每次只写一个寄存器，
-并会备份、读回比较和恢复。完整结果见 `docs/bl616cl-i2c.md`。
+`i2c set` 可以写寄存器（上例把 0x1A 写成 0xC4，默认值是 0xC0，用完写回）。不要加
+`-s`：它把寄存器号和数值分成两次调用发送，驱动不支持；i2ctool 的选项会保留到后续
+命令，误用后加一次 `-n` 恢复。`hw eeprom` 每次只写一个寄存器，并会备份、读回比较和
+恢复。完整结果见 `docs/bl616cl-i2c.md`。

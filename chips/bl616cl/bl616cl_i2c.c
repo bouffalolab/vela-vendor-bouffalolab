@@ -191,13 +191,45 @@ static bool bl616cl_i2c_frequency_valid(uint32_t frequency)
 }
 
 /****************************************************************************
+ * Name: bl616cl_i2c_group_count
+ *
+ * Description:
+ *   Return how many messages starting at index i go out as one LHAL
+ *   transfer: two when msgs[i] has NOSTOP or the next message has NOSTART,
+ *   otherwise one.
+ *
+ * Input Parameters:
+ *   msgs  - Array of I2C messages
+ *   count - Number of messages in the array
+ *   i     - Index of the first message of the group
+ *
+ * Returned Value:
+ *   1 or 2.
+ *
+ ****************************************************************************/
+
+static int bl616cl_i2c_group_count(const struct i2c_msg_s *msgs, int count,
+                                   int i)
+{
+  if ((msgs[i].flags & I2C_M_NOSTOP) != 0 ||
+      (i + 1 < count && (msgs[i + 1].flags & I2C_M_NOSTART) != 0))
+    {
+      return 2;
+    }
+
+  return 1;
+}
+
+/****************************************************************************
  * Name: bl616cl_i2c_validate
  *
  * Description:
  *   Validate a message chain before any hardware access. Checks buffers,
- *   length limits, 7-bit addresses, frequency and flags, and only accepts a
- *   NOSTOP write (prefix) directly followed by a read on the same address and
- *   frequency.
+ *   length limits, 7-bit addresses, frequency and flags. Besides single
+ *   messages it accepts two kinds of pairs on the same address and
+ *   frequency, both starting with a write (prefix): a NOSTOP prefix followed
+ *   by a read (repeated start), and a prefix followed by a NOSTART write
+ *   (continuation of the same write).
  *
  * Input Parameters:
  *   msgs  - Array of I2C messages to validate
@@ -205,9 +237,9 @@ static bool bl616cl_i2c_frequency_valid(uint32_t frequency)
  *
  * Returned Value:
  *   Zero (OK) on success; a negated errno value on failure. Errors: -EINVAL
- *   for malformed messages or a prefix/read pair with different address or
- *   frequency; -EOPNOTSUPP for 10-bit addressing, NOSTART, or an unsupported
- *   NOSTOP usage.
+ *   for malformed messages or a pair with different address or frequency;
+ *   -EOPNOTSUPP for 10-bit addressing or an unsupported NOSTOP/NOSTART
+ *   usage.
  *
  ****************************************************************************/
 
@@ -243,11 +275,17 @@ static int bl616cl_i2c_validate(struct i2c_msg_s *msgs, int count)
           return -EOPNOTSUPP;
         }
 
-      if ((msgs[i].flags & I2C_M_NOSTOP) != 0)
+      if (bl616cl_i2c_group_count(msgs, count, i) == 2)
         {
+          /* The prefix becomes the LHAL sub-address, so the pair is either
+           * prefix + repeated-start read or prefix + continued write.
+           */
+
           if ((msgs[i].flags & I2C_M_READ) != 0 ||
               msgs[i].length > BL616CL_I2C_MAX_PREFIX ||
-              i + 1 >= count || msgs[i + 1].flags != I2C_M_READ)
+              i + 1 >= count ||
+              (msgs[i + 1].flags != I2C_M_READ &&
+               msgs[i + 1].flags != I2C_M_NOSTART))
             {
               return -EOPNOTSUPP;
             }
@@ -330,8 +368,10 @@ static int bl616cl_i2c_transport_failed(struct bl616cl_i2c_priv_s *priv,
  *
  * Description:
  *   Convert one group of one or two NuttX messages to LHAL messages, set the
- *   bus frequency of the first message and run the transfer. Any failure
- *   cleans up the controller.
+ *   bus frequency of the first message and run the transfer. In a pair the
+ *   first message is passed as an LHAL NOSTOP sub-address; LHAL sends a
+ *   repeated start before a read and continues a write without one. Any
+ *   failure cleans up the controller.
  *
  * Input Parameters:
  *   priv  - I2C port private state
@@ -359,7 +399,7 @@ static int bl616cl_i2c_call(struct bl616cl_i2c_priv_s *priv,
           lhal[i].flags |= I2C_M_READ;
         }
 
-      if ((msgs[i].flags & I2C_M_NOSTOP) != 0)
+      if (i == 0 && count == 2)
         {
           lhal[i].flags |= I2C_M_NOSTOP;
         }
@@ -383,8 +423,8 @@ static int bl616cl_i2c_call(struct bl616cl_i2c_priv_s *priv,
  *
  * Description:
  *   Implement the i2c_ops_s transfer method. Validates the chain, takes the
- *   port lock and runs it in groups (a NOSTOP write plus its read count as
- *   one group).
+ *   port lock and runs it in groups (a prefix write plus its read or NOSTART
+ *   write count as one group).
  *
  * Input Parameters:
  *   dev   - Device structure as returned by bl616cl_i2cbus_initialize()
@@ -426,7 +466,7 @@ static int bl616cl_i2c_transfer(struct i2c_master_s *dev,
 
   for (i = 0; i < count; i += group_count)
     {
-      group_count = (msgs[i].flags & I2C_M_NOSTOP) != 0 ? 2 : 1;
+      group_count = bl616cl_i2c_group_count(msgs, count, i);
       ret = bl616cl_i2c_call(priv, &msgs[i], group_count);
       if (ret < 0)
         {

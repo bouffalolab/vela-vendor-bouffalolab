@@ -64,6 +64,7 @@ struct i2c_hw_config_s
   bool allow_write;
   bool capacity_set;
   bool expect_no_target;
+  bool split_write;
 };
 
 struct i2c_hw_worker_s
@@ -110,6 +111,9 @@ static void i2c_test_usage(const char *progname)
   printf("  --allow-write        Required by the destructive EEPROM case\n");
   printf("  --no-target          Probe expects the selected address not to "
          "ACK\n");
+  printf("  --split-write        EEPROM writes send the offset and the data "
+         "as two\n"
+         "                       messages, the data one with NOSTART\n");
 }
 
 static int i2c_parse_u32(const char *text, uint32_t *value)
@@ -160,6 +164,12 @@ static int i2c_parse_hw_options(int argc, char *argv[],
       if (strcmp(argv[i], "--no-target") == 0)
         {
           cfg->expect_no_target = true;
+          continue;
+        }
+
+      if (strcmp(argv[i], "--split-write") == 0)
+        {
+          cfg->split_write = true;
           continue;
         }
 
@@ -373,7 +383,7 @@ static int i2c_eeprom_write_fd(int fd, const struct i2c_hw_config_s *cfg,
                                const uint8_t *buffer, size_t length)
 {
   uint8_t *tx;
-  struct i2c_msg_s msg;
+  struct i2c_msg_s msgs[2];
   size_t done = 0;
   int ret = OK;
 
@@ -408,12 +418,25 @@ static int i2c_eeprom_write_fd(int fd, const struct i2c_hw_config_s *cfg,
 
       i2c_encode_offset(tx, cfg->addr_width, current);
       memcpy(tx + cfg->addr_width, buffer + done, chunk);
-      msg.frequency = cfg->frequency;
-      msg.addr = addr;
-      msg.flags = 0;
-      msg.buffer = tx;
-      msg.length = cfg->addr_width + chunk;
-      ret = i2c_ioctl_transfer(fd, &msg, 1);
+      msgs[0].frequency = cfg->frequency;
+      msgs[0].addr = addr;
+      msgs[0].flags = 0;
+      msgs[0].buffer = tx;
+      msgs[0].length = cfg->addr_width + chunk;
+      if (cfg->split_write)
+        {
+          /* Same bytes on the wire: the NOSTART data message continues the
+           * offset message without a new START.
+           */
+
+          msgs[0].length = cfg->addr_width;
+          msgs[1] = msgs[0];
+          msgs[1].flags = I2C_M_NOSTART;
+          msgs[1].buffer = tx + cfg->addr_width;
+          msgs[1].length = chunk;
+        }
+
+      ret = i2c_ioctl_transfer(fd, msgs, cfg->split_write ? 2 : 1);
       if (ret < 0)
         {
           break;
@@ -714,10 +737,10 @@ out:
   if (result == OK)
     {
       printf("I2C_TEST RESULT mode=hw case=eeprom PASS bus=%d addr=0x%02x "
-             "offset=%" PRIu32 " length=%zu backup=verified "
+             "offset=%" PRIu32 " length=%zu write=%s backup=verified "
              "restore=verified\n",
              cfg->bus, cfg->addr, cfg->offset,
-             cfg->length);
+             cfg->length, cfg->split_write ? "split" : "single");
     }
   else
     {

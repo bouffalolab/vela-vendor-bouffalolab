@@ -31,7 +31,7 @@ OpenVela `I2C_TRANSFER()` 接受消息数组并要求整组传输原子。公共
 | 双总线并发 | 纳入，未实测 | 两实例各一把 mutex，互不串行；实物双总线待资源冻结 |
 | 10-bit address | 后续项 | 寄存器有字段，当前没有真实 10-bit target 验证 |
 | 三段以上 restart | 后续项 | LHAL 私有 restart 与公共 ABI 不同，尚未逐段证明线序 |
-| `NOSTART` continuation | 后续项 | 当前 LHAL 未实现公共语义，返回 `-EOPNOTSUPP` |
+| `NOSTART` continuation | 写续写纳入 | 1..16 字节写 + 带 `NOSTART` 的写，翻译成 LHAL 子地址 + 写；读续读和三段以上的链返回 `-EOPNOTSUPP` |
 | IRQ、trace、bus reset | 后续项 | 缺完整 ISR/callback、trace 和 GPIO recovery 验证闭环 |
 | DMA | 排除 | 当前路径启用后直接返回，没有 channel、完成等待和 cache 合同 |
 | slave、1 MHz、3.4 MHz | 排除 | LHAL 无 slave API，频率文档上限为 400 kHz |
@@ -101,12 +101,21 @@ BL616CL-AVE-V10 只有 I2C0，硬连到 GPIO20（SCL）、GPIO11（SDA），板�
 ## 消息和错误合同
 
 硬件访问前统一检查 `count > 0`、非空 buffer、7-bit 地址、100/400 kHz 和
-1..1024 字节。非法结构返回 `-EINVAL`；合法但当前未支持的 `TEN`、`NOSTART`、
-终止 `NOSTOP`、17 字节 combined prefix 和三段无 STOP 链返回 `-EOPNOTSUPP`。
+1..1024 字节。非法结构返回 `-EINVAL`；合法但当前未支持的 `TEN`、单独或接在读后面的
+`NOSTART`、终止 `NOSTOP`、17 字节 prefix 和三段无 STOP 链返回 `-EOPNOTSUPP`。
 
-`WRITE|NOSTOP -> READ` 只有在地址和频率一致时合成一次 LHAL 双消息调用。第一段
-是 1..16 字节 prefix，第二段是 1..1024 字节 read。STOP 分隔的普通消息仍在同一
-mutex 内分别调用 LHAL，防止其它 client 插入整组 transfer。
+两种双消息在地址和频率一致时合成一次 LHAL 调用，第一段都是 1..16 字节写（prefix），
+作为 LHAL 的 `NOSTOP` 子地址：
+
+- `WRITE|NOSTOP -> READ`：第二段是 1..1024 字节读，线上为 prefix 后 repeated start 再读。
+- `WRITE[|NOSTOP] -> WRITE|NOSTART`：第二段是 1..1024 字节写，线上为一次 START、
+  地址+W、prefix、数据、STOP，和把两段拼成一条写消息相同。NuttX `i2c set` 写寄存器
+  就是这种消息（寄存器号带 `NOSTOP`，数值带 `NOSTART`）。原生 SDK 在 BL616CL 上用
+  同样的 LHAL 子地址 + 写来写 codec 寄存器。
+
+`WRITE|NOSTOP -> WRITE`（不带 `NOSTART`）在公共语义里要 repeated start，LHAL 子地址
+做不到，仍返回 `-EOPNOTSUPP`。STOP 分隔的普通消息仍在同一 mutex 内分别调用 LHAL，
+防止其它 client 插入整组 transfer。
 
 chip/arch 与 app 使用的 `ENOTSUP` 数值不同，本实现跨 archive 合同固定使用两侧
 一致的 `EOPNOTSUPP=95`。LHAL 独立 archive 使用工具链 `ETIMEDOUT=116`，chip
@@ -229,8 +238,19 @@ SCL 低于请求值，不超过请求值。当时只有内部上拉，接外部 
 - 波形：这次没有接逻辑分析仪，接 4.7 kOhm 外部上拉时的 SCL 实际频率和 ACK 时序未测。
 - `hw dual`：AVE-V10 只有 I2C0。
 
-NuttX `i2c set` 用 `NOSTOP` + `NOSTART` 拼接“寄存器号 + 数值”，本驱动不支持
-`NOSTART`，所以 `i2c set` 写不了寄存器；写寄存器用单条消息，例如上面的 `hw eeprom`。
+同日驱动支持 `NOSTART` 续写后，在同一板上补测：
+
+| 命令 | 结果 |
+|---|---|
+| `i2c set -b 0 -a 10 -r 1a c4`，再 `i2c get` | 读回 0xC4；写回 0xC0 后读回 0xC0 |
+| 同上加 `-f 400000`，写 0xC8 | 读回 0xC8；写回 0xC0 后读回 0xC0 |
+| `mcu_i2c_test hw eeprom ... --allow-write --split-write`，0x1A 在 100/400 kHz、0x10 在 100 kHz | 均 PASS，备份、读回、恢复已校验 |
+| `i2c set -s -b 0 -a 10 -r 1a c4` | 按预期失败，0x1A 仍为 0xC0 |
+
+`i2c set -s` 把寄存器号和数值分成两次调用，第一次以 `NOSTOP` 结束，要求总线跨调用
+保持占用，本驱动不支持。i2ctool 的 `-s/-n` 等选项会保留到之后的命令，用过 `-s`
+后 `i2c get` 也会失败，要加一次 `-n` 恢复。只验证了 1 字节 prefix；更长的 prefix
+写续写需要 EEPROM。
 
 ## 现役外设回归
 

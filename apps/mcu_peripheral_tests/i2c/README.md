@@ -17,7 +17,7 @@ BL616CL LHAL 是同步 polling master，文档频率范围为 305 Hz 至 400 kHz
 | hw | `hw concurrent` | 同一总线多个线程反复 combined read，检查数据没有交叉 |
 | hw | `hw dual` | I2C0 与 I2C1 两个总线并行访问各自 target |
 
-DMA、10-bit 地址、三段以上 repeated-start、`NOSTART` continuation、总线复位不在本 P0 app 中伪装为已支持能力；相应参数会被拒绝或留给后续测试。适配层对非法频率、地址、flags 和长度的拒绝路径没有对应的实物总线现象，本 app 不覆盖。
+DMA、10-bit 地址、三段以上 repeated-start、读续读、总线复位不在本 P0 app 中伪装为已支持能力；相应参数会被拒绝或留给后续测试。适配层对非法频率、地址、flags 和长度的拒绝路径没有对应的实物总线现象，本 app 不覆盖。
 
 Ai-M64P-32S-Kit 缺外接 target、上拉和逻辑分析仪，`hw` case 在该板上只记录完整
 执行流程和判据，不标记为已实测 PASS。2026-10-13 起 `hw probe
@@ -26,7 +26,7 @@ Ai-M64P-32S-Kit 缺外接 target、上拉和逻辑分析仪，`hw` case 在该�
 同时注册 I2C0（GPIO30/31）和 I2C1（GPIO4/5），两条总线的 `hw probe --no-target`
 均 PASS；`hw dual` 仍需两路 target。2026-10-16 起
 BL616CL-AVE-V10 的 `nsh-peripherals` 注册 I2C0（GPIO20/11，板载 ES8388，地址 0x10），
-`hw probe`、`hw combined`、单寄存器 `hw eeprom` 和 `hw concurrent` 对真实从机 PASS，
+`hw probe`、`hw combined`、单寄存器 `hw eeprom`（单消息和 `--split-write`）和 `hw concurrent` 对真实从机 PASS，
 命令和结果见 `docs/bl616cl-i2c.md` 的“正向 target”。ES8388 读不自动递增地址，
 `hw boundary` 和多字节读仍要 EEPROM。
 
@@ -143,6 +143,10 @@ mcu_i2c_test hw eeprom --bus 0 --addr 0x50 --offset 0x100 \
 3. 读回同一区域，逐字节比较 pattern；失败时仍进入恢复流程。
 4. 用 backup 按同样页算法写回原数据，再次读回并逐字节比较。
 5. 只有 pattern 验证成功且 restore 验证成功，才输出总 PASS；恢复失败明确输出 `data-may-be-modified`，不能伪报成功。
+
+加 `--split-write` 时，每页写改为两条消息：偏移一条，数据一条并带 `I2C_M_NOSTART`，线上
+字节与单消息写相同，用来覆盖驱动的 `NOSTART` 续写（NuttX `i2c set` 也这样写）。RESULT
+行的 `write=split|single` 标明本次用的写法。
 
 进入 EEPROM case 后，任何写入前失败都记录 `restore=not-required`；尝试写入后，
 诊断行只能记录 `restore=verified` 或 `restore=failed`。每次调用最后仍只有一条
