@@ -288,8 +288,10 @@ static int timer_wait_fire(const struct app_config_s *cfg, sigset_t *set)
  * A scope on that pin then measures the timer period independently of the
  * software CLOCK_MONOTONIC check.  Uses the standard NuttX GPIO char driver
  * (GPIOC_WRITE), so the app stays decoupled from the chip/board GPIO code.
+ * Without CONFIG_DEV_GPIO the option only reports that it is unavailable.
  */
 
+#ifdef CONFIG_DEV_GPIO
 static int gpio_out_open(const struct app_config_s *cfg)
 {
   int fd;
@@ -332,6 +334,25 @@ static void gpio_out_close(int fd)
       close(fd);
     }
 }
+#else
+static int gpio_out_open(const struct app_config_s *cfg)
+{
+  if (cfg->gpio_toggle)
+    {
+      printf("  WARN: GPIO toggle disabled, CONFIG_DEV_GPIO is not set\n");
+    }
+
+  return -1;
+}
+
+static void gpio_out_toggle(int fd, bool *level)
+{
+}
+
+static void gpio_out_close(int fd)
+{
+}
+#endif
 
 /****************************************************************************
  * TIMER-001 : basic counting / overflow period accuracy
