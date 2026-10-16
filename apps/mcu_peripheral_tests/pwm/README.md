@@ -243,7 +243,7 @@ active/inactive stop-state，不能把枚举值直接写入 bit。
 
 ## 当前实测数据
 
-2026-10-16 当前程序在 Ai-M64P-32S-Kit `nsh-peripherals` 上执行 `mcu_pwm_test -c all -w 0`（未接 `-g` 回环）：8 个 case 全部 PASS，8 项电平检查 SKIP（`level_checks_skipped=8`）；带 `-g` 的电平检查尚未实板运行。以下是 2026-10-13 的实板记录。
+2026-10-16 当前程序在 Ai-M64P-32S-Kit `nsh-peripherals` 上执行：不带 `-g` 时 8 个 case 全部 PASS、8 项电平检查 SKIP；GPIO8 与 GPIO22 短接后 `mcu_pwm_test -c all -w 0 -g /dev/gpio22` 8 个 case 全部 PASS、`level_checks_skipped=0`（运行中翻转、4 组 cpol/dcpol 停止电平 0/1/0/1、多通道停止电平 1/0）。把 `-g` 换成未接 PWM 的 `/dev/gpio20` 时，001 报输出不翻转、005 报停止电平不符，均 FAIL，说明电平检查能发现接线或输出错误。以下是 2026-10-13 的实板记录。
 
 多通道版本在 `nsh-peripherals`（4 通道，见开头分配）上执行 `-c all`：PWM-001～006、
 008、009 均 PASS。不开 `PWM_MULTICHAN`、只配 CH2 负输出的临时配置上 009 SKIP，其余
