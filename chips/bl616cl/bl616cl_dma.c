@@ -65,6 +65,8 @@
 #define BL616CL_DMA_CHANNEL_COUNT     8
 #define BL616CL_DMA_TRANSFER_MAX \
   (DMA_TRANSFERSIZE_MASK >> DMA_TRANSFERSIZE_SHIFT)
+#define BL616CL_DMA_DRQ_MAX \
+  (DMA_SRCPERIPHERAL_MASK >> DMA_SRCPERIPHERAL_SHIFT)
 
 /****************************************************************************
  * Private Types
@@ -242,6 +244,43 @@ static size_t bl616cl_dma_pending_bytes(
 static bool bl616cl_dma_step_valid(int step, unsigned int width)
 {
   return step == 0 || step == (int)width;
+}
+
+/****************************************************************************
+ * Name: bl616cl_dma_direction_valid
+ *
+ * Description:
+ *   Check the direction and the DMA request IDs. Memory-to-memory
+ *   transfers take no request. A peripheral transfer takes the LHAL
+ *   request number (DMA_REQUEST_*) on the peripheral side only; zero is a
+ *   valid request there (UART0 RX).
+ *
+ * Input Parameters:
+ *   config - Channel configuration.
+ *
+ * Returned Value:
+ *   True if the direction and request IDs are valid; false otherwise.
+ *
+ ****************************************************************************/
+
+static bool bl616cl_dma_direction_valid(const struct dma_config_s *config)
+{
+  switch (config->direction)
+    {
+      case DMA_MEM_TO_MEM:
+        return config->src_drq == 0 && config->dst_drq == 0;
+
+      case DMA_MEM_TO_DEV:
+        return config->src_drq == 0 &&
+               config->dst_drq <= BL616CL_DMA_DRQ_MAX;
+
+      case DMA_DEV_TO_MEM:
+        return config->dst_drq == 0 &&
+               config->src_drq <= BL616CL_DMA_DRQ_MAX;
+
+      default:
+        return false;
+    }
 }
 
 /****************************************************************************
@@ -573,9 +612,10 @@ static void bl616cl_dma_put_chan(struct dma_dev_s *dev,
  * Name: bl616cl_dma_config
  *
  * Description:
- *   Implement the dma_ops_s config method. Only memory-to-memory
- *   transfers with equal 1, 2 or 4 byte source and destination widths, no
- *   DRQ, and fixed or width-sized steps are accepted.
+ *   Implement the dma_ops_s config method. Memory-to-memory, memory-to-
+ *   peripheral and peripheral-to-memory transfers with equal 1, 2 or 4
+ *   byte source and destination widths and fixed or width-sized steps are
+ *   accepted. See bl616cl_dma_direction_valid() for the request IDs.
  *
  * Input Parameters:
  *   chan - DMA channel handle returned by get_chan.
@@ -602,9 +642,8 @@ static int bl616cl_dma_config(struct dma_chan_s *chan,
       return -EINVAL;
     }
 
-  if (config->direction != DMA_MEM_TO_MEM ||
+  if (!bl616cl_dma_direction_valid(config) ||
       config->src_width != config->dst_width ||
-      config->src_drq != 0 || config->dst_drq != 0 ||
       !bl616cl_dma_step_valid(config->src_step, config->src_width) ||
       !bl616cl_dma_step_valid(config->dst_step, config->dst_width))
     {
@@ -652,9 +691,11 @@ static int bl616cl_dma_config(struct dma_chan_s *chan,
  *
  * Description:
  *   Implement the dma_ops_s start method. Validate the alignment and
- *   length, program the source, destination and control registers, then
- *   enable the channel. The callback is invoked on completion with the
- *   byte count or a negated errno value.
+ *   length, program the source, destination, control and peripheral
+ *   request registers, then enable the channel. Peripheral transfers use
+ *   single (INCR1) bursts. The callback is invoked on completion with the
+ *   byte count or a negated errno value, and may start the next transfer
+ *   on its own channel.
  *
  * Input Parameters:
  *   chan - DMA channel handle returned by get_chan.
@@ -666,8 +707,8 @@ static int bl616cl_dma_config(struct dma_chan_s *chan,
  *
  * Returned Value:
  *   Zero (OK) on success; a negated errno value on failure: -EINVAL for a
- *   bad state, length or alignment, -EBUSY if a transfer or callback is
- *   in progress, -E2BIG if the length exceeds the hardware limit.
+ *   bad state, length or alignment, -EBUSY if a transfer is in progress,
+ *   -E2BIG if the length exceeds the hardware limit.
  *
  ****************************************************************************/
 
@@ -680,6 +721,7 @@ static int bl616cl_dma_start(struct dma_chan_s *chan,
   uint32_t control;
   uint32_t config;
   uint32_t units;
+  uint32_t burst;
   uint8_t width;
   uint8_t encoded_width;
   irqstate_t flags;
@@ -690,19 +732,20 @@ static int bl616cl_dma_start(struct dma_chan_s *chan,
       return -EINVAL;
     }
 
+  /* A completion callback runs in the DMA interrupt with the channel
+   * already COMPLETE or ERROR, so it may start the next transfer here.
+   * put_chan marks the channel RELEASING first, which is rejected below.
+   */
+
   flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
   if (!channel->configured ||
       (channel->state != BL616CL_DMA_READY &&
        channel->state != BL616CL_DMA_COMPLETE &&
        channel->state != BL616CL_DMA_ERROR &&
-       channel->state != BL616CL_DMA_STOPPED) ||
-      channel->callbacks_inflight != 0)
+       channel->state != BL616CL_DMA_STOPPED))
     {
       spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
-      return channel->state == BL616CL_DMA_RUNNING ||
-                 channel->callbacks_inflight != 0 ?
-               -EBUSY :
-               -EINVAL;
+      return channel->state == BL616CL_DMA_RUNNING ? -EBUSY : -EINVAL;
     }
 
   width = channel->width;
@@ -724,9 +767,27 @@ static int bl616cl_dma_start(struct dma_chan_s *chan,
 
   base = channel->dev->reg_base;
   bl616cl_dma_mask_stop_clear(channel);
+
+  config = 0;
+  burst = DMA_BURST_INCR4;
+  if (channel->config.direction == DMA_MEM_TO_DEV)
+    {
+      config = ((uint32_t)channel->config.dst_drq <<
+                DMA_DSTPERIPHERAL_SHIFT) |
+               ((uint32_t)DMA_MEMORY_TO_PERIPH << DMA_FLOWCNTRL_SHIFT);
+      burst = DMA_BURST_INCR1;
+    }
+  else if (channel->config.direction == DMA_DEV_TO_MEM)
+    {
+      config = ((uint32_t)channel->config.src_drq <<
+                DMA_SRCPERIPHERAL_SHIFT) |
+               ((uint32_t)DMA_PERIPH_TO_MEMORY << DMA_FLOWCNTRL_SHIFT);
+      burst = DMA_BURST_INCR1;
+    }
+
   control = units |
-            ((uint32_t)DMA_BURST_INCR4 << DMA_SBSIZE_SHIFT) |
-            ((uint32_t)DMA_BURST_INCR4 << DMA_DBSIZE_SHIFT) |
+            (burst << DMA_SBSIZE_SHIFT) |
+            (burst << DMA_DBSIZE_SHIFT) |
             ((uint32_t)encoded_width << DMA_SWIDTH_SHIFT) |
             ((uint32_t)encoded_width << DMA_DWIDTH_SHIFT) |
             DMA_I;
@@ -748,7 +809,6 @@ static int bl616cl_dma_start(struct dma_chan_s *chan,
   putreg32(1u << channel->index,
            DMA_BASE + DMA_INTERRCLR_OFFSET);
 
-  config = 0;
   putreg32(config, base + DMA_CxCONFIG_OFFSET);
   channel->callback = callback;
   channel->arg = arg;

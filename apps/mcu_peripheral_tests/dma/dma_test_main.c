@@ -404,6 +404,8 @@ static int run_invalid_atomic_case(struct dma_dev_s *dev)
   int config_direction;
   int config_width;
   int config_drq;
+  int config_periph_drq;
+  int config_drq_range;
   int config_priority;
   int config_timeout;
   int config_option;
@@ -430,7 +432,7 @@ static int run_invalid_atomic_case(struct dma_dev_s *dev)
   invalid.dst_step = 4;
   config_step = DMA_CONFIG(chan, &invalid);
   invalid.src_step = 4;
-  invalid.direction = DMA_MEM_TO_DEV;
+  invalid.direction = DMA_DEV_TO_DEV;
   config_direction = DMA_CONFIG(chan, &invalid);
   invalid.direction = DMA_MEM_TO_MEM;
   invalid.dst_width = 2;
@@ -438,6 +440,21 @@ static int run_invalid_atomic_case(struct dma_dev_s *dev)
   invalid.dst_width = 4;
   invalid.src_drq = 1;
   config_drq = DMA_CONFIG(chan, &invalid);
+
+  /* Peripheral directions take a request only on the device side, and the
+   * request must fit the 6-bit hardware field.
+   */
+
+  invalid.direction = DMA_MEM_TO_DEV;
+  invalid.dst_step = 0;
+  config_periph_drq = DMA_CONFIG(chan, &invalid);
+  invalid.direction = DMA_DEV_TO_MEM;
+  invalid.src_step = 0;
+  invalid.dst_step = 4;
+  invalid.src_drq = 64;
+  config_drq_range = DMA_CONFIG(chan, &invalid);
+  invalid.direction = DMA_MEM_TO_MEM;
+  invalid.src_step = 4;
   invalid.src_drq = 0;
   invalid.priority = 1;
   config_priority = DMA_CONFIG(chan, &invalid);
@@ -549,6 +566,16 @@ static int run_invalid_atomic_case(struct dma_dev_s *dev)
       contract_failures |= 1u << 16;
     }
 
+  if (config_periph_drq != -EINVAL)
+    {
+      contract_failures |= 1u << 17;
+    }
+
+  if (config_drq_range != -EINVAL)
+    {
+      contract_failures |= 1u << 18;
+    }
+
   fill_pattern(g_source, 64, 0x52);
   up_clean_dcache(source, source + 64);
   prepare_destination(g_destination, 64);
@@ -560,9 +587,10 @@ static int run_invalid_atomic_case(struct dma_dev_s *dev)
       ret = check_destination(g_source, g_destination, 64);
     }
 
-  printf("  config invalid=%d/%d/%d/%d unsupported=%d/%d/%d\n",
+  printf("  config invalid=%d/%d/%d/%d/%d/%d unsupported=%d/%d/%d\n",
          config_step, config_direction, config_width, config_drq,
-         config_priority, config_timeout, config_option);
+         config_periph_drq, config_drq_range, config_priority,
+         config_timeout, config_option);
   printf("  start invalid=%d/%d/%d/%d/%d ops=%d/%d/%d retained=%d "
          "residual=%lu contract=0x%05x\n",
          start_zero, start_nonmultiple, start_src_align, start_dst_align,

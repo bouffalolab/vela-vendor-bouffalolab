@@ -308,9 +308,9 @@ config BL616CL_DMA0
 	depends on !DMA_LINK
 	---help---
 		Enable the BL616CL DMA0 adapter for the OpenVela generic DMA API.
-		The first revision supports fixed-channel memory-to-memory transfers
-		only. Peripheral request users, linked lists, cyclic transfers, and
-		pause/resume are intentionally excluded.
+		It supports fixed-channel one-shot memory-to-memory and peripheral
+		request transfers. Linked lists, cyclic transfers, and pause/resume
+		are intentionally excluded.
 
 menuconfig BL616CL_I2C
 	bool "I2C master"

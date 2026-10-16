@@ -7,10 +7,12 @@
 独立的 `libapps_mcu_dma_test.a`；chip adapter `bl616cl_dma.c.o` 进入
 `libarch.a`，LHAL `bflb_dma.c.o` 进入 `libbl_lhal.a`。
 
-BL616CL DMA0 有 8 个 channel，共用一个 raw IRQ 31（NuttX IRQ 47）。首版只接入
-memory-to-memory one-shot：支持 1/2/4-byte 同宽访问，源和目的 step 只能是 0 或
-width，单次最多 4095 transfer units。pause/resume、cyclic、LLI/link/insert、硬件
-error 注入和外设 DMA consumer 不属于本轮能力。
+BL616CL DMA0 有 8 个 channel，共用一个 raw IRQ 31（NuttX IRQ 47）。adapter 支持
+memory-to-memory 和 memory-to-peripheral、peripheral-to-memory one-shot：1/2/4-byte
+同宽访问，源和目的 step 只能是 0 或 width，单次最多 4095 transfer units。本测试只做
+mem2mem 数据传输和外设方向的参数校验；外设方向的实际传输由 I2S 播放和录音
+（`mcu_i2s_test`）覆盖。pause/resume、cyclic、LLI/link/insert 和硬件 error 注入不属于
+本轮能力。
 
 ## 配置与构建
 
@@ -121,8 +123,9 @@ units=4095 ret=0 callbacks=1 data=match; units=4096 ret=-7
 流程：
 
 1. 固定申请 channel 2，先安装一份有效的 4-byte mem2mem 配置。
-2. 依次提交负 step、非 mem2mem、源/目的 width 不同和非零 DRQ；均须返回
-   `-EINVAL`。
+2. 依次提交负 step、不支持的 dev2dev 方向、源/目的 width 不同、mem2mem 带非零
+   DRQ、mem2dev 把 DRQ 放在内存侧、dev2mem 请求号超过 63；均须返回 `-EINVAL`。
+   mem2dev、dev2mem 本身是合法方向，实际外设传输由 I2S 播放和录音覆盖。
 3. 依次提交非零 priority、timeout、option；首版不支持，必须返回 NuttX ABI 的
    `-ENOTSUP=-138`。
 4. 对保留的有效配置依次提交零长度、长度非 width 整数倍、源未对齐、目的未对齐和
@@ -135,7 +138,7 @@ units=4095 ret=0 callbacks=1 data=match; units=4096 ret=-7
 实测关键数据：
 
 ```text
-config invalid=-22/-22/-22/-22 unsupported=-138/-138/-138
+config invalid=-22/-22/-22/-22/-22/-22 unsupported=-138/-138/-138
 start invalid=-22/-22/-22/-22/-22 ops=-138/-138/-138 retained=0 residual=0 contract=0x00000
 [DMA-003] PASS ret=0
 ```
@@ -223,7 +226,7 @@ nsh>
 
 ## 限制
 
-- 只支持 DMA0 mem2mem one-shot；没有外设 request consumer 证据。
+- 只支持 DMA0 one-shot；外设方向目前只有 I2S0 一个 consumer（TX、RX 各一个通道）。
 - pause/resume、cyclic、LLI/link/insert 返回 `-ENOTSUP`。
 - 硬件 error IRQ 没有可重复的触发方法，error 回调（`-EIO`、residual）没有测试覆盖。
 - mem2mem 传输太快，无法稳定在 RUNNING 状态下观测，传输中 `DMA_STOP`/residual、
