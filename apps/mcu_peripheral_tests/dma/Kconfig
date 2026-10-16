@@ -3,11 +3,9 @@ config BL_MCU_PERIPHERAL_TESTS_DMA
 	default n
 	depends on BUILD_FLAT && BUILTIN
 	depends on ARCH_CHIP_BL616CL && DMA && BL616CL_DMA0
-	select BL616CL_DMA0_TEST
 	---help---
 		Enable the BL616CL DMA0 contract and hardware test runner. This is a
-		test-only application and enables DMA adapter test hooks. Keep it
-		disabled in product configurations.
+		test-only application. Keep it disabled in product configurations.
 
 if BL_MCU_PERIPHERAL_TESTS_DMA
 

@@ -33,7 +33,6 @@
 #include <nuttx/arch.h>
 #include <nuttx/dma/dma.h>
 #include <nuttx/irq.h>
-#include <nuttx/sched.h>
 #include <nuttx/semaphore.h>
 #include <nuttx/spinlock.h>
 
@@ -98,7 +97,6 @@ struct bl616cl_dma_chan_s
   uint8_t width;
   uint8_t callbacks_inflight;
   bool configured;
-  bool held;
   enum bl616cl_dma_state_e state;
 };
 
@@ -164,13 +162,6 @@ static struct bl616cl_dma_chan_s
   g_bl616cl_dma_channels[BL616CL_DMA_CHANNEL_COUNT];
 static spinlock_t g_bl616cl_dma_lock = SP_UNLOCKED;
 static bool g_bl616cl_dma_initialized;
-
-#ifdef CONFIG_BL616CL_DMA0_TEST
-static bool g_bl616cl_dma_hold_before_enable;
-static bool g_bl616cl_dma_test_suppress_put_assert;
-static pid_t g_bl616cl_dma_test_callback_tid = -1;
-static struct bl616cl_dma_test_status_s g_bl616cl_dma_test_status;
-#endif
 
 /****************************************************************************
  * Private Functions
@@ -328,43 +319,20 @@ static void bl616cl_dma_callback_done(
  * Description:
  *   Handle terminal-count and error status bits. For each running channel
  *   it records the residual, updates the state, stops the channel and
- *   invokes the client callback with the byte count or -EIO. Also used by
- *   the test injection path.
+ *   invokes the client callback with the byte count or -EIO.
  *
  * Input Parameters:
  *   tc_status - Terminal-count status bit mask, one bit per channel.
  *   error_status - Error status bit mask, one bit per channel.
- *   hardware_irq - True if called from the hardware interrupt; false for
- *     test injection (only used for test statistics).
  *
  * Returned Value:
  *   None
  *
  ****************************************************************************/
 
-static void bl616cl_dma_process_irq(uint8_t tc_status, uint8_t error_status,
-                                    bool hardware_irq)
+static void bl616cl_dma_process_irq(uint8_t tc_status, uint8_t error_status)
 {
   uint8_t index;
-
-#ifdef CONFIG_BL616CL_DMA0_TEST
-  irqstate_t test_flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
-
-  g_bl616cl_dma_test_status.tc_status = tc_status;
-  g_bl616cl_dma_test_status.error_status = error_status;
-  if (hardware_irq)
-    {
-      g_bl616cl_dma_test_status.tc_clear_status = tc_status;
-      g_bl616cl_dma_test_status.error_clear_status = error_status;
-      g_bl616cl_dma_test_status.irq_count++;
-    }
-  else
-    {
-      g_bl616cl_dma_test_status.software_injection_count++;
-    }
-
-  spin_unlock_irqrestore(&g_bl616cl_dma_lock, test_flags);
-#endif
 
   for (index = 0; index < BL616CL_DMA_CHANNEL_COUNT; index++)
     {
@@ -389,7 +357,6 @@ static void bl616cl_dma_process_irq(uint8_t tc_status, uint8_t error_status,
           channel->residual_bytes = error ?
                                       bl616cl_dma_pending_bytes(channel) :
                                       0;
-          channel->held = false;
           channel->state = error ? BL616CL_DMA_ERROR : BL616CL_DMA_COMPLETE;
           bl616cl_dma_mask_stop_clear(channel);
 
@@ -406,11 +373,6 @@ static void bl616cl_dma_process_irq(uint8_t tc_status, uint8_t error_status,
 
       if (callback != NULL)
         {
-#ifdef CONFIG_BL616CL_DMA0_TEST
-          flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
-          g_bl616cl_dma_test_status.callback_count++;
-          spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
-#endif
           callback(&channel->chan, arg, result);
           bl616cl_dma_callback_done(channel);
         }
@@ -448,7 +410,7 @@ static int bl616cl_dma_interrupt(int irq, void *context, void *arg)
 
   putreg32(tc_status, DMA_BASE + DMA_INTTCCLEAR_OFFSET);
   putreg32(error_status, DMA_BASE + DMA_INTERRCLR_OFFSET);
-  bl616cl_dma_process_irq(tc_status, error_status, true);
+  bl616cl_dma_process_irq(tc_status, error_status);
   return OK;
 }
 
@@ -480,43 +442,6 @@ static struct bl616cl_dma_chan_s *bl616cl_dma_from_chan(
     }
 
   return NULL;
-}
-
-/****************************************************************************
- * Name: bl616cl_dma_in_callback_context
- *
- * Description:
- *   Report whether the caller runs in a completion callback context,
- *   where releasing a channel is not allowed. With
- *   CONFIG_BL616CL_DMA0_TEST, a thread running injected test callbacks
- *   also counts.
- *
- * Input Parameters:
- *   None
- *
- * Returned Value:
- *   True in interrupt (or injected callback) context; false otherwise.
- *
- ****************************************************************************/
-
-static bool bl616cl_dma_in_callback_context(void)
-{
-#ifdef CONFIG_BL616CL_DMA0_TEST
-  pid_t callback_tid;
-  irqstate_t flags;
-
-  if (up_interrupt_context())
-    {
-      return true;
-    }
-
-  flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
-  callback_tid = g_bl616cl_dma_test_callback_tid;
-  spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
-  return callback_tid == nxsched_gettid();
-#else
-  return up_interrupt_context();
-#endif
 }
 
 /****************************************************************************
@@ -567,7 +492,6 @@ static struct dma_chan_s *bl616cl_dma_get_chan(
 
   channel->state = BL616CL_DMA_OWNED;
   channel->configured = false;
-  channel->held = false;
   channel->callback = NULL;
   channel->arg = NULL;
   channel->request_bytes = 0;
@@ -582,7 +506,8 @@ static struct dma_chan_s *bl616cl_dma_get_chan(
  * Description:
  *   Implement the dma_dev_s put_chan method. Stop the channel, wait for
  *   callbacks in flight, clear its state and make it available again.
- *   Calling it from a callback context is rejected (DEBUGASSERT).
+ *   Calling it from interrupt context, which includes the completion
+ *   callbacks, is rejected (DEBUGASSERT).
  *
  * Input Parameters:
  *   dev - DMA device (unused).
@@ -606,22 +531,9 @@ static void bl616cl_dma_put_chan(struct dma_dev_s *dev,
       return;
     }
 
-  if (bl616cl_dma_in_callback_context())
+  if (up_interrupt_context())
     {
-#ifdef CONFIG_BL616CL_DMA0_TEST
-      bool suppress_assert;
-
-      flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
-      g_bl616cl_dma_test_status.rejected_puts++;
-      suppress_assert = g_bl616cl_dma_test_suppress_put_assert;
-      spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
-      if (!suppress_assert)
-        {
-          DEBUGASSERT(false);
-        }
-#else
       DEBUGASSERT(false);
-#endif
       return;
     }
 
@@ -647,7 +559,6 @@ static void bl616cl_dma_put_chan(struct dma_dev_s *dev,
   DEBUGASSERT(channel->callbacks_inflight == 0);
   memset(&channel->config, 0, sizeof(channel->config));
   channel->configured = false;
-  channel->held = false;
   channel->callback = NULL;
   channel->arg = NULL;
   channel->request_bytes = 0;
@@ -844,18 +755,7 @@ static int bl616cl_dma_start(struct dma_chan_s *chan,
   channel->request_bytes = len;
   channel->residual_bytes = len;
   channel->state = BL616CL_DMA_RUNNING;
-
-#ifdef CONFIG_BL616CL_DMA0_TEST
-  channel->held = g_bl616cl_dma_hold_before_enable;
-#else
-  channel->held = false;
-#endif
-
-  if (!channel->held)
-    {
-      bflb_dma_channel_start(channel->dev);
-    }
-
+  bflb_dma_channel_start(channel->dev);
   spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
   return OK;
 }
@@ -933,7 +833,6 @@ static int bl616cl_dma_stop(struct dma_chan_s *chan)
     {
       channel->residual_bytes = bl616cl_dma_pending_bytes(channel);
       channel->state = BL616CL_DMA_STOPPED;
-      channel->held = false;
       bl616cl_dma_mask_stop_clear(channel);
     }
 
@@ -1133,148 +1032,3 @@ errout:
   putreg32(config & ~DMA_E, DMA_BASE + DMA_TOP_CONFIG_OFFSET);
   bflb_peripheral_clock_control(BFLB_PERIPHERAL_DMA0, false);
 }
-
-#ifdef CONFIG_BL616CL_DMA0_TEST
-/****************************************************************************
- * Name: bl616cl_dma_test_inject_irq
- *
- * Description:
- *   Test hook: feed software terminal-count and error status into the
- *   interrupt processing path, marking the caller as running in callback
- *   context.
- *
- * Input Parameters:
- *   tc_status - Terminal-count status bit mask.
- *   error_status - Error status bit mask.
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-void bl616cl_dma_test_inject_irq(uint8_t tc_status, uint8_t error_status)
-{
-  irqstate_t flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
-
-  DEBUGASSERT(g_bl616cl_dma_test_callback_tid < 0);
-  g_bl616cl_dma_test_callback_tid = nxsched_gettid();
-  spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
-  bl616cl_dma_process_irq(tc_status, error_status, false);
-
-  flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
-  g_bl616cl_dma_test_callback_tid = -1;
-  spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
-}
-
-/****************************************************************************
- * Name: bl616cl_dma_test_set_hold_before_enable
- *
- * Description:
- *   Test hook: when set, later transfers are programmed but not enabled
- *   until bl616cl_dma_test_release_hold() is called.
- *
- * Input Parameters:
- *   hold - True to hold new transfers before enable.
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-void bl616cl_dma_test_set_hold_before_enable(bool hold)
-{
-  irqstate_t flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
-
-  g_bl616cl_dma_hold_before_enable = hold;
-  spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
-}
-
-/****************************************************************************
- * Name: bl616cl_dma_test_suppress_put_assert
- *
- * Description:
- *   Test hook: control whether put_chan called from a callback context
- *   triggers DEBUGASSERT. Rejected calls are counted either way.
- *
- * Input Parameters:
- *   suppress - True to suppress the assertion.
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-void bl616cl_dma_test_suppress_put_assert(bool suppress)
-{
-  irqstate_t flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
-
-  g_bl616cl_dma_test_suppress_put_assert = suppress;
-  spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
-}
-
-/****************************************************************************
- * Name: bl616cl_dma_test_release_hold
- *
- * Description:
- *   Test hook: enable all running channels that are being held before
- *   enable.
- *
- * Input Parameters:
- *   None
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-void bl616cl_dma_test_release_hold(void)
-{
-  unsigned int index;
-  irqstate_t flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
-
-  for (index = 0; index < BL616CL_DMA_CHANNEL_COUNT; index++)
-    {
-      struct bl616cl_dma_chan_s *channel =
-        &g_bl616cl_dma_channels[index];
-
-      if (channel->state == BL616CL_DMA_RUNNING && channel->held)
-        {
-          channel->held = false;
-          bflb_dma_channel_start(channel->dev);
-        }
-    }
-
-  spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
-}
-
-/****************************************************************************
- * Name: bl616cl_dma_test_get_status
- *
- * Description:
- *   Test hook: copy the interrupt and callback statistics collected by
- *   the driver.
- *
- * Input Parameters:
- *   status - Location that receives the statistics; nothing is done if
- *     NULL.
- *
- * Returned Value:
- *   None
- *
- ****************************************************************************/
-
-void bl616cl_dma_test_get_status(
-  struct bl616cl_dma_test_status_s *status)
-{
-  irqstate_t flags;
-
-  if (status == NULL)
-    {
-      return;
-    }
-
-  flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
-  *status = g_bl616cl_dma_test_status;
-  spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
-}
-#endif

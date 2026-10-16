@@ -14,7 +14,7 @@ error 注入和外设 DMA consumer 不属于本轮能力。
 
 ## 配置与构建
 
-| 配置 | DMA0 adapter | test hook/app | clean build |
+| 配置 | DMA0 adapter | test app | clean build |
 |---|---:|---:|---:|
 | `nsh` | n | n | 1224/1224 |
 | `nsh-dma`（历史，已删除） | y | n | 1227/1227 |
@@ -44,8 +44,8 @@ vendor/bouffalolab/vela build \
 - 关闭态没有 `bl616cl_dma.c.o`、`bflb_dma.c.o`、DMA test archive 或 adapter/test
   符号。
 - 产品态包含 `bl616cl_dma.c.o`、`bflb_dma.c.o`，强符号
-  `riscv_dma_initialize` 的类型为 `T`，不包含 test hook/app。
-- 测试态额外包含 `libapps_mcu_dma_test.a`、`dma_test_main.c.o` 和 test hook。
+  `riscv_dma_initialize` 的类型为 `T`，不包含 test app。
+- 测试态额外包含 `libapps_mcu_dma_test.a`、`dma_test_main.c.o`。
 - 三态 whole image 均为 4 MiB，boot2、双 partition、app 和 MFG 擦除区校验通过。
 
 ## 运行命令与总流程
@@ -56,28 +56,38 @@ vendor/bouffalolab/vela build \
 mcu_dma_test
 ```
 
-程序按 DMA-001 到 DMA-008 顺序执行。每个 case 自己申请固定 channel、配置、启动、
-等待完成并释放；任一断言失败会打印该 case 的负 errno，但仍继续运行其余 case，最终
-以 `DMA0 summary` 汇总。完成判据是八项均打印 `PASS ret=0`，汇总为
-`passed=8 failed=0`，且没有 panic、assert 或意外复位。
+程序按 DMA-001 到 DMA-007 顺序执行（编号 DMA-008 不再使用）。每个 case 自己申请
+固定 channel、配置、启动、等待完成并释放；任一断言失败会打印该 case 的负 errno，但
+仍继续运行其余 case，最终以 `DMA0 summary` 汇总。完成判据是七项均打印
+`PASS ret=0`，汇总为 `passed=7 failed=0`，且没有 panic、assert 或意外复位。
 
-cache maintenance 由 DMA client 负责：源 buffer 在启动前 clean，目的 buffer 在 DMA
-写入前和 CPU 读取前 invalidate。测试 buffer 按 32 字节对齐并独占 cache line。这里验证
-的是调用方履行该协议后的 cached/non-cache alias 可见性，不宣称 DMA adapter 自动维护
-cache，也不宣称未 clean 的 dirty cache 数据会被保护。
+测试只使用 OpenVela 公共 DMA API 和 `<arch/chip/bl616cl_dma.h>` 的
+`bl616cl_dma0_device()`，判据只来自公开可观察结果：`DMA_START`/`DMA_CONFIG` 返回值、
+callback 次数与 result、`DMA_RESIDUAL`、目的 buffer 逐字节比较，以及
+`DMA_GET_CHAN`/`DMA_PUT_CHAN` 的返回值与阻塞行为。目的 buffer 后紧跟 32 字节保护区，
+传输后保护区必须保持原值，用来发现越界写入。
+
+cache maintenance 由 DMA client 负责：源 buffer 在启动前 clean；目的 buffer 和保护区
+在 DMA 前 flush（clean + invalidate，使初值落到内存），CPU 读取前 invalidate。测试
+buffer 按 32 字节对齐。这里验证的是调用方履行该协议后的 cached/non-cache alias
+可见性，不宣称 DMA adapter 自动维护 cache，也不宣称未 clean 的 dirty cache 数据会被
+保护。
+
+各节「实测关键数据」与文末汇总来自用例精简前的固件（当时 8 项）；输出格式未变的行
+予以保留。现行 7 项于 2026-10-16 在 BL616CL-AVE-V10 上全部 PASS（`passed=7 failed=0`），
+记录见 `docs/bl616cl-dma.md`。
 
 ## DMA-001：width、step、数据和 TC 回调
 
 流程：
 
 1. 固定申请 channel 0，分别配置 1、2、4-byte 同宽传输，源/目的 step 均为 width。
-2. 每轮写入不同逐字节 pattern，clean 源、invalidate 目的，再启动 256 units。
+2. 每轮写入不同逐字节 pattern，clean 源、flush 目的和保护区，再启动 256 units。
 3. 等待 TC callback，要求 callback 恰好一次，返回长度等于请求字节数，residual=0。
-4. 读取 test 统计，要求 IRQ 计数和 callback 计数各增加一次，TC status/clear 含 CH0，
-   error status/clear 不含 CH0。
-5. invalidate 目的并逐字节比较源/目的。
-6. 再配置 1-byte、`src_step=0`、`dst_step=1`，要求目的 128 字节全部复制源首字节。
-7. 释放 channel。
+4. invalidate 目的并逐字节比较源/目的，保护区不得改变。
+5. 再配置 1-byte、`src_step=0`、`dst_step=1`；源 128 字节互不相同，要求目的 128 字节
+   全部等于源首字节，保护区不变。
+6. 释放 channel。
 
 实测关键数据：
 
@@ -94,15 +104,15 @@ width=1 src_step=0 ret=0 callbacks=1
 流程：
 
 1. 固定申请 channel 1，配置 4-byte width 和递增 step。
-2. 传输 `4095 * 4` 字节，等待一次 TC callback 并逐字节比较。
+2. 传输 `4095 * 4` 字节，等待一次 TC callback（result 为请求字节数、residual=0），
+   逐字节比较并检查保护区。
 3. 在相同有效配置下请求 `4096 * 4` 字节；必须在写硬件前返回 `-E2BIG`。
-4. 检查 CH1 TC snapshot/clear 和 error 位，释放 channel。
+4. 释放 channel。
 
 实测关键数据：
 
 ```text
 units=4095 ret=0 callbacks=1 data=match; units=4096 ret=-7
-DMA-002 irq: tc=0x02/tc_clear=0x02 error=0x00/error_clear=0x00
 [DMA-002] PASS ret=0
 ```
 
@@ -119,7 +129,8 @@ DMA-002 irq: tc=0x02/tc_clear=0x02 error=0x00/error_clear=0x00
    地址末端溢出；均须返回 `-EINVAL`。
 5. 调用 cyclic、pause、resume；均须返回 `-ENOTSUP=-138`。
 6. 要求 pre-start residual=0、失败位图 `contract=0x00000`，证明每个 errno 都符合合同。
-7. 使用最初的有效配置完成 64 字节传输并比较数据，证明失败请求没有污染旧配置。
+7. 使用最初的有效配置完成 64 字节传输并比较数据和保护区，证明失败请求没有污染旧
+   配置。
 
 实测关键数据：
 
@@ -135,65 +146,37 @@ start invalid=-22/-22/-22/-22/-22 ops=-138/-138/-138 retained=0 residual=0 contr
 
 1. 按 ident 0..7 固定申请全部 8 个 channel，每个 channel 使用独立源、目的和 pattern。
 2. 全部配置为 1-byte 递增 mem2mem，再依次启动 128 字节传输。
-3. 每个 channel 都必须收到且只收到一次 callback，返回长度为 128。
+3. 每个 channel 都必须收到且只收到一次 callback，返回长度为 128，residual=0。
 4. 对每组目的 buffer 做 invalidate 和逐字节比较。
-5. 释放全部 channel，并检查聚合 IRQ 的 TC snapshot/clear；该 case 只证明资源和分发，
-   不作为并行带宽数据。
+5. 释放全部 channel。该 case 只证明资源和共享 IRQ 分发，不作为并行带宽数据。
 
 实测关键数据：
 
 ```text
 channels=8 ret=0 (resource/IRQ dispatch evidence, not bandwidth)
-DMA-004 irq: tc=0xc0/tc_clear=0xc0 error=0x00/error_clear=0x00
 [DMA-004] PASS ret=0
 ```
 
-## DMA-005：回调边界与软件 IRQ 合同
+## DMA-005：NULL callback 完成
 
 流程：
 
-1. 固定申请 channel 3，以 NULL callback 完成真实 DMA；要求状态仍进入完成态、
-   residual=0、IRQ 计数增加，而 callback 计数不增加。
-2. 用普通 callback 再启动；callback 内调用 STOP 必须无死锁，调用 void
-   `DMA_PUT_CHAN` 必须由运行时 guard 无副作用拒绝，拒绝计数增加一次。
-3. 启用 test-only pre-enable hold，在 channel 仍为 RUNNING 时软件注入同一 channel 的
-   TC+error；error 必须优先，只回调一次、返回 `-EIO`，residual 保持完整 128 字节。
-4. 解除 hold，再做一次真实 DMA 完成，证明 error terminal 状态可重启。
-5. 释放 channel。
+1. 固定申请 channel 3，配置 1-byte 递增 mem2mem，以 NULL callback 启动 128 字节。
+2. 轮询 `DMA_RESIDUAL` 直到为 0，超时 2 s。
+3. 轮询 `DMA_CONFIG` 直到不再返回 `-EBUSY`，并要求返回 0。channel 离开 RUNNING
+   说明中断已处理完成，且没有调用 NULL callback。
+4. 逐字节比较目的数据并检查保护区，释放 channel。
 
-软件注入只验证 adapter 状态机、优先级和清理合同，不是 BL616CL 硬件 error IRQ 的
-实物注入证据。
-
-实测关键数据：
-
-```text
-injection_count=1 callback_count=17 rejected_puts=1
-ret=0 error-residual=128 restart-callback=1 rejected-put-delta=1
-[DMA-005] PASS ret=0
-```
-
-## DMA-006：stop/residual 与 cache alias
+## DMA-006：cache alias
 
 流程：
 
-1. 固定申请 channel 4，确认测试 buffer 位于 cacheable OCRAM，并计算对应 non-cache alias。
-2. 配置 128 字节传输，打开 test-only hold，使寄存器已编程但 channel 尚未 enable。
-3. 要求 residual=128；RUNNING 状态重新 config/start 均返回 `-EBUSY`。
-4. STOP 后再次 STOP，两个调用都必须可安全完成；residual 仍为 128。
-5. 解除 hold，以 cached 源和 non-cache 目的 alias 重启真实 DMA；按 client cache 协议
-   invalidate 后通过 cached alias 比较数据。
-6. 检查真实 TC callback 和 IRQ snapshot/clear，释放 channel。
-
-该流程证明 pre-enable stop、byte residual 换算、结束后重启和 alias 可见性。DMA 传输过快，
-本轮不宣称能稳定捕获线速中途取消。
-
-实测关键数据：
-
-```text
-busy=-16/-16 repeat-stop=0 ret=0 aliases=0x20fd3380/0x20fcf380
-DMA-006 irq: tc=0x10/tc_clear=0x10 error=0x00/error_clear=0x00
-[DMA-006] PASS ret=0
-```
+1. 固定申请 channel 4，确认源、目的和保护区位于 cacheable OCRAM，计算目的 buffer 的
+   non-cache alias。
+2. clean cached 源，flush 目的和保护区，以 cached 源 → non-cache 目的 alias 启动
+   128 字节传输。
+3. 要求 callback 恰好一次、result=128、residual=0。
+4. invalidate 后通过 cached alias 比较数据并检查保护区，释放 channel。
 
 ## DMA-007：owner 等待、耗尽和并发 put
 
@@ -213,28 +196,10 @@ ninth-waiter=blocked/woken concurrent-put=single-post ret=0
 [DMA-007] PASS ret=0
 ```
 
-## DMA-008：callback drain
-
-流程：
-
-1. 固定申请 channel 7，使用 test-only hold，启动带阻塞点的 callback。
-2. 由独立线程软件注入 TC，等待 callback 已进入但尚未退出。
-3. 再启动 task-context put 线程；等待 20 ms，put 不得提前返回。
-4. 释放 callback，等待 callback、注入线程和 put 线程退出；要求 callback 恰好一次且
-   返回 128 字节，put 此时才返回。
-5. 重新申请 channel 7，必须得到同一 handle，证明 drain 后资源完整复用。
-
-实测关键数据：
-
-```text
-callback=1 put-returned=1 reused=0x60fc9e8c ret=0
-[DMA-008] PASS ret=0
-```
-
 ## 最终实测汇总
 
-Ai-M64P-32S-Kit 使用 `/dev/ttyUSB2`、2000000 baud。测试固件
-`nuttx.bin` SHA256 为
+以下为用例精简前固件的记录。Ai-M64P-32S-Kit 使用 `/dev/ttyUSB2`、2000000 baud。
+测试固件 `nuttx.bin` SHA256 为
 `0d8eee354d532d3b6ca531ff786b18c927a548076a342b85eb15510637fcb3cf`，烧录后设备端
 回读与 host 一致。标准复位后出现 `NuttShell (NSH) NuttX-3.6.1`。
 
@@ -260,7 +225,9 @@ nsh>
 
 - 只支持 DMA0 mem2mem one-shot；没有外设 request consumer 证据。
 - pause/resume、cyclic、LLI/link/insert 返回 `-ENOTSUP`。
-- 硬件 error IRQ 缺少可重复注入方法；DMA-005 的 error 是 test-only 软件合同。
-- stop 实测边界是 programmed-but-not-enabled；不声明线速传输中的精确取消时序。
+- 硬件 error IRQ 没有可重复的触发方法，error 回调（`-EIO`、residual）没有测试覆盖。
+- mem2mem 传输太快，无法稳定在 RUNNING 状态下观测，传输中 `DMA_STOP`/residual、
+  RUNNING 时 config/start 返回 `-EBUSY` 没有测试覆盖；不声明线速传输中的取消时序。
+- task 上下文 put 等待 in-flight callback 退出、callback 中 put 被拒绝，均无测试覆盖。
 - cache maintenance 属于 client；每个未来 consumer 必须独立定义 buffer ownership、
   descriptor 属性和 clean/invalidate 时机。

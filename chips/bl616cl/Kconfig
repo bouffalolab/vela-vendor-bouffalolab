@@ -312,17 +312,6 @@ config BL616CL_DMA0
 		only. Peripheral request users, linked lists, cyclic transfers, and
 		pause/resume are intentionally excluded.
 
-if BL616CL_DMA0
-
-config BL616CL_DMA0_TEST
-	bool
-	default n
-	---help---
-		Build test-only DMA0 IRQ injection, start hold, and runtime diagnostics.
-		Product configurations must keep this option disabled.
-
-endif # BL616CL_DMA0
-
 menuconfig BL616CL_I2C
 	bool "I2C master"
 	default n
