@@ -3,6 +3,7 @@ config BL_MCU_PERIPHERAL_TESTS_SPI
 	default n
 	depends on SPI && SPI_EXCHANGE && BL616CL_SPI
 	depends on BL616CL_SPI0 || BL616CL_SPI1
+	depends on ARCH_BOARD_AI_M64P_32S_KIT
 	depends on !DISABLE_PTHREAD
 	select BL616CL_SPI_TEST
 	select SPI_BITORDER

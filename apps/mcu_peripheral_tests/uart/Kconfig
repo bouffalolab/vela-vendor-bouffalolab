@@ -2,6 +2,7 @@ config BL_MCU_PERIPHERAL_TESTS_UART
 	tristate "MCU peripheral UART tests"
 	default n
 	depends on SERIAL && SERIAL_TERMIOS && BL616CL_UART1
+	depends on ARCH_BOARD_AI_M64P_32S_KIT
 	depends on !DISABLE_PTHREAD
 	---help---
 		Enable the BL616CL UART1 standard-serial case runner.  UART1 is

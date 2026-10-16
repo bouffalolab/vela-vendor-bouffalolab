@@ -2,6 +2,7 @@ config BL_MCU_PERIPHERAL_TESTS_GPIO
 	tristate "MCU peripheral GPIO tests"
 	default n
 	depends on DEV_GPIO && !DISABLE_SIGNALS
+	depends on ARCH_BOARD_AI_M64P_32S_KIT
 	---help---
 		Enable the MCU peripheral GPIO case runner.
 

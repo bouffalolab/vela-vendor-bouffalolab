@@ -7,7 +7,7 @@ RTC、SPI、Timer、TRNG、UART 和 WDT，编入全部 12 个 `mcu_*_test` 命�
 `gpio` 示例。NSH 命令行最长 127 个字符、最多 16 个参数，并开启命令历史和
 Tab 补全，各测试 README 中写全参数的命令可以直接输入。
 
-后续新增外设驱动及测试统一加入此配置，不为单个外设新增 defconfig。
+本板适用的外设测试统一加入此配置，不为单个外设新增 defconfig。GPIO、UART、SPI、PWM 测试依赖本板接线，Kconfig 限定只在本板（`ARCH_BOARD_AI_M64P_32S_KIT`）编译；音视频类外设在 `bl616cl-ave-v10` 上测试。
 基础 `configs/nsh` 提供 `free`、`ps` 命令，并通过启动脚本挂载 `/proc`。
 
 QFN48 封装提供 GPIO0 到 GPIO36。片内 flash（SF1）和 PSRAM 不占用这些 GPIO，

@@ -1,5 +1,11 @@
 #
 
+config ARCH_BOARD_AI_M64P_32S_KIT
+	def_bool y
+	---help---
+		Board identity, defined only while this board is selected. Test
+		apps that need this board's wiring depend on it.
+
 menuconfig AI_M64P_KIT_UART1
 	bool "Ai-M64P-32S-Kit UART1"
 	default n
