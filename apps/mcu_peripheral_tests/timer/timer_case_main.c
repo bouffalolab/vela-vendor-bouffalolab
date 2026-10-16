@@ -1,16 +1,16 @@
 /****************************************************************************
  * vendor/bouffalolab/apps/mcu_peripheral_tests/timer/timer_case_main.c
  *
- * MCU Peripheral Timer / PWM Test Cases (TIMER-001 ~ TIMER-010)
+ * MCU Peripheral Timer / PWM Test Cases (TIMER-001 ~ TIMER-009)
  *   TIMER-001  basic counting / overflow period accuracy (/dev/timer0)
  *   TIMER-002  clock prescaler effect        (/dev/timer0 + custom ioctl)
  *   TIMER-003  PWM frequency / duty precision       (/dev/pwm0)
  *   TIMER-004  PWM duty ramp / breathing LED        (/dev/pwm0)
  *   TIMER-005  timer lifecycle and rejected requests (/dev/timer0)
  *
- * 001/002/005 use the selected timer node; 003/004 use /dev/pwm0. 006-010
- * exercise tick, poll, notification lifetime, dual-instance and callback
- * contracts. Timer measurements are software checks; PWM cases need a scope.
+ * 001/002/005 use the selected timer node; 003/004 use /dev/pwm0. 006-009
+ * exercise tick, poll, notification lifetime and dual-instance contracts.
+ * Timer measurements are software checks; PWM cases need a scope.
  ****************************************************************************/
 
 /****************************************************************************
@@ -57,7 +57,6 @@
 #define CASE_007                 "007"
 #define CASE_008                 "008"
 #define CASE_009                 "009"
-#define CASE_010                 "010"
 #define CASE_ALL                 "all"
 
 #define TIMER_SIGNO              14
@@ -134,7 +133,7 @@ static void print_usage(const char *progname)
 {
   printf("Usage: %s [options]\n", progname);
   printf("Common:\n");
-  printf("  -c <id>   Case: 001..010,all (default: all)\n");
+  printf("  -c <id>   Case: 001..009,all (default: all)\n");
   printf("  -d <dev>  Timer device (default: %s)\n", DEFAULT_TIMER_DEVPATH);
   printf("  -p <dev>  PWM device  (default: %s)\n", DEFAULT_PWM_DEVPATH);
   printf("  -C <n>    [003/004] PWM channel with PWM_MULTICHAN "
@@ -169,7 +168,6 @@ static void print_usage(const char *progname)
   printf("[007] poll and one-shot notification: selected timer node\n");
   printf("[008] multi-fd shared state: selected timer node\n");
   printf("[009] TIMER0/TIMER1 dual-instance isolation\n");
-  printf("[010] raw callback contract (test-only Kconfig)\n");
 }
 
 static double mono_now(void)
@@ -1354,120 +1352,6 @@ out:
 }
 
 /****************************************************************************
- * TIMER-010 : raw lower-half callback contract
- ****************************************************************************/
-
-#ifdef CONFIG_BL616CL_TIMER_TEST
-struct raw_callback_context_s
-{
-  volatile uint32_t count;
-  uint32_t next_interval;
-};
-
-static bool timer_raw_callback(uint32_t *next_interval, void *arg)
-{
-  struct raw_callback_context_s *ctx = arg;
-
-  ctx->count++;
-  if (ctx->count == 1)
-    {
-      *next_interval = ctx->next_interval;
-      return true;
-    }
-
-  return false;
-}
-
-static int timer_index_from_path(const char *devpath)
-{
-  size_t len = strlen(devpath);
-
-  if (len == 0 || devpath[len - 1] < '0' || devpath[len - 1] > '1')
-    {
-      return -EINVAL;
-    }
-
-  return devpath[len - 1] - '0';
-}
-#endif
-
-static int run_case_010(const struct app_config_s *cfg)
-{
-#ifdef CONFIG_BL616CL_TIMER_TEST
-  struct raw_callback_context_s ctx;
-  struct timer_lowerhalf_s *lower;
-  struct timer_status_s status;
-  int timer;
-  int waits;
-  int ret = -EIO;
-
-  printf("[TIMER-010] Raw lower-half callback contract\n");
-  memset(&status, 0, sizeof(status));
-  timer = timer_index_from_path(cfg->timer_devpath);
-  if (timer < 0)
-    {
-      printf("  FAIL: timer path must end in 0 or 1\n");
-      return timer;
-    }
-
-  lower = bl616cl_timer_test_lower((uint8_t)timer);
-  if (lower == NULL)
-    {
-      printf("  FAIL: selected timer lower is not built\n");
-      return -ENODEV;
-    }
-
-  ctx.count = 0;
-  ctx.next_interval = 30000;
-  (void)TIMER_STOP(lower);
-  if (TIMER_SETTIMEOUT(lower, 50000) < 0)
-    {
-      printf("  FAIL: raw settimeout failed\n");
-      return -EIO;
-    }
-
-  TIMER_SETCALLBACK(lower, timer_raw_callback, &ctx);
-  if (TIMER_START(lower) < 0)
-    {
-      printf("  FAIL: raw start failed\n");
-      TIMER_SETCALLBACK(lower, NULL, NULL);
-      return -EIO;
-    }
-
-  for (waits = 0; waits < 100 && ctx.count < 2; waits++)
-    {
-      usleep(10000);
-    }
-
-  if (TIMER_GETSTATUS(lower, &status) >= 0 && ctx.count == 2 &&
-      (status.flags & TCFLAGS_ACTIVE) == 0 &&
-      status.timeout == ctx.next_interval)
-    {
-      printf("  callbacks=2 next=%luus active=no\n",
-             (unsigned long)status.timeout);
-      printf("  [TIMER-010] PASS true reload, next interval and "
-             "false stop\n\n");
-      ret = 0;
-    }
-  else
-    {
-      printf("  FAIL: callbacks=%lu flags=0x%lx timeout=%lu\n",
-             (unsigned long)ctx.count, (unsigned long)status.flags,
-             (unsigned long)status.timeout);
-    }
-
-  (void)TIMER_STOP(lower);
-  TIMER_SETCALLBACK(lower, NULL, NULL);
-  (void)TIMER_SETTIMEOUT(lower, cfg->timeout_us);
-  return ret;
-#else
-  UNUSED(cfg);
-  printf("[TIMER-010] FAIL raw callback test is not enabled\n");
-  return -ENOTSUP;
-#endif
-}
-
-/****************************************************************************
  * main
  ****************************************************************************/
 
@@ -1560,8 +1444,7 @@ int main(int argc, char *argv[])
       strcmp(cfg.case_id, CASE_006) != 0 &&
       strcmp(cfg.case_id, CASE_007) != 0 &&
       strcmp(cfg.case_id, CASE_008) != 0 &&
-      strcmp(cfg.case_id, CASE_009) != 0 &&
-      strcmp(cfg.case_id, CASE_010) != 0)
+      strcmp(cfg.case_id, CASE_009) != 0)
     {
       printf("Unsupported case id: %s\n", cfg.case_id);
       return ERROR;
@@ -1706,23 +1589,6 @@ int main(int argc, char *argv[])
           passed++;
         }
       else if (strcmp(cfg.case_id, CASE_009) == 0)
-        {
-          printf("Timer Summary: executed=%d passed=%d -> FAIL\n",
-                 executed, passed);
-          return ERROR;
-        }
-    }
-
-  if (strcmp(cfg.case_id, CASE_ALL) == 0 ||
-      strcmp(cfg.case_id, CASE_010) == 0)
-    {
-      executed++;
-      ret = run_case_010(&cfg);
-      if (ret >= 0)
-        {
-          passed++;
-        }
-      else if (strcmp(cfg.case_id, CASE_010) == 0)
         {
           printf("Timer Summary: executed=%d passed=%d -> FAIL\n",
                  executed, passed);

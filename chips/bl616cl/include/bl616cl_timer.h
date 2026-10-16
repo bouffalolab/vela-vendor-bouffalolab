@@ -27,8 +27,6 @@
 
 #include <nuttx/config.h>
 
-#include <stdint.h>
-
 #include <nuttx/timers/timer.h>
 
 /****************************************************************************
@@ -40,34 +38,5 @@
  */
 
 #define BL616CL_TCIOC_SETCLOCKDIV _TCIOC(0x0040)
-
-/****************************************************************************
- * Public Function Prototypes
- ****************************************************************************/
-
-#ifdef CONFIG_BL616CL_TIMER_TEST
-
-/****************************************************************************
- * Name: bl616cl_timer_test_lower
- *
- * Description:
- *   Return the lower half of a timer so that test code can call its
- *   operations directly. Available only with CONFIG_BL616CL_TIMER_TEST.
- *
- *   The timer test application uses this configuration-gated extension
- *   because the standard timer API cannot exercise the lower-half callback
- *   contract directly.
- *
- * Input Parameters:
- *   timer - Timer index, 0 or 1.
- *
- * Returned Value:
- *   The timer lower half; NULL if that timer is not enabled.
- *
- ****************************************************************************/
-
-struct timer_lowerhalf_s *bl616cl_timer_test_lower(uint8_t timer);
-
-#endif
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIP_BL616CL_INCLUDE_BL616CL_TIMER_H */

@@ -23,7 +23,7 @@ USB-UART 只能证明固件启动、节点、callback、状态和软件计时。
 | tick ioctl | OpenVela timer upper-half | lower 提供 tick ops，向上取整 |
 | poll | OpenVela upper-half | 单 waiter 唤醒，第二 waiter 报 `POLLERR` |
 | 多 fd | timer upper 共享 lower | 验证 timeout/active 共享、close 不停止 |
-| raw callback | lower callback 槽位 | 仅 test-only Kconfig 暴露 |
+| `next_interval` 重装 | lower callback 的 `next_interval` 输出 | OpenVela upper-half 不写该值，没有公开接口可触发，未覆盖 |
 | input capture/DMA | capture 仅 TIMER0，DMA 还缺 cache/通道闭环 | 延后，不冒充 TIMER1 能力 |
 
 ### Kconfig 与 owner
@@ -31,9 +31,6 @@ USB-UART 只能证明固件启动、节点、callback、状态和软件计时。
 - `CONFIG_BL616CL_TIMER` 控制普通 timer lower 总体。
 - `CONFIG_BL616CL_TIMER0`、`CONFIG_BL616CL_TIMER1` 分别控制实例和 bringup
   节点；TIMER1 依赖 `!BL616CL_ONESHOT`。
-- `CONFIG_BL616CL_TIMER_TEST` 只导出 `bl616cl_timer_test_lower()`；
-  `CONFIG_BL_MCU_PERIPHERAL_TESTS_TIMER_RAW` 选择它并启用 TIMER-010，生产配置
-  保持关闭。
 - `BL616CL_TCIOC_SETCLOCKDIV` 已移到 `_TCIOC(0x0040)`，避开 OpenVela timer
   与 oneshot 的保留号段 `0x0001..0x003f`。
 - TIMER0/TIMER1 的 stop、IRQ mask、configure、attach、start 和 live update
@@ -81,8 +78,8 @@ vendor/bouffalolab/vela build \
 |---|---:|---|
 | `nsh` | 1223/1223 | `libarch.a` 无 `bl616cl_tim.c.o`，只有 oneshot；无 timer0/1 |
 | `nsh` | 1223/1223 | `bl616cl_tim.c.o` 仅有 TIMER0，节点为 timer0 |
-| `nsh` | 1223/1223 | 仅有 TIMER1，含 test hook，节点为 timer1 |
-| `nsh-timer`（历史，已删除） | 1223/1223 | TIMER0/TIMER1 均存在，含 test hook |
+| `nsh` | 1223/1223 | 仅有 TIMER1，节点为 timer1 |
+| `nsh-timer`（历史，已删除） | 1223/1223 | TIMER0/TIMER1 均存在 |
 | `nsh` | 1224/1224 | TIMER0 与 oneshot 存在，无 TIMER1 普通实例 |
 
 测试 main 的归档路径为 `apps/vendor/bouffalolab/apps/mcu_peripheral_tests/timer/`
@@ -98,7 +95,7 @@ oneshot 基线可见；它不代表普通 timer lower 被启用。
 1. 使用 `bl_module_reset.py --port /dev/ttyUSB2 --baudrate 2000000` 复位，
    必须匹配 `NuttShell (NSH)` 与 `nsh>`。
 2. 执行 `ls /dev`，按配置确认 timer0/timer1/oneshot 节点。
-3. 对单实例配置，001/002/005~008/010 使用 `-d` 指定实际节点；009 只在 dual
+3. 对单实例配置，001/002/005~008 使用 `-d` 指定实际节点；009 只在 dual
    配置执行；oneshot 配置执行 `oneshot -d 100000 /dev/oneshot`。
 4. 每条命令等待自身的 PASS/完成标志和 `nsh>`，不能用上一条命令的旧 prompt
    作为成功判据。
@@ -239,24 +236,6 @@ nsh>
 [TIMER-009] TIMER0/TIMER1 dual-instance isolation
   timer0=30000us timer1=50000us timer1-active-after-timer0-stop=yes
   [TIMER-009] PASS dual IRQ, state and stop isolation
-Timer Summary: executed=1 passed=1 failed=0 -> PASS
-nsh>
-```
-
-### TIMER-010 raw callback
-
-命令：`mcu_timer_test -d /dev/timer1 -c 010`
-
-流程：从 test hook 取得 lower，设置 50ms；第一次 callback 写入 30ms 并返回 true，
-第二次返回 false；最多等待 1s，要求计数恰为 2、状态 inactive、timeout=30000us；
-最后 STOP、清空 callback/arg 并恢复 timeout。该 case 只在 raw test Kconfig 下出现。
-
-实测：
-
-```text
-[TIMER-010] Raw lower-half callback contract
-  callbacks=2 next=30000us active=no
-  [TIMER-010] PASS true reload, next interval and false stop
 Timer Summary: executed=1 passed=1 failed=0 -> PASS
 nsh>
 ```

@@ -844,37 +844,3 @@ int bl616cl_timer_initialize(const char *devpath, uint8_t timer)
   handle = timer_register(devpath, (struct timer_lowerhalf_s *)priv);
   return handle != NULL ? OK : -EEXIST;
 }
-
-#ifdef CONFIG_BL616CL_TIMER_TEST
-/****************************************************************************
- * Name: bl616cl_timer_test_lower
- *
- * Description:
- *   Return the lower half of a timer so that test code can call its
- *   operations directly. Available only with CONFIG_BL616CL_TIMER_TEST.
- *
- * Input Parameters:
- *   timer - Timer index, 0 or 1.
- *
- * Returned Value:
- *   The timer lower half; NULL if that timer is not enabled.
- *
- ****************************************************************************/
-
-struct timer_lowerhalf_s *bl616cl_timer_test_lower(uint8_t timer)
-{
-  switch (timer)
-    {
-#ifdef CONFIG_BL616CL_TIMER0
-      case 0:
-        return (struct timer_lowerhalf_s *)&g_bl616cl_timer0;
-#endif
-#ifdef CONFIG_BL616CL_TIMER1
-      case 1:
-        return (struct timer_lowerhalf_s *)&g_bl616cl_timer1;
-#endif
-      default:
-        return NULL;
-    }
-}
-#endif
