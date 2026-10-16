@@ -37,8 +37,8 @@ CMake + Ninja（本仓不提供 `Make.defs`/`Makefile`）。
 ```
 
 目标写到 `configs/<name>` 一层；`vendor/bouffalolab/boards/` 前缀可省略，无歧义时
-chip 和 `configs/` 层也可省略（`bl616cl/ai-m64p-32s-kit/configs/nsh`、
-`ai-m64p-32s-kit/nsh`、`nsh` 等价）。默认并行度为逻辑核数的一半，可用 `-j N` 覆盖。
+chip 和 `configs/` 层也可省略（`bl616cl/ai-m64p-32s-kit/configs/nsh` 与
+`ai-m64p-32s-kit/nsh` 等价；`nsh`、`nsh-peripherals` 两板都有，要带板名）。默认并行度为逻辑核数的一半，可用 `-j N` 覆盖。
 
 Ai-M64P-32S-Kit 的配置：
 
@@ -49,6 +49,9 @@ Ai-M64P-32S-Kit 的配置：
 | `ostest` | NuttX OS 测试 |
 | `wifi` | Wi-Fi STA |
 | `ble` | BLE（controller 库 + zblue host）和 `mible` 测试命令，不开 Wi-Fi |
+
+BL616CL-AVE-V10（音视频评估板）有 `nsh` 和 `nsh-peripherals`，引脚与外设见
+[板级说明](boards/bl616cl/bl616cl-ave-v10/README.md)。
 
 构建产物在 `cmake_out/<board>_<config>/`：
 
@@ -80,7 +83,7 @@ shell 补全：`./vela completion install`，或 `./vela completion <bash|zsh|fi
 | 目录 | 作用 | 接入构建的方式 |
 |---|---|---|
 | `chips/` | 芯片移植（custom chip，当前 `bl616cl`） | 按 defconfig 的 `CONFIG_ARCH_CHIP_CUSTOM_DIR` 纳入 |
-| `boards/` | 板级（`bl616cl/ai-m64p-32s-kit`，`bl616cl/common` 为共用启动代码） | 按 defconfig 的 `CONFIG_ARCH_BOARD_CUSTOM_DIR` 纳入 |
+| `boards/` | 板级（`bl616cl/ai-m64p-32s-kit`、`bl616cl/bl616cl-ave-v10`，`bl616cl/common` 为共用启动代码） | 按 defconfig 的 `CONFIG_ARCH_BOARD_CUSTOM_DIR` 纳入 |
 | `drivers/` | Bouffalo SDK `drivers/` 的只读镜像（lhal、soc、rfparam、预编译 phyrf），独立仓 | `cmake/bl616cl_lhal.cmake`、`bl616cl_std.cmake` 显式选择源码 |
 | `components/` | 中间件，当前为 `wireless/`（`wifi`、`ble`、`rfparam`） | 自动发现 |
 | `apps/` | 测试与示例 app：`mcu_peripheral_tests`、`os_feature_tests`、`perf_tools`、`wireless_tests` | 自动发现 |

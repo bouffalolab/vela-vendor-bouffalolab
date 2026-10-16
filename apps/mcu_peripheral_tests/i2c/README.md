@@ -31,11 +31,15 @@ case 只记录完整执行流程和判据，不标记为已实测 PASS。2026-10
 --no-target` 已在 GPIO4/5 上用逻辑分析仪确认（I2C0、I2C1 各一次，见
 `docs/bl616cl-i2c.md`）；I2C0 在 GPIO4/5 可正常启动。2026-10-14 起 `nsh-peripherals`
 同时注册 I2C0（GPIO30/31）和 I2C1（GPIO4/5），`fake all --bus 0/1`、`fake dual` 和两条
-总线的 `hw probe --no-target` 均 PASS；`hw dual` 仍需两路 target。
+总线的 `hw probe --no-target` 均 PASS；`hw dual` 仍需两路 target。2026-10-16 起
+BL616CL-AVE-V10 的 `nsh-peripherals` 注册 I2C0（GPIO20/11，板载 ES8388，地址 0x10），
+`hw probe`、`hw combined`、单寄存器 `hw eeprom` 和 `hw concurrent` 对真实从机 PASS，
+命令和结果见 `docs/bl616cl-i2c.md` 的“正向 target”。ES8388 读不自动递增地址，
+`hw boundary` 和多字节读仍要 EEPROM。
 
 ## 配置与构建
 
-打开 `CONFIG_BL_MCU_PERIPHERAL_TESTS_I2C` 前必须同时启用 `I2C`、`I2C_DRIVER` 和 `BL616CL_I2C`。该选项会选择芯片层的 `BL616CL_I2C_TEST` hook，默认配置为：
+打开 `CONFIG_BL_MCU_PERIPHERAL_TESTS_I2C` 前必须同时启用 `I2C`、`I2C_DRIVER` 和 `BL616CL_I2C`，并由板级选项注册总线（`AI_M64P_KIT_I2C0/1` 或 `BL616CL_AVE_V10_I2C0`），其它板上不编译本测试。该选项会选择芯片层的 `BL616CL_I2C_TEST` hook，默认配置为：
 
 ```text
 CONFIG_BL_MCU_PERIPHERAL_TESTS_I2C=y

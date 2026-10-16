@@ -1,0 +1,20 @@
+#
+# For a description of the syntax of this configuration file,
+# see the file kconfig-language.txt in the NuttX tools repository.
+#
+
+config ARCH_BOARD_BL616CL_AVE_V10
+	def_bool y
+	---help---
+		Board identity, defined only while this board is selected. Test
+		apps that need this board's wiring depend on it.
+
+config BL616CL_AVE_V10_I2C0
+	bool "BL616CL-AVE-V10 I2C0 (ES8388, camera SCCB)"
+	default n
+	select BL616CL_I2C
+	select BL616CL_I2C0
+	---help---
+		Register I2C0 as /dev/i2c0 on GPIO20 (SCL) and GPIO11 (SDA). The
+		board wires the ES8388 codec (address 0x10) and the camera
+		connector SCCB to this bus with 4.7 kOhm pull-ups to 3.3 V.

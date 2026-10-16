@@ -2,7 +2,7 @@ config BL_MCU_PERIPHERAL_TESTS_I2C
 	tristate "MCU peripheral I2C tests"
 	default n
 	depends on I2C && I2C_DRIVER && BL616CL_I2C
-	depends on AI_M64P_KIT_I2C0 || AI_M64P_KIT_I2C1
+	depends on AI_M64P_KIT_I2C0 || AI_M64P_KIT_I2C1 || BL616CL_AVE_V10_I2C0
 	depends on !DISABLE_PTHREAD
 	select BL616CL_I2C_TEST
 	---help---

@@ -1,0 +1,519 @@
+/****************************************************************************
+ * vendor/bouffalolab/boards/bl616cl/bl616cl-ave-v10/scripts/ld.script
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ ****************************************************************************/
+
+#include <nuttx/config.h>
+
+OUTPUT_ARCH(riscv)
+ENTRY(__start)
+
+/* BLE EM (CONFIG_BL616CL_EM_SIZE) is carved from the top of WRAM, as in
+ * the Bouffalo SDK bl616cl_common.ld.in. ram_wifi is the WRAM below EM on
+ * the nocache alias, the only view the Wi-Fi hardware uses. .wifibss sits
+ * at its top and the heap, on the cacheable alias, runs up to where
+ * .wifibss starts, so the split follows the size of .wifibss instead of a
+ * fixed WRAM size.
+ */
+
+__LD_CONFIG_EM_SEL = CONFIG_BL616CL_EM_SIZE * 1024;
+__bl616cl_ram_size = 224K - 1K + 160K - __LD_CONFIG_EM_SEL;
+
+MEMORY
+{
+  fw_header (rx)  : ORIGIN = 0x7ffff000, LENGTH = 4K
+  rom_header (rx)  : ORIGIN = 0x80000000, LENGTH = 6K
+  flash (rx) : ORIGIN = 0x80001800,
+               LENGTH = __bl616cl_app_size - 4K - 6K
+  ram_nocache (!rx) : ORIGIN = 0x20fc0400, LENGTH = __bl616cl_ram_size
+  ram (!rx) : ORIGIN = 0x60fc0400, LENGTH = __bl616cl_ram_size
+  ram_wifi (wxa) : ORIGIN = 0x20ff8000, LENGTH = 160K - __LD_CONFIG_EM_SEL
+}
+
+/* Let ld derive program headers from section attributes. Script-generated
+ * constants need READONLY because they have no read-only input sections.
+ */
+
+SECTIONS
+{
+  .fw_header :
+  {
+    KEEP(*(.fw_header))
+  } > fw_header
+
+  __rom_header_start__ = ORIGIN(rom_header);
+  __bl616cl_cache_xip_start = ABSOLUTE(ORIGIN(rom_header));
+  /* Cache maintenance covers the hardware XIP window, not just this image. */
+
+  __bl616cl_cache_xip_end = ABSOLUTE(ORIGIN(rom_header) + 4M);
+  __bl616cl_cache_ram_start = ABSOLUTE(ORIGIN(ram));
+
+  .init ORIGIN(rom_header) :
+  {
+    KEEP(*(.text.entry))
+    KEEP(*(SORT_NONE(.init)))
+  } > rom_header
+
+  .multi_bins ORIGIN(rom_header) + 512 (READONLY) :
+  {
+    __multi_bins__ = ABSOLUTE(.);
+    LONG(0x464c4553) LONG(0x00000000)
+    LONG(LENGTH(fw_header))
+    LONG(__rom_end__ - __rom_header_start__ + LENGTH(fw_header))
+    LONG(0x0000504c) LONG(0x00000000)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x52415744) LONG(0x49464346)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x464d4f52) LONG(0x00000053)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x54524543) LONG(0x00000053)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x4f545541) LONG(0x5453494c)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0xffffffff) LONG(0xffffffff)
+    LONG(0xffffffff) LONG(0xffffffff)
+  } > rom_header
+
+  .rftlv.tool ORIGIN(rom_header) + 1K (READONLY) :
+  {
+    _ld_symbol_rftlv_address = ABSOLUTE(.);
+    LONG(0x46524c42)
+    LONG(0x41524150)
+    . = ORIGIN(rom_header) + 3K;
+  } > rom_header
+
+  .ver ORIGIN(rom_header) + 3K (READONLY) :
+  {
+    LONG(0x42464c42)
+    LONG(0x46524556)
+    KEEP(*(.bflb_verinf))
+    LONG(0x42464c42)
+    LONG(0x46524556)
+    KEEP(*(.verinfo))
+    . = ALIGN(4);
+    _version_info_section_start = ABSOLUTE(.);
+    KEEP(*(.version.*))
+    _version_info_section_end = ABSOLUTE(.);
+  } > rom_header
+
+  .init_code :
+  {
+    KEEP(*riscv_fpu.S.o(.text))
+    KEEP(*bl616cl_start.c.o(.text.__bl616cl_start))
+    KEEP(*bl616cl_cpu.c.o(.text.bl616cl_* .rodata.g_bl616cl_pmp_entry))
+    KEEP(*bl616cl_memory.c.o(.text.bl616cl_memory_early_init
+                             .text.bl616cl_flash_early_init))
+    KEEP(*bl616cl_cache.c.o(.text.bl616cl_cache_early_init))
+    KEEP(*rv_pmp.c.o(.text.rvpmp_* .rodata.rvpmp_*))
+    KEEP(*bl616cl_glb.c.o(.text.GLB_Set_EM_Sel))
+  } > rom_header
+
+  __rom_header_used_end__ = ABSOLUTE(.);
+  __rom_header_end__ = ORIGIN(rom_header) + LENGTH(rom_header);
+
+  __ram_nocache_start__ = ORIGIN(ram_nocache);
+
+  .nocache_data :
+  {
+    . = ALIGN(4);
+    *(.nocache_ram)
+    . = ALIGN(4);
+  } > ram_nocache AT > flash
+
+  .nocache_noinit (NOLOAD) :
+  {
+    . = ALIGN(4);
+    *(.nocache_noinit_ram)
+    *(.noncacheable)
+    . = ALIGN(4);
+  } > ram_nocache
+
+  __ram_nocache_end__ = ABSOLUTE(.);
+
+  .ram_skip_nocache_region (NOLOAD) :
+  {
+    . += (ABSOLUTE(__ram_nocache_end__) -
+          ABSOLUTE(ORIGIN(ram_nocache)));
+    . = ALIGN(32);
+  } > ram
+
+  .ram_code :
+  {
+    . = ALIGN(4);
+    *(.tcm_code*)
+    *(.sclock_rlt_code*)
+    . = ALIGN(4);
+  } > ram AT > flash
+
+  .ram_rodata :
+  {
+    . = ALIGN(4);
+    *(.tcm_const*)
+    *(.sclock_rlt_const*)
+    /* Flash command functions use compiler-generated io_mode jump tables
+     * before XIP is restored. Keep those tables with the RAM code.
+     */
+
+    *bflb_sflash.c.o(.rodata .rodata.* .srodata .srodata.*)
+
+    /* Flash clock calibration switches clocks with XIP disabled. */
+
+    *libbl_std.a:bl616cl_glb.c.o(.rodata .rodata.* .srodata .srodata.*)
+    *libbl_std.a:bl616cl_clock.c.o(.rodata .rodata.* .srodata .srodata.*)
+    . = ALIGN(4);
+  } > ram AT > flash
+
+  .data :
+  {
+    _sdata = ABSOLUTE(.);
+    __global_pointer$ = . + 0x800;
+    *(.data .data.*)
+    *(.sdata .sdata.*)
+    *(.sdata2 .sdata2.*)
+    *(.tcm_data*)
+    *(.gnu.linkonce.d.*)
+    . = ALIGN(4);
+    _edata = ABSOLUTE(.);
+  } > ram AT > flash
+
+  /* Give NOLOAD sections an explicit RAM LMA so they do not inherit the
+   * preceding flash-backed data mapping.
+   */
+
+  .noinit (NOLOAD) : AT(ADDR(.noinit))
+  {
+    *(.noinit .noinit.*)
+    /* Preserve the SDK no-init convention for reused objects. */
+
+    *(.noinit_data*)
+    . = ALIGN(16);
+  } > ram
+
+  /* Wi-Fi shared data: macsw descriptors, wl80211 RX buffer memory and
+   * the NuttX IOB pool (CONFIG_IOB_SECTION="SHAREDRAM"), which the MAC
+   * transmits from directly (collection modeled after the BL4 baseline
+   * .wifibss section). The start is aligned down to the section
+   * alignment, so the padding inside and the size do not depend on the
+   * address.
+   */
+
+  .wifibss ((ORIGIN(ram_wifi) + LENGTH(ram_wifi) - SIZEOF(.wifibss)) &
+            ~(MAX(ALIGNOF(.wifibss), 16) - 1)) (NOLOAD) :
+  {
+    PROVIDE(__wifi_bss_start = ABSOLUTE(.));
+    _sshram = ABSOLUTE(.);
+    *(SHAREDRAMIPC)
+    *(SHAREDRAM)
+    _eshram = ABSOLUTE(.);
+    *ipc_shared.o(COMMON)
+    *sdu_shared.o(COMMON)
+    *hal_desc.o(COMMON)
+    *txl_buffer_shared.o(SHAREDRAM) *txl_buffer_shared.o(COMMON)
+    *txl_frame_shared.o(COMMON)
+    *scan_shared.o(COMMON)
+    *scanu_shared.o(COMMON)
+    *mfp_bip.o(COMMON)
+    *me_mic.o(COMMON)
+    *(.wifi_ram*)
+    . = ALIGN(16);
+    PROVIDE(__wifi_bss_end = ABSOLUTE(.));
+  } > ram_wifi
+
+  /* The part of ram_wifi taken by .wifibss; the heap gets the rest. */
+
+  __ram_wifi_start = ADDR(.wifibss);
+  __ram_wifi_end = ORIGIN(ram_wifi) + LENGTH(ram_wifi);
+
+  .bss (NOLOAD) : AT(ADDR(.bss))
+  {
+    _sbss = ABSOLUTE(.);
+    *(.bss .bss.*)
+    *(.sbss .sbss.*)
+    *(COMMON)
+    . = ALIGN(16);
+    _ebss = ABSOLUTE(.);
+  } > ram
+
+  .idle_stack (NOLOAD) : AT(ADDR(.idle_stack))
+  {
+    . = ALIGN(16);
+    __StackBase = ABSOLUTE(.);
+    . += CONFIG_IDLETHREAD_STACKSIZE;
+    __StackTop = ABSOLUTE(.);
+  } > ram
+
+  /* The heap runs up to the cacheable alias of __ram_wifi_start. */
+
+  __HeapBase = ALIGN(__StackTop, 16);
+  __HeapLimit = __ram_wifi_start - ORIGIN(ram_nocache) + ORIGIN(ram);
+  __bl616cl_cache_ram_end = ABSOLUTE(__HeapLimit);
+
+  /* Special RAM sections consume their inputs first. Place the remaining
+   * XIP code and constants after their flash load images.  Start the code
+   * on a 32 KiB (I-cache size) boundary so that a change in the RAM load
+   * images does not move it to other cache sets.
+   */
+
+  .text ALIGN(LOADADDR(.data) + SIZEOF(.data), 32K) :
+  {
+    _stext = ABSOLUTE(.);
+    __bl616cl_wifi_hot_start = ABSOLUTE(.);
+
+    /* Wi-Fi hot paths in call order, so that they stay in few I-cache
+     * sets and no cold code sits between them.  Derived from
+     * macsw_cache_affinity.ld.in (functions that LTO keeps separate in
+     * this build) plus the task loop and host port functions that the tick
+     * profile shows on the same paths.  LTO renames local copies with a
+     * .lto_priv/.isra/.constprop suffix, hence the ".*" patterns.
+     */
+
+    /* Wi-Fi task loop */
+    *(.text.wifi_main .text.wifi_main.*)
+    *(.text.ke_evt_schedule .text.ke_evt_schedule.*)
+    *(.text.ke_evt_clear .text.ke_evt_clear.*)
+    *(.text.ke_evt_set .text.ke_evt_set.*)
+    *(.text.ke_state_get .text.ke_state_get.*)
+    *(.text.wifi_task_suspend .text.wifi_task_suspend.*)
+    *(.text.wifi_task_resume .text.wifi_task_resume.*)
+    *(.text.coex_coord_on_wifi_suspend_enter .text.coex_coord_on_wifi_suspend_enter.*)
+    *(.text.coex_coord_on_wifi_wake .text.coex_coord_on_wifi_wake.*)
+    *(.text.coex_coord_set_tx_paused .text.coex_coord_set_tx_paused.*)
+    *(.text.co_list_push_back .text.co_list_push_back.*)
+    *(.text.co_list_push_front .text.co_list_push_front.*)
+    *(.text.co_list_pop_front .text.co_list_pop_front.*)
+    *(.text.co_clz .text.co_clz.*)
+    /* Wi-Fi TX */
+    *(.text.rtos_mutex_lock .text.rtos_mutex_lock.*)
+    *(.text.rtos_mutex_unlock .text.rtos_mutex_unlock.*)
+    *(.text.wl80211_mac_tx .text.wl80211_mac_tx.*)
+    *(.text.vif_mgmt_get_staid .text.vif_mgmt_get_staid.*)
+    *(.text.macif_tx_evt .text.macif_tx_evt.*)
+    *(.text.txu_cntrl_push .text.txu_cntrl_push.*)
+    *(.text.txl_cntrl_tx_check .text.txl_cntrl_tx_check.*)
+    *(.text.txl_payload_handle .text.txl_payload_handle.*)
+    *(.text.chan_is_tx_allowed .text.chan_is_tx_allowed.*)
+    *(.text.txu_cntrl_sechdr_len_compute .text.txu_cntrl_sechdr_len_compute.*)
+    *(.text.rc_check .text.rc_check.*)
+    *(.text.rc_trial_check_bfm_stbc_htc .text.rc_trial_check_bfm_stbc_htc.*)
+    *(.text.tpc_get_vif_tx_power_vs_rate .text.tpc_get_vif_tx_power_vs_rate.*)
+    *(.text.wl_wlan_power_cfg_get .text.wl_wlan_power_cfg_get.*)
+    *(.text.trpc_get_default_power_idx .text.trpc_get_default_power_idx.*)
+    *(.text.trpc_get_power_idx .text.trpc_get_power_idx.*)
+    *(.text.tpc_get_vif_tx_prot_power_vs_rate .text.tpc_get_vif_tx_prot_power_vs_rate.*)
+    *(.text.txu_cntrl_sec_hdr_append .text.txu_cntrl_sec_hdr_append.*)
+    *(.text.txl_ampdu_constraints_get .text.txl_ampdu_constraints_get.*)
+    *(.text.txl_agg_mpdu_nb_delims .text.txl_agg_mpdu_nb_delims.*)
+    *(.text.txl_agg_split .text.txl_agg_split.*)
+    *(.text.txl_he_mu_edca_blocked .text.txl_he_mu_edca_blocked.*)
+    *(.text.txl_agg_he_tb_prep_for_cat .text.txl_agg_he_tb_prep_for_cat.*)
+    *(.text.txl_he_txop_dur_rtscts_thres_ampdu_check .text.txl_he_txop_dur_rtscts_thres_ampdu_check.*)
+    *(.text.txl_he_tb_config .text.txl_he_tb_config.*)
+    *(.text.txl_he_tb_enable .text.txl_he_tb_enable.*)
+    *(.text.txl_he_txop_dur_rtscts_thres_mpdu_check .text.txl_he_txop_dur_rtscts_thres_mpdu_check.*)
+    *(.text.txl_he_txop_dur_rtscts_thres_apply .text.txl_he_txop_dur_rtscts_thres_apply.*)
+    *(.text.txl_frame_exchange_chain .text.txl_frame_exchange_chain.*)
+    *(.text.txl_cntrl_newhead .text.txl_cntrl_newhead.*)
+    *(.text.wlan_txavail .text.wlan_txavail.*)
+    *(.text.net_buf_tx_alloc .text.net_buf_tx_alloc.*)
+    *(.text.find_active_sta_vif .text.find_active_sta_vif.*)
+    *(.text.txu_cntrl_use_bss_min_rate .text.txu_cntrl_use_bss_min_rate.*)
+    *(.text.bam_baw_index_compute .text.bam_baw_index_compute.*)
+    *(.text.bam_baw_index_compute_opt .text.bam_baw_index_compute_opt.*)
+    *(.text.txl_fill_bar .text.txl_fill_bar.*)
+    . = ALIGN(64);
+    /* Wi-Fi TX confirmation */
+    *(.text.interrupt0_handler .text.interrupt0_handler.*)
+    *(.text.txl_agg_finish .text.txl_agg_finish.*)
+    *(.text.txl_transmit_trigger .text.txl_transmit_trigger.*)
+    *(.text.txl_agg_check_rtscts_retry_limit .text.txl_agg_check_rtscts_retry_limit.*)
+    *(.text.txl_agg_check_saved_agg_desc .text.txl_agg_check_saved_agg_desc.*)
+    *(.text.txl_frame_cfm .text.txl_frame_cfm.*)
+    *(.text.txl_cfm_push .text.txl_cfm_push.*)
+    *(.text.rxl_immediate_frame_get .text.rxl_immediate_frame_get.*)
+    *(.text.txl_frame_evt .text.txl_frame_evt.*)
+    *(.text.txu_cntrl_cfm .text.txu_cntrl_cfm.*)
+    *(.text.ke_msg_send .text.ke_msg_send.*)
+    *(.text.rc_cfm_ampdu .text.rc_cfm_ampdu.*)
+    *(.text.rc_update_counters .text.rc_update_counters.*)
+    *(.text.macif_tx_cfm_push .text.macif_tx_cfm_push.*)
+    *(.text.macif_tx_data_ind .text.macif_tx_data_ind.*)
+    *(.text.rc_cfm_singleton .text.rc_cfm_singleton.*)
+    *(.text.txl_agg_check .text.txl_agg_check.*)
+    *(.text.txl_cfm_evt .text.txl_cfm_evt.*)
+    *(.text.macif_msg_evt .text.macif_msg_evt.*)
+    *(.text.macsw_tx_pending_cb .text.macsw_tx_pending_cb.*)
+    *(.text.wl80211_sta_tx_complete .text.wl80211_sta_tx_complete.*)
+    *(.text.net_buf_tx_free .text.net_buf_tx_free.*)
+    . = ALIGN(64);
+    /* Wi-Fi RX */
+    *(.text.rxu_msdu_upload_and_indicate .text.rxu_msdu_upload_and_indicate.*)
+    *(.text.rxl_mpdu_transfer .text.rxl_mpdu_transfer.*)
+    *(.text.rxl_payload_transfer .text.rxl_payload_transfer.*)
+    *(.text.rxu_cntrl_desc_prepare .text.rxu_cntrl_desc_prepare.*)
+    *(.text.rxl_mpdu_isr .text.rxl_mpdu_isr.*)
+    *(.text.rxl_rxdesc_get .text.rxl_rxdesc_get.*)
+    *(.text.rxl_rxdesc_ready_for_processing .text.rxl_rxdesc_ready_for_processing.*)
+    *(.text.rxl_dma_int_handler .text.rxl_dma_int_handler.*)
+    *(.text.rxl_dma_evt .text.rxl_dma_evt.*)
+    *(.text.rxl_frame_release .text.rxl_frame_release.*)
+    *(.text.rxu_cntrl_frame_handle .text.rxu_cntrl_frame_handle.*)
+    *(.text.rxu_cntrl_protected_handle .text.rxu_cntrl_protected_handle.*)
+    *(.text.rxu_cntrl_check_pn .text.rxu_cntrl_check_pn.*)
+    *(.text.rxu_cntrl_duplicate_check .text.rxu_cntrl_duplicate_check.*)
+    *(.text.rxu_cntrl_reord_fwd .text.rxu_cntrl_reord_fwd.*)
+    *(.text.macif_rx_desc_upload .text.macif_rx_desc_upload.*)
+    *(.text.rxl_cntrl_evt .text.rxl_cntrl_evt.*)
+    *(.text.dma_push .text.dma_push.*)
+    *(.text.rxl_go_to_last_rbd .text.rxl_go_to_last_rbd.*)
+    *(.text.rxu_cntrl_mic_check .text.rxu_cntrl_mic_check.*)
+    *(.text.mac_ie_check .text.mac_ie_check.*)
+    *(.text.macif_rx_buf_get .text.macif_rx_buf_get.*)
+    *(.text.wl80211_mac_rx_free .text.wl80211_mac_rx_free.*)
+    *(.text.wlan_sta_rx_done .text.wlan_sta_rx_done.*)
+    /* NuttX semaphores, work queue and timers on the same paths */
+    *(.text.nxsem_wait_slow .text.nxsem_wait_slow.*)
+    *(.text.nxsem_post_slow .text.nxsem_post_slow.*)
+    *(.text.nxsem_tickwait_slow .text.nxsem_tickwait_slow.*)
+    *(.text.work_queue .text.work_queue.*)
+    *(.text.work_queue_wq .text.work_queue_wq.*)
+    *(.text.work_qcancel .text.work_qcancel.*)
+    *(.text.wd_cancel .text.wd_cancel.*)
+    *(.text.clock_systime_ticks .text.clock_systime_ticks.*)
+    __bl616cl_wifi_hot_end = ABSOLUTE(.);
+
+    *(.text .text.*)
+    *(.gnu.linkonce.t.*)
+    . = ALIGN(4);
+    __bl616cl_text_end = ABSOLUTE(.);
+  } > flash
+
+  .rodata :
+  {
+    *(.rodata .rodata.*)
+    *(.srodata .srodata.*)
+    *(.gnu.linkonce.r.*)
+    . = ALIGN(4);
+    /* NuttX defines _etext as the end of text plus rodata. */
+
+    _etext = ABSOLUTE(.);
+  } > flash
+
+  .init_section :
+  {
+    _sinit = ABSOLUTE(.);
+    KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
+    KEEP(*(.init_array))
+    _einit = ABSOLUTE(.);
+  } > flash
+
+  .copy.table (READONLY) :
+  {
+    __mem_copy_sections = ABSOLUTE(.);
+    LONG(ADDR(.nocache_data));
+    LONG(ADDR(.nocache_data) + SIZEOF(.nocache_data));
+    LONG(LOADADDR(.nocache_data));
+    LONG(ADDR(.ram_code));
+    LONG(ADDR(.ram_code) + SIZEOF(.ram_code));
+    LONG(LOADADDR(.ram_code));
+    LONG(ADDR(.ram_rodata));
+    LONG(ADDR(.ram_rodata) + SIZEOF(.ram_rodata));
+    LONG(LOADADDR(.ram_rodata));
+    LONG(ADDR(.data));
+    LONG(ADDR(.data) + SIZEOF(.data));
+    LONG(LOADADDR(.data));
+    LONG(0xffffffff);
+    LONG(0xffffffff);
+    LONG(0xffffffff);
+  } > flash
+
+  .zero.table (READONLY) :
+  {
+    __mem_setz_sections = ABSOLUTE(.);
+    LONG(ADDR(.bss));
+    LONG(ADDR(.bss) + SIZEOF(.bss));
+    LONG(0xffffffff);
+    LONG(0xffffffff);
+  } > flash
+
+  /* Keep all flash-backed output sections above this final marker. */
+
+  .image_end (READONLY) :
+  {
+    . = ALIGN(4);
+    __rom_end__ = ABSOLUTE(.);
+  } > flash
+
+  /* Startup copies and clears complete 32-bit words. */
+
+  ASSERT(((ADDR(.nocache_data) | LOADADDR(.nocache_data) |
+           SIZEOF(.nocache_data)) & 3) == 0,
+         "BL616CL .nocache_data copy must be word aligned")
+  ASSERT(((ADDR(.ram_code) | LOADADDR(.ram_code) |
+           SIZEOF(.ram_code)) & 3) == 0,
+         "BL616CL .ram_code copy must be word aligned")
+  ASSERT(((ADDR(.ram_rodata) | LOADADDR(.ram_rodata) |
+           SIZEOF(.ram_rodata)) & 3) == 0,
+         "BL616CL .ram_rodata copy must be word aligned")
+  ASSERT(((ADDR(.data) | LOADADDR(.data) |
+           SIZEOF(.data)) & 3) == 0,
+         "BL616CL .data copy must be word aligned")
+  ASSERT(((ADDR(.bss) | SIZEOF(.bss)) & 3) == 0,
+         "BL616CL .bss clear must be word aligned")
+  ASSERT(((ADDR(.copy.table) | ADDR(.zero.table)) & 3) == 0,
+         "BL616CL startup tables must be word aligned")
+
+  ASSERT(SIZEOF(.fw_header) == 256,
+         "BL616CL firmware header must be 256 bytes")
+  ASSERT(SIZEOF(.init) <= 512, "BL616CL reset entry exceeds ROM header")
+  ASSERT(ADDR(.rftlv.tool) == ORIGIN(rom_header) + 1K,
+         "BL616CL RF TLV offset is invalid")
+  ASSERT(ADDR(.ver) == ORIGIN(rom_header) + 3K,
+         "BL616CL version offset is invalid")
+  ASSERT(__rom_header_used_end__ <= __rom_header_end__,
+         "BL616CL pre-cache code exceeds ROM header")
+  ASSERT(LOADADDR(.nocache_data) == ORIGIN(flash),
+         "BL616CL RAM load images must follow the ROM header")
+  ASSERT(ADDR(.text) == ALIGN(LOADADDR(.data) + SIZEOF(.data), 32K),
+         "BL616CL XIP text must follow the RAM load images")
+  ASSERT(__rom_end__ <= ORIGIN(flash) + LENGTH(flash),
+         "BL616CL flash image overflow")
+  ASSERT(__ram_nocache_end__ <= ORIGIN(ram_nocache) + LENGTH(ram_nocache),
+         "BL616CL nocache RAM overflow")
+  ASSERT(__HeapBase < __HeapLimit, "BL616CL cacheable RAM overflow")
+  ASSERT(__bl616cl_app_size > 4K + 6K,
+         "BL616CL application partition is too small")
+  ASSERT(__LD_CONFIG_EM_SEL == 0 || __LD_CONFIG_EM_SEL == 16K ||
+         __LD_CONFIG_EM_SEL == 32K, "BL616CL EM size is invalid")
+  ASSERT(ADDR(.wifibss) >= 0x20ff8000,
+         "BL616CL .wifibss must stay in WRAM")
+  ASSERT(ADDR(.wifibss) + SIZEOF(.wifibss) <= __ram_wifi_end,
+         "BL616CL .wifibss overlaps EM")
+  ASSERT((__StackTop & 15) == 0, "BL616CL idle stack must be 16-byte aligned")
+
+  /DISCARD/ :
+  {
+    *(.note.GNU-stack)
+    *(.riscv.attributes)
+  }
+
+  .comment 0 : { *(.comment) }
+  .debug_abbrev 0 : { *(.debug_abbrev) }
+  .debug_info 0 : { *(.debug_info) }
+  .debug_line 0 : { *(.debug_line) }
+  .debug_str 0 : { *(.debug_str) }
+}

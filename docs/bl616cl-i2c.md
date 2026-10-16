@@ -2,8 +2,9 @@
 
 本文说明 BL616CL I2C master 与 OpenVela I2C 子系统的最大能力交集、实现边界、
 Kconfig 裁剪、构建检查和运行验证。当前已完成 I2C1-only 软件合同与现役外设回归，
-并用逻辑分析仪确认 I2C0、I2C1 在 GPIO4/5 上的无 target 地址波形；外接 I2C target
-尚未冻结，因此不把 fake 或 USB-UART 结果写成正向总线通过。
+并用逻辑分析仪确认 I2C0、I2C1 在 GPIO4/5 上的无 target 地址波形。2026-10-16 起在
+BL616CL-AVE-V10 上以板载 ES8388 完成正向读写验证（见“正向 target”）；多字节读和
+双总线仍缺实物 target。
 
 ## 背景
 
@@ -79,10 +80,11 @@ I2CIOC_TRANSFER
 | `BL616CL_I2C0/1` | 控制器实例 | 只生成对应实例私有数据和符号 |
 | `AI_M64P_KIT_I2C` | board I2C 资源总开关 | 不执行 board 注册 |
 | `AI_M64P_KIT_I2C0/1` | board 实例、pin 和 `/dev/i2cN` | 未选择实例不占 pin、不注册节点 |
+| `BL616CL_AVE_V10_I2C0` | AVE-V10 的 I2C0（固定 GPIO20/11）和 `/dev/i2c0` | 不注册节点 |
 | `BL616CL_I2C_TEST` | chip fake 注入接口 | 正式产品无测试替换入口 |
 | `BL_MCU_PERIPHERAL_TESTS_I2C` | 测试 app | 无测试 archive、命令和字符串 |
 
-板级默认关闭 I2C：
+Ai-M64P-32S-Kit 板级默认关闭 I2C：
 
 - I2C0 默认 GPIO4=SCL、GPIO5=SDA。数据手册引脚表中 GPIO4/5 的 function 5 就是
   I2C0 SCL/SDA，没有 32.768 kHz 晶振或 DC-DC 功能。早先在另一块模组上记录过这两脚
@@ -93,6 +95,9 @@ I2CIOC_TRANSFER
 - USB GPIO32/33、UART0 GPIO34/35、boot GPIO36 不作为 I2C pin。
 - 板上没有已确认的 I2C target 和独立上拉。实物测试需外接 3.3 V EEPROM 和
   2.2 kOhm 至 4.7 kOhm 上拉。
+
+BL616CL-AVE-V10 只有 I2C0，硬连到 GPIO20（SCL）、GPIO11（SDA），板上 4.7 kOhm 上拉到
+3.3 V，挂 ES8388 codec（地址 0x10）和摄像头排线的 SCCB。
 
 ## 消息和错误合同
 
@@ -237,6 +242,37 @@ Start、Address write 0x52、NACK、Stop。临时配置启动到 `nsh>`，`/dev/
 
 SCL 低于请求值，不超过请求值。当时只有内部上拉，接外部 2.2 kOhm 至 4.7 kOhm 上拉后的
 频率未测，原因未验证。
+
+### 正向 target：BL616CL-AVE-V10 上的 ES8388
+
+2026-10-16，BL616CL-AVE-V10，`nsh-peripherals`，I2C0 接板载 ES8388（地址 0x10）。
+
+| 命令 | 结果 |
+|---|---|
+| `mcu_i2c_test fake all --bus 0` | 5 个子项 PASS |
+| `mcu_i2c_test hw probe --bus 0 --addr 0x10 --freq 100000`、`--freq 400000` | 均 PASS（ACK） |
+| `mcu_i2c_test hw probe --bus 0 --addr 0x52 --freq 100000 --no-target` | PASS，`ret=-110 raw_status=0000000b` |
+| `i2c dev -b 0 0x08 0x77` | 只有 0x10 应答 |
+| `i2c get -b 0 -a 10 -r <reg>`，reg 0x00–0x34 | 53 个寄存器全部等于 NuttX `es8388.h` 的复位默认值 |
+| `mcu_i2c_test hw combined --bus 0 --addr 0x10 --offset 0x00 --addr-width 1 --length 1 --freq 400000` | PASS，读到 0x06 |
+| `mcu_i2c_test hw eeprom --addr 16 --offset 26 --addr-width 1 --capacity 53 --length 1 --page-size 1 --allow-write`，另加 `--freq 400000` 再跑一次 | 均 PASS，写入、读回、恢复都已校验 |
+| 同上，`--offset 16` | PASS |
+| `mcu_i2c_test hw concurrent --bus 0 --addr 0x10 --offset 0 --length 1 --iterations 32 --freq 400000` | PASS，128 次组合读一致 |
+
+`hw eeprom` 在这里只是借用它的“备份、单消息写、读回、恢复”流程；`--length 1
+--page-size 1` 保证每次只写一个寄存器。上面的 0x1A（LDACVOL）、0x10（LADCVOL）写入
+值分别是 0x40、0x4A，测试后恢复为默认 0xC0。
+
+这组结果证明了单字节读、写地址后 repeated-start 读、单消息写和同一总线的并发互斥，
+在 100/400 kHz 下对真实从机都正确。没有覆盖的部分：
+
+- 多字节读：ES8388 读操作不自动递增寄存器地址（`i2c dump` 只有首字节有效），不能用它
+  验证多字节读和 `hw boundary`，仍需要 EEPROM。
+- 波形：这次没有接逻辑分析仪，接 4.7 kOhm 外部上拉时的 SCL 实际频率和 ACK 时序未测。
+- `hw dual`：AVE-V10 只有 I2C0。
+
+NuttX `i2c set` 用 `NOSTOP` + `NOSTART` 拼接“寄存器号 + 数值”，本驱动不支持
+`NOSTART`，所以 `i2c set` 写不了寄存器；写寄存器用单条消息，例如上面的 `hw eeprom`。
 
 ## 现役外设回归
 
