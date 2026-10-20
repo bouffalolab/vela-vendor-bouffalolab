@@ -44,12 +44,12 @@
  *   None.
  *
  * Returned Value:
- *   Zero (OK) on success; the negated errno value of the first peripheral
- *   that fails to initialize.
+ *   None. A peripheral that fails is logged and the others are still
+ *   initialized.
  *
  ****************************************************************************/
 
-int bl616cl_board_initialize(void)
+void bl616cl_board_initialize(void)
 {
 #if defined(CONFIG_BL616CL_AVE_V10_I2C0) || \
     defined(CONFIG_BL616CL_AVE_V10_AUDIO)
@@ -61,7 +61,6 @@ int bl616cl_board_initialize(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize I2C0: %d\n", ret);
-      return ret;
     }
 #endif
 
@@ -70,9 +69,6 @@ int bl616cl_board_initialize(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize audio: %d\n", ret);
-      return ret;
     }
 #endif
-
-  return OK;
 }

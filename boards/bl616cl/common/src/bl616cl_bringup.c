@@ -112,8 +112,8 @@ static void bl616cl_chipinfo_report(void)
  *   None.
  *
  * Returned Value:
- *   Zero (OK) on success; the negated errno value of the first step that
- *   fails. The remaining steps are skipped.
+ *   Zero (OK). A step that fails is logged and the remaining steps still
+ *   run, so that one device does not keep the others from registering.
  *
  ****************************************************************************/
 
@@ -134,13 +134,13 @@ int bl616cl_bringup(void)
   ret = bl616cl_bod_initialize();
   if (ret < 0)
     {
-      return ret;
+      syslog(LOG_ERR, "ERROR: Failed to initialize BOD: %d\n", ret);
     }
 
   ret = bl616cl_bus_error_initialize();
   if (ret < 0)
     {
-      return ret;
+      syslog(LOG_ERR, "ERROR: Failed to initialize bus errors: %d\n", ret);
     }
 
 #ifdef CONFIG_BL616CL_WDT
@@ -149,22 +149,16 @@ int bl616cl_bringup(void)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize watchdog driver: %d\n",
              ret);
-      return ret;
     }
 #endif
 
-  ret = bl616cl_board_initialize();
-  if (ret < 0)
-    {
-      return ret;
-    }
+  bl616cl_board_initialize();
 
 #ifdef CONFIG_BL_COMPONENT_WL80211
   ret = bl616cl_wlan_sta_initialize();
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize Wi-Fi WLAN: %d\n", ret);
-      return ret;
     }
 #endif
 
@@ -173,7 +167,6 @@ int bl616cl_bringup(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize BLE: %d\n", ret);
-      return ret;
     }
 #endif
 
@@ -182,7 +175,6 @@ int bl616cl_bringup(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to register RTC driver: %d\n", ret);
-      return ret;
     }
 #endif
 
@@ -192,7 +184,6 @@ int bl616cl_bringup(void)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize oneshot driver: %d\n",
              ret);
-      return ret;
     }
 #endif
 
@@ -202,7 +193,6 @@ int bl616cl_bringup(void)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize timer driver: %d\n",
              ret);
-      return ret;
     }
 #endif
 
@@ -212,7 +202,6 @@ int bl616cl_bringup(void)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize timer1 driver: %d\n",
              ret);
-      return ret;
     }
 #endif
 

@@ -44,27 +44,22 @@
  *   None.
  *
  * Returned Value:
- *   Zero (OK) on success; the negated errno value of the first peripheral
- *   that fails to initialize.
+ *   None. A peripheral that fails is logged and the others are still
+ *   initialized.
  *
  ****************************************************************************/
 
-int bl616cl_board_initialize(void)
+void bl616cl_board_initialize(void)
 {
-#if defined(CONFIG_AI_M64P_KIT_UART1) || defined(CONFIG_BL616CL_GPIO) || \
-	defined(CONFIG_AI_M64P_KIT_I2C0) || \
-	defined(CONFIG_AI_M64P_KIT_I2C1) || defined(CONFIG_AI_M64P_KIT_SPI0) || \
+#if defined(CONFIG_AI_M64P_KIT_UART1) || defined(CONFIG_AI_M64P_KIT_SPI0) || \
 	defined(CONFIG_AI_M64P_KIT_PWM)
   int ret;
 #endif
 
+  /* The GPIO and I2C initialization log each pin or bus that fails */
+
 #ifdef CONFIG_BL616CL_GPIO
-  ret = ai_m64p_kit_gpio_initialize();
-  if (ret < 0)
-    {
-      syslog(LOG_ERR, "ERROR: Failed to initialize GPIO driver: %d\n", ret);
-      return ret;
-    }
+  ai_m64p_kit_gpio_initialize();
 #endif
 
 #ifdef CONFIG_AI_M64P_KIT_UART1
@@ -72,17 +67,11 @@ int bl616cl_board_initialize(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize UART1: %d\n", ret);
-      return ret;
     }
 #endif
 
 #if defined(CONFIG_AI_M64P_KIT_I2C0) || defined(CONFIG_AI_M64P_KIT_I2C1)
-  ret = ai_m64p_kit_i2c_initialize();
-  if (ret < 0)
-    {
-      syslog(LOG_ERR, "ERROR: Failed to initialize I2C buses: %d\n", ret);
-      return ret;
-    }
+  ai_m64p_kit_i2c_initialize();
 #endif
 
 #ifdef CONFIG_AI_M64P_KIT_SPI0
@@ -90,7 +79,6 @@ int bl616cl_board_initialize(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize SPI buses: %d\n", ret);
-      return ret;
     }
 #endif
 
@@ -99,9 +87,6 @@ int bl616cl_board_initialize(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize PWM output: %d\n", ret);
-      return ret;
     }
 #endif
-
-  return OK;
 }

@@ -58,15 +58,17 @@ static const struct es8388_lower_s g_es8388_lower =
  *   None.
  *
  * Returned Value:
- *   Zero (OK) on success; -ENODEV if the I2C bus, I2S or codec cannot be
- *   initialized, or the negated errno value from audio_register().
+ *   Zero (OK) on success; -ENODEV if the I2C bus or I2S cannot be
+ *   initialized, -ENOMEM if a codec instance cannot be allocated, or the
+ *   negated errno value from audio_register(). The codec is not probed, so
+ *   a codec that does not answer on I2C is not reported here. If only the
+ *   recording device fails, /dev/audio/pcm0 stays registered.
  *
  ****************************************************************************/
 
 int bl616cl_ave_v10_audio_initialize(void)
 {
-  struct audio_lowerhalf_s *playback;
-  struct audio_lowerhalf_s *capture;
+  struct audio_lowerhalf_s *codec;
   struct i2c_master_s *i2c;
   struct i2s_dev_s *i2s;
   int ret;
@@ -79,25 +81,36 @@ int bl616cl_ave_v10_audio_initialize(void)
     }
 
   i2s = bl616cl_i2sbus_initialize(&g_i2s_pins);
-  playback = i2s != NULL ? es8388_initialize(i2c, i2s, &g_es8388_lower) :
-                           NULL;
-  capture = playback != NULL ?
-            es8388_initialize(i2c, i2s, &g_es8388_lower) : NULL;
-  if (capture == NULL)
+  if (i2s == NULL)
     {
       bl616cl_i2cbus_uninitialize(i2c);
       return -ENODEV;
     }
 
-  /* The ES8388 driver has no uninitialize; on failure the codec instances
-   * keep their I2C reference.
+  /* The ES8388 driver has no uninitialize, so a codec instance and its I2C
+   * reference cannot be released once created. Playback is registered
+   * before the recording instance is created, so that /dev/audio/pcm0
+   * works even if recording fails.
    */
 
-  ret = audio_register("pcm0", playback);
-  if (ret >= 0)
+  codec = es8388_initialize(i2c, i2s, &g_es8388_lower);
+  if (codec == NULL)
     {
-      ret = audio_register("pcm_in0", capture);
+      bl616cl_i2cbus_uninitialize(i2c);
+      return -ENOMEM;
     }
 
-  return ret;
+  ret = audio_register("pcm0", codec);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  codec = es8388_initialize(i2c, i2s, &g_es8388_lower);
+  if (codec == NULL)
+    {
+      return -ENOMEM;
+    }
+
+  return audio_register("pcm_in0", codec);
 }

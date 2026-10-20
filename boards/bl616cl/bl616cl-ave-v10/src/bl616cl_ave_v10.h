@@ -81,8 +81,11 @@ int bl616cl_ave_v10_i2c_initialize(void);
  *   None.
  *
  * Returned Value:
- *   Zero (OK) on success; -ENODEV if the I2C bus, I2S or codec cannot be
- *   initialized, or the negated errno value from audio_register().
+ *   Zero (OK) on success; -ENODEV if the I2C bus or I2S cannot be
+ *   initialized, -ENOMEM if a codec instance cannot be allocated, or the
+ *   negated errno value from audio_register(). The codec is not probed, so
+ *   a codec that does not answer on I2C is not reported here. If only the
+ *   recording device fails, /dev/audio/pcm0 stays registered.
  *
  ****************************************************************************/
 

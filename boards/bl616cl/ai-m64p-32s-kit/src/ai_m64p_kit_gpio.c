@@ -24,8 +24,7 @@
 
 #include <nuttx/config.h>
 
-#include <debug.h>
-#include <errno.h>
+#include <syslog.h>
 #include <sys/param.h>
 
 #include <nuttx/ioexpander/gpio.h>
@@ -153,11 +152,12 @@ static const struct ai_m64p_kit_gpio_pin_s g_ai_m64p_kit_gpio_pins[] =
  *   None.
  *
  * Returned Value:
- *   Zero (OK) on success; a negated errno value on failure.
+ *   None. A pin that fails to register is logged and the other pins are
+ *   still registered.
  *
  ****************************************************************************/
 
-int ai_m64p_kit_gpio_initialize(void)
+void ai_m64p_kit_gpio_initialize(void)
 {
   struct ioexpander_dev_s *ioe;
   unsigned int i;
@@ -166,8 +166,8 @@ int ai_m64p_kit_gpio_initialize(void)
   ioe = bl616cl_gpio_initialize();
   if (ioe == NULL)
     {
-      gpioerr("ERROR: bl616cl_gpio_initialize failed\n");
-      return -ENODEV;
+      syslog(LOG_ERR, "ERROR: Failed to initialize GPIO driver\n");
+      return;
     }
 
   for (i = 0; i < nitems(g_ai_m64p_kit_gpio_pins); i++)
@@ -178,13 +178,10 @@ int ai_m64p_kit_gpio_initialize(void)
       ret = gpio_lower_half(ioe, p->pin, p->pintype, p->pin);
       if (ret < 0)
         {
-          gpioerr("ERROR: Failed to register /dev/gpio%d: %d\n",
-                  p->pin, ret);
-          return ret;
+          syslog(LOG_ERR, "ERROR: Failed to register /dev/gpio%d: %d\n",
+                 p->pin, ret);
         }
     }
-
-  return OK;
 }
 
 #endif /* CONFIG_BL616CL_GPIO */

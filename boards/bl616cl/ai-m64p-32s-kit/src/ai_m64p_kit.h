@@ -107,11 +107,12 @@ int ai_m64p_kit_uart_initialize(void);
  *   None.
  *
  * Returned Value:
- *   Zero (OK) on success; a negated errno value on failure.
+ *   None. A pin that fails to register is logged and the other pins are
+ *   still registered.
  *
  ****************************************************************************/
 
-int ai_m64p_kit_gpio_initialize(void);
+void ai_m64p_kit_gpio_initialize(void);
 #endif
 
 #if defined(CONFIG_AI_M64P_KIT_I2C0) || defined(CONFIG_AI_M64P_KIT_I2C1)
@@ -128,11 +129,12 @@ int ai_m64p_kit_gpio_initialize(void);
  *   None.
  *
  * Returned Value:
- *   Zero (OK) on success; a negated errno value if a bus fails to register.
+ *   None. A bus that fails to register is logged and the other bus is still
+ *   registered.
  *
  ****************************************************************************/
 
-int ai_m64p_kit_i2c_initialize(void);
+void ai_m64p_kit_i2c_initialize(void);
 #endif
 
 #ifdef CONFIG_AI_M64P_KIT_SPI0

@@ -36,8 +36,8 @@
  *   None.
  *
  * Returned Value:
- *   Zero (OK) on success; the negated errno value of the first step that
- *   fails. The remaining steps are skipped.
+ *   Zero (OK). A step that fails is logged and the remaining steps still
+ *   run, so that one device does not keep the others from registering.
  *
  ****************************************************************************/
 
@@ -54,11 +54,11 @@ int bl616cl_bringup(void);
  *   None.
  *
  * Returned Value:
- *   Zero (OK) on success; the negated errno value of the first peripheral
- *   that fails to initialize.
+ *   None. A peripheral that fails is logged and the others are still
+ *   initialized.
  *
  ****************************************************************************/
 
-int bl616cl_board_initialize(void);
+void bl616cl_board_initialize(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_COMMON_BL616CL_BOARD_COMMON_H */

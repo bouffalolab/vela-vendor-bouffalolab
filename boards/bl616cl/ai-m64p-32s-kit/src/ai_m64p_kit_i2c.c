@@ -12,6 +12,7 @@
 #include <nuttx/config.h>
 
 #include <errno.h>
+#include <syslog.h>
 
 #include <nuttx/i2c/i2c_master.h>
 
@@ -130,11 +131,12 @@ static int ai_m64p_kit_i2c_register(int port, uint8_t scl_pin,
  *   None.
  *
  * Returned Value:
- *   Zero (OK) on success; a negated errno value if a bus fails to register.
+ *   None. A bus that fails to register is logged and the other bus is still
+ *   registered.
  *
  ****************************************************************************/
 
-int ai_m64p_kit_i2c_initialize(void)
+void ai_m64p_kit_i2c_initialize(void)
 {
   int ret;
 
@@ -144,7 +146,7 @@ int ai_m64p_kit_i2c_initialize(void)
                                  CONFIG_AI_M64P_KIT_I2C0_SDA_PIN);
   if (ret < 0)
     {
-      return ret;
+      syslog(LOG_ERR, "ERROR: Failed to register I2C0: %d\n", ret);
     }
 #endif
 
@@ -154,9 +156,7 @@ int ai_m64p_kit_i2c_initialize(void)
                                  CONFIG_AI_M64P_KIT_I2C1_SDA_PIN);
   if (ret < 0)
     {
-      return ret;
+      syslog(LOG_ERR, "ERROR: Failed to register I2C1: %d\n", ret);
     }
 #endif
-
-  return OK;
 }
