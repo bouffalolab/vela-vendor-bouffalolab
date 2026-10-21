@@ -79,6 +79,10 @@ if(CONFIG_BL616CL_I2C0 OR CONFIG_BL616CL_I2C1)
   list(APPEND SRCS bl616cl_i2c.c)
 endif()
 
+if(CONFIG_BL616CL_I2S)
+  list(APPEND SRCS bl616cl_i2s.c)
+endif()
+
 if(CONFIG_BL616CL_SPI0 OR CONFIG_BL616CL_SPI1)
   list(APPEND SRCS bl616cl_spi.c)
 endif()

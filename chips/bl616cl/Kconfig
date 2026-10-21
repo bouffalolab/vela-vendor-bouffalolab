@@ -377,6 +377,32 @@ config BL616CL_I2C1
 
 endif # BL616CL_I2C
 
+menuconfig BL616CL_I2S
+	bool "I2S0 master"
+	default n
+	depends on AUDIO && BL616CL_DMA0
+	select I2S
+	select SCHED_HPWORK
+	---help---
+		Enable the BL616CL I2S0 lower-half (struct i2s_dev_s). The chip is
+		the I2S master: it drives MCLK through CLKOUT, BCLK and FS, and
+		moves samples with DMA0. Board code owns the pin selection and the
+		codec registration. The DMA0 channels are set in "DMA0 channel
+		assignment".
+
+if BL616CL_I2S
+
+config BL616CL_I2S_NBUFFERS
+	int "Queued buffers"
+	default 4
+	range 2 16
+	---help---
+		Number of audio buffers the driver can hold at once, for both
+		directions. send() and receive() wait for a free slot when all are
+		in use.
+
+endif # BL616CL_I2S
+
 menuconfig BL616CL_SPI
 	bool "SPI master"
 	default n
