@@ -24,11 +24,13 @@
 
 #include <nuttx/config.h>
 
+#include <assert.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <syslog.h>
 
 #include <nuttx/arch.h>
 #include <nuttx/dma/dma.h>
@@ -62,11 +64,39 @@
 
 /* DMA base address comes from hardware/bl616cl_memorymap.h. */
 
-#define BL616CL_DMA_CHANNEL_COUNT     8
+#define BL616CL_DMA_CHANNEL_COUNT     BL616CL_DMA0_NCHANNELS
 #define BL616CL_DMA_TRANSFER_MAX \
   (DMA_TRANSFERSIZE_MASK >> DMA_TRANSFERSIZE_SHIFT)
 #define BL616CL_DMA_DRQ_MAX \
   (DMA_SRCPERIPHERAL_MASK >> DMA_SRCPERIPHERAL_SHIFT)
+
+/* Fail the build when the DMA0 channel assignment menu names a channel
+ * that does not exist or gives one channel to two users. A Kconfig range
+ * would drop a bad value silently instead.
+ */
+
+static_assert((BL616CL_DMA0_APP >> BL616CL_DMA_CHANNEL_COUNT) == 0,
+              "DMA0 application channels name a channel above CH7");
+
+#define BL616CL_DMA_ON(n, channel, name)   + ((channel) == (n))
+#define BL616CL_DMA_USERS(n) \
+  (((BL616CL_DMA0_APP >> (n)) & 1) \
+   BL616CL_DMA0_ASSIGNMENTS(BL616CL_DMA_ON, n))
+#define BL616CL_DMA_CHECK(n) \
+  static_assert(BL616CL_DMA_USERS(n) <= 1, \
+                "DMA0 CH" #n " is assigned more than once, see the DMA0 " \
+                "channel assignment menu")
+
+BL616CL_DMA_CHECK(0);
+BL616CL_DMA_CHECK(1);
+BL616CL_DMA_CHECK(2);
+BL616CL_DMA_CHECK(3);
+BL616CL_DMA_CHECK(4);
+BL616CL_DMA_CHECK(5);
+BL616CL_DMA_CHECK(6);
+BL616CL_DMA_CHECK(7);
+
+#define BL616CL_DMA_ENTRY(arg, channel, name)  [channel] = name,
 
 /****************************************************************************
  * Private Types
@@ -100,6 +130,7 @@ struct bl616cl_dma_chan_s
   uint8_t callbacks_inflight;
   bool configured;
   enum bl616cl_dma_state_e state;
+  void *holder;                 /* Return address of the owner's get_chan */
 };
 
 struct bl616cl_dma_dev_s
@@ -158,6 +189,13 @@ static const char * const g_bl616cl_dma_names[BL616CL_DMA_CHANNEL_COUNT] =
   BFLB_NAME_DMA0_CH0, BFLB_NAME_DMA0_CH1, BFLB_NAME_DMA0_CH2,
   BFLB_NAME_DMA0_CH3, BFLB_NAME_DMA0_CH4, BFLB_NAME_DMA0_CH5,
   BFLB_NAME_DMA0_CH6, BFLB_NAME_DMA0_CH7
+};
+
+/* SDK driver of each channel in the DMA0 channel assignment menu */
+
+static const char * const g_bl616cl_dma_users[BL616CL_DMA_CHANNEL_COUNT] =
+{
+  BL616CL_DMA0_ASSIGNMENTS(BL616CL_DMA_ENTRY, 0)
 };
 
 static struct bl616cl_dma_chan_s
@@ -484,12 +522,44 @@ static struct bl616cl_dma_chan_s *bl616cl_dma_from_chan(
 }
 
 /****************************************************************************
+ * Name: bl616cl_dma_assignment
+ *
+ * Description:
+ *   Return the user a channel is assigned to in the DMA0 channel assignment
+ *   menu.
+ *
+ * Input Parameters:
+ *   ident - Channel index.
+ *
+ * Returned Value:
+ *   The SDK driver name, "application code", or "nothing".
+ *
+ ****************************************************************************/
+
+static const char *bl616cl_dma_assignment(unsigned int ident)
+{
+  if (g_bl616cl_dma_users[ident] != NULL)
+    {
+      return g_bl616cl_dma_users[ident];
+    }
+
+  if ((BL616CL_DMA0_APP >> ident) & 1)
+    {
+      return "application code";
+    }
+
+  return "nothing";
+}
+
+/****************************************************************************
  * Name: bl616cl_dma_get_chan
  *
  * Description:
  *   Implement the dma_dev_s get_chan method. Wait for the requested
  *   channel to become available and take ownership of it, resetting its
- *   state. Cannot be called from interrupt context.
+ *   state. Cannot be called from interrupt context. Channels are not
+ *   shared, so a channel that is already held is logged before the wait,
+ *   which may never end.
  *
  * Input Parameters:
  *   dev - DMA device (unused).
@@ -516,9 +586,15 @@ static struct dma_chan_s *bl616cl_dma_get_chan(
     }
 
   channel = &g_bl616cl_dma_channels[ident];
-  if (nxsem_wait_uninterruptible(&channel->available) < 0)
+  if (nxsem_trywait(&channel->available) < 0)
     {
-      return NULL;
+      syslog(LOG_ERR, "DMA0 CH%u is held by code at %p (assigned to %s);"
+             " waiting, DMA0 channels are not shared\n",
+             ident, channel->holder, bl616cl_dma_assignment(ident));
+      if (nxsem_wait_uninterruptible(&channel->available) < 0)
+        {
+          return NULL;
+        }
     }
 
   flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
@@ -535,6 +611,7 @@ static struct dma_chan_s *bl616cl_dma_get_chan(
   channel->arg = NULL;
   channel->request_bytes = 0;
   channel->residual_bytes = 0;
+  channel->holder = __builtin_return_address(0);
   spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
   return &channel->chan;
 }
@@ -602,6 +679,7 @@ static void bl616cl_dma_put_chan(struct dma_dev_s *dev,
   channel->arg = NULL;
   channel->request_bytes = 0;
   channel->residual_bytes = 0;
+  channel->holder = NULL;
   channel->state = BL616CL_DMA_FREE;
   spin_unlock_irqrestore(&g_bl616cl_dma_lock, flags);
 

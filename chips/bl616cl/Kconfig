@@ -312,6 +312,43 @@ config BL616CL_DMA0
 		request transfers. Linked lists, cyclic transfers, and pause/resume
 		are intentionally excluded.
 
+		Each channel belongs to one user for good. All channels, of SDK
+		drivers and of application code, are assigned in "DMA0 channel
+		assignment"; the build fails if two users share one.
+
+menu "DMA0 channel assignment"
+	depends on BL616CL_DMA0
+
+comment "A driver keeps its channel; channels are never shared"
+
+config BL616CL_I2S_TX_DMA_CHANNEL
+	int "I2S0 TX"
+	default 0
+	range 0 7
+	depends on BL616CL_I2S
+	---help---
+		DMA0 channel for I2S transmit. The I2S driver takes it at
+		initialization and keeps it.
+
+config BL616CL_I2S_RX_DMA_CHANNEL
+	int "I2S0 RX"
+	default 1
+	range 0 7
+	depends on BL616CL_I2S
+	---help---
+		DMA0 channel for I2S receive, kept like the TX channel.
+
+config BL616CL_DMA0_APP_CHANNELS
+	hex "Application code"
+	default 0x0
+	---help---
+		Channels that code outside the SDK drivers takes with
+		DMA_GET_CHAN, one bit per channel (bit n is CHn, up to 0xff).
+		They count as assigned like the SDK driver channels: sharing one
+		with an SDK driver fails the build, and tests leave them alone.
+
+endmenu # DMA0 channel assignment
+
 menuconfig BL616CL_I2C
 	bool "I2C master"
 	default n

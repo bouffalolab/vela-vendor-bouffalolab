@@ -30,6 +30,49 @@
 #include <nuttx/dma/dma.h>
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define BL616CL_DMA0_NCHANNELS  8
+
+/* DMA0 channel assignment, as set in the "DMA0 channel assignment" menu. A
+ * user takes its channel at initialization and keeps it; channels are
+ * never shared.
+ *
+ * BL616CL_DMA0_ASSIGNMENTS(X, arg) expands X(arg, channel, name) once for
+ * each channel of an enabled SDK driver. A new SDK driver adds its entries
+ * here; the reserved mask, the build-time duplicate check and the conflict
+ * log are derived from this list.
+ */
+
+#ifdef CONFIG_BL616CL_I2S
+#  define BL616CL_DMA0_I2S(X, arg) \
+     X(arg, CONFIG_BL616CL_I2S_TX_DMA_CHANNEL, "I2S0 TX") \
+     X(arg, CONFIG_BL616CL_I2S_RX_DMA_CHANNEL, "I2S0 RX")
+#else
+#  define BL616CL_DMA0_I2S(X, arg)
+#endif
+
+#define BL616CL_DMA0_ASSIGNMENTS(X, arg) \
+  BL616CL_DMA0_I2S(X, arg)
+
+/* Channels declared for application code, one bit per channel */
+
+#ifdef CONFIG_BL616CL_DMA0_APP_CHANNELS
+#  define BL616CL_DMA0_APP      CONFIG_BL616CL_DMA0_APP_CHANNELS
+#else
+#  define BL616CL_DMA0_APP      0
+#endif
+
+/* All channels assigned in the menu, one bit per channel. Code that is not
+ * in the menu, such as tests, may only use the other channels.
+ */
+
+#define BL616CL_DMA0_BIT(arg, channel, name) | (1u << (channel))
+#define BL616CL_DMA0_RESERVED \
+  (BL616CL_DMA0_APP BL616CL_DMA0_ASSIGNMENTS(BL616CL_DMA0_BIT, 0))
+
+/****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 

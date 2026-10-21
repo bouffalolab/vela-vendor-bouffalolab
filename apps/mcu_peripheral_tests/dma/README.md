@@ -63,6 +63,13 @@ mcu_dma_test
 仍继续运行其余 case，最终以 `DMA0 summary` 汇总。完成判据是七项均打印
 `PASS ret=0`，汇总为 `passed=7 failed=0`，且没有 panic、assert 或意外复位。
 
+DMA0 通道按使用者固定分配（见 `docs/bl616cl-dma.md` 的“通道分配”），分配给 SDK
+驱动或应用代码的通道一直被持有。测试启动时按 `<arch/chip/bl616cl_dma.h>` 的
+`BL616CL_DMA0_RESERVED` 跳过这些通道，把其余通道按编号排成空闲通道表，下文的“第 n
+个空闲通道”即这张表的第 n 项，并打印 `DMA0 test: <n> free channels, skipping
+assigned 0x..`。Ai-M64P-32S-Kit 不开 I2S，空闲通道是 CH0–CH7；BL616CL-AVE-V10 打开
+I2S，跳过 CH0/CH1，空闲通道是 CH2–CH7。空闲通道少于 5 个时测试直接失败。
+
 测试只使用 OpenVela 公共 DMA API 和 `<arch/chip/bl616cl_dma.h>` 的
 `bl616cl_dma0_device()`，判据只来自公开可观察结果：`DMA_START`/`DMA_CONFIG` 返回值、
 callback 次数与 result、`DMA_RESIDUAL`、目的 buffer 逐字节比较，以及
@@ -76,14 +83,15 @@ buffer 按 32 字节对齐。这里验证的是调用方履行该协议后的 ca
 保护。
 
 各节「实测关键数据」与文末汇总来自用例精简前的固件（当时 8 项）；输出格式未变的行
-予以保留。现行 7 项于 2026-10-16 在 BL616CL-AVE-V10 上全部 PASS（`passed=7 failed=0`），
-记录见 `docs/bl616cl-dma.md`。
+予以保留。现行 7 项于 2026-10-16 在 BL616CL-AVE-V10 上全部 PASS（`passed=7 failed=0`）；
+2026-10-20 改为按空闲通道运行后，在 AVE-V10（6 个通道）和 Ai-M64P-32S-Kit（8 个通道）
+上各连跑两次，均为 `passed=7 failed=0`。记录见 `docs/bl616cl-dma.md`。
 
 ## DMA-001：width、step、数据和 TC 回调
 
 流程：
 
-1. 固定申请 channel 0，分别配置 1、2、4-byte 同宽传输，源/目的 step 均为 width。
+1. 申请第 1 个空闲通道，分别配置 1、2、4-byte 同宽传输，源/目的 step 均为 width。
 2. 每轮写入不同逐字节 pattern，clean 源、flush 目的和保护区，再启动 256 units。
 3. 等待 TC callback，要求 callback 恰好一次，返回长度等于请求字节数，residual=0。
 4. invalidate 目的并逐字节比较源/目的，保护区不得改变。
@@ -105,7 +113,7 @@ width=1 src_step=0 ret=0 callbacks=1
 
 流程：
 
-1. 固定申请 channel 1，配置 4-byte width 和递增 step。
+1. 申请第 2 个空闲通道，配置 4-byte width 和递增 step。
 2. 传输 `4095 * 4` 字节，等待一次 TC callback（result 为请求字节数、residual=0），
    逐字节比较并检查保护区。
 3. 在相同有效配置下请求 `4096 * 4` 字节；必须在写硬件前返回 `-E2BIG`。
@@ -122,7 +130,7 @@ units=4095 ret=0 callbacks=1 data=match; units=4096 ret=-7
 
 流程：
 
-1. 固定申请 channel 2，先安装一份有效的 4-byte mem2mem 配置。
+1. 申请第 3 个空闲通道，先安装一份有效的 4-byte mem2mem 配置。
 2. 依次提交负 step、不支持的 dev2dev 方向、源/目的 width 不同、mem2mem 带非零
    DRQ、mem2dev 把 DRQ 放在内存侧、dev2mem 请求号超过 63；均须返回 `-EINVAL`。
    mem2dev、dev2mem 本身是合法方向，实际外设传输由 I2S 播放和录音覆盖。
@@ -143,11 +151,12 @@ start invalid=-22/-22/-22/-22/-22 ops=-138/-138/-138 retained=0 residual=0 contr
 [DMA-003] PASS ret=0
 ```
 
-## DMA-004：八通道与共享 IRQ
+## DMA-004：全部空闲通道与共享 IRQ
 
 流程：
 
-1. 按 ident 0..7 固定申请全部 8 个 channel，每个 channel 使用独立源、目的和 pattern。
+1. 申请全部空闲通道（M64P 8 个，AVE-V10 6 个），每个 channel 使用独立源、目的和
+   pattern。
 2. 全部配置为 1-byte 递增 mem2mem，再依次启动 128 字节传输。
 3. 每个 channel 都必须收到且只收到一次 callback，返回长度为 128，residual=0。
 4. 对每组目的 buffer 做 invalidate 和逐字节比较。
@@ -160,11 +169,13 @@ channels=8 ret=0 (resource/IRQ dispatch evidence, not bandwidth)
 [DMA-004] PASS ret=0
 ```
 
+AVE-V10 上为 `channels=6`。
+
 ## DMA-005：NULL callback 完成
 
 流程：
 
-1. 固定申请 channel 3，配置 1-byte 递增 mem2mem，以 NULL callback 启动 128 字节。
+1. 申请第 4 个空闲通道，配置 1-byte 递增 mem2mem，以 NULL callback 启动 128 字节。
 2. 轮询 `DMA_RESIDUAL` 直到为 0，超时 2 s。
 3. 轮询 `DMA_CONFIG` 直到不再返回 `-EBUSY`，并要求返回 0。channel 离开 RUNNING
    说明中断已处理完成，且没有调用 NULL callback。
@@ -174,7 +185,7 @@ channels=8 ret=0 (resource/IRQ dispatch evidence, not bandwidth)
 
 流程：
 
-1. 固定申请 channel 4，确认源、目的和保护区位于 cacheable OCRAM，计算目的 buffer 的
+1. 申请第 5 个空闲通道，确认源、目的和保护区位于 cacheable OCRAM，计算目的 buffer 的
    non-cache alias。
 2. clean cached 源，flush 目的和保护区，以 cached 源 → non-cache 目的 alias 启动
    128 字节传输。
@@ -185,17 +196,20 @@ channels=8 ret=0 (resource/IRQ dispatch evidence, not bandwidth)
 
 流程：
 
-1. 按 ident 0..7 持有全部 channel。
-2. 启动第九个线程再次申请 channel 7；等待 20 ms 后它必须仍阻塞。
-3. 释放原 channel 7；等待线程必须被唤醒并获得同一 fixed-ident channel，再释放全部资源。
-4. 重新持有 channel 6，同时启动两个线程对同一 handle 执行 put；两线程都必须返回，
-   但 available semaphore 只能 post 一次。
-5. 再持有 channel 6，启动 waiter；它必须在持有期间阻塞，释放后获得同一 handle。
+1. 持有全部空闲通道。
+2. 启动一个线程再次申请最后一个空闲通道；等待 20 ms 后它必须仍阻塞。
+3. 释放这个通道；等待线程必须被唤醒并获得同一 fixed-ident channel，再释放全部资源。
+4. 持有倒数第二个空闲通道，同时启动两个线程对同一 handle 执行 put；两线程都必须
+   返回，但 available semaphore 只能 post 一次。
+5. 再持有这个通道，启动 waiter；它必须在持有期间阻塞，释放后获得同一 handle。
 
-实测关键数据：
+第 2、5 步的等待会让驱动打印通道被占用的错误日志（见 `docs/bl616cl-dma.md`），是
+本用例预期的输出。实测关键数据（AVE-V10）：
 
 ```text
-ninth-waiter=blocked/woken concurrent-put=single-post ret=0
+DMA0 CH7 is held by code at 0x8006ad58 (assigned to nothing); waiting, DMA0 channels are not shared
+DMA0 CH6 is held by code at 0x8006af80 (assigned to nothing); waiting, DMA0 channels are not shared
+  extra-waiter=blocked/woken concurrent-put=single-post ret=0
 [DMA-007] PASS ret=0
 ```
 
@@ -226,7 +240,8 @@ nsh>
 
 ## 限制
 
-- 只支持 DMA0 one-shot；外设方向目前只有 I2S0 一个 consumer（TX、RX 各一个通道）。
+- 只支持 DMA0 one-shot；外设方向目前只有 I2S0 一个 consumer（TX、RX 各一个通道，
+  初始化后一直持有）。
 - pause/resume、cyclic、LLI/link/insert 返回 `-ENOTSUP`。
 - 硬件 error IRQ 没有可重复的触发方法，error 回调（`-EIO`、residual）没有测试覆盖。
 - mem2mem 传输太快，无法稳定在 RUNNING 状态下观测，传输中 `DMA_STOP`/residual、

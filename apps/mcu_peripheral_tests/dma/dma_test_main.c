@@ -29,13 +29,17 @@
  * Pre-processor Definitions
  ****************************************************************************/
 
-#define DMA_CHANNEL_COUNT      8u
+#define DMA_CHANNEL_COUNT      BL616CL_DMA0_NCHANNELS
 #define DMA_TRANSFER_MAX_UNITS 4095u
 #define DMA_TEST_MAX_BYTES     (DMA_TRANSFER_MAX_UNITS * 4u)
 #define DMA_SMALL_BYTES        128u
 #define DMA_WAIT_LOOPS         2000u
 #define DMA_GUARD_BYTES        32u
 #define DMA_GUARD_VALUE        0xeeu
+
+/* DMA-001 to DMA-006 use the first five free channels */
+
+#define DMA_TEST_MIN_CHANNELS  5u
 #define DMA_CACHE_ALIAS        0x40000000u
 #define DMA_CACHED_RAM_START   0x60fc0400u
 #define DMA_CACHED_RAM_END     0x61010000u
@@ -89,6 +93,13 @@ static uint8_t g_parallel_source[DMA_CHANNEL_COUNT][DMA_SMALL_BYTES]
   __attribute__((aligned(32)));
 static uint8_t g_parallel_destination[DMA_CHANNEL_COUNT][DMA_SMALL_BYTES]
   __attribute__((aligned(32)));
+
+/* Channels the test may use: those not assigned to an SDK driver.  The
+ * cases name them by position, so they run unchanged on any board.
+ */
+
+static unsigned int g_channels[DMA_CHANNEL_COUNT];
+static unsigned int g_nchannels;
 
 /****************************************************************************
  * Private Functions
@@ -292,7 +303,7 @@ static int run_width_step_case(struct dma_dev_s *dev)
   printf("[DMA-001] width/step, TC callback and data\n");
   for (i = 0; i < sizeof(widths) / sizeof(widths[0]); i++)
     {
-      struct dma_chan_s *chan = DMA_GET_CHAN(dev, 0);
+      struct dma_chan_s *chan = DMA_GET_CHAN(dev, g_channels[0]);
       struct dma_event_s event;
       size_t length = 256u * widths[i];
 
@@ -327,7 +338,7 @@ static int run_width_step_case(struct dma_dev_s *dev)
    * the first byte everywhere.
    */
 
-  fixed_chan = DMA_GET_CHAN(dev, 0);
+  fixed_chan = DMA_GET_CHAN(dev, g_channels[0]);
   memset(&fixed_event, 0, sizeof(fixed_event));
   fill_pattern(g_source, DMA_SMALL_BYTES, 0xa5);
   memset(expected, 0xa5, sizeof(expected));
@@ -360,7 +371,7 @@ static int run_width_step_case(struct dma_dev_s *dev)
 
 static int run_boundary_case(struct dma_dev_s *dev)
 {
-  struct dma_chan_s *chan = DMA_GET_CHAN(dev, 1);
+  struct dma_chan_s *chan = DMA_GET_CHAN(dev, g_channels[1]);
   struct dma_event_s event;
   size_t length = DMA_TRANSFER_MAX_UNITS * 4u;
   int ret;
@@ -394,7 +405,7 @@ static int run_boundary_case(struct dma_dev_s *dev)
 
 static int run_invalid_atomic_case(struct dma_dev_s *dev)
 {
-  struct dma_chan_s *chan = DMA_GET_CHAN(dev, 2);
+  struct dma_chan_s *chan = DMA_GET_CHAN(dev, g_channels[2]);
   struct dma_config_s invalid;
   struct dma_event_s event;
   uintptr_t source = (uintptr_t)g_source;
@@ -607,12 +618,12 @@ static int run_parallel_case(struct dma_dev_s *dev)
   unsigned int i;
   int ret = OK;
 
-  printf("[DMA-004] eight fixed channels and shared TC IRQ\n");
+  printf("[DMA-004] all free channels and shared TC IRQ\n");
   memset(channels, 0, sizeof(channels));
   memset(events, 0, sizeof(events));
-  for (i = 0; i < DMA_CHANNEL_COUNT; i++)
+  for (i = 0; i < g_nchannels; i++)
     {
-      channels[i] = DMA_GET_CHAN(dev, i);
+      channels[i] = DMA_GET_CHAN(dev, g_channels[i]);
       fill_pattern(g_parallel_source[i], DMA_SMALL_BYTES,
                    (uint8_t)(0x60u + i));
       memset(g_parallel_destination[i], 0, DMA_SMALL_BYTES);
@@ -628,19 +639,19 @@ static int run_parallel_case(struct dma_dev_s *dev)
         }
     }
 
-  for (i = 0; ret >= 0 && i < DMA_CHANNEL_COUNT; i++)
+  for (i = 0; ret >= 0 && i < g_nchannels; i++)
     {
       ret = DMA_START(channels[i], dma_callback, &events[i],
                       (uintptr_t)g_parallel_destination[i],
                       (uintptr_t)g_parallel_source[i], DMA_SMALL_BYTES);
     }
 
-  for (i = 0; ret >= 0 && i < DMA_CHANNEL_COUNT; i++)
+  for (i = 0; ret >= 0 && i < g_nchannels; i++)
     {
       ret = wait_for_callback(&events[i]);
     }
 
-  for (i = 0; i < DMA_CHANNEL_COUNT; i++)
+  for (i = 0; i < g_nchannels; i++)
     {
       if (channels[i] != NULL)
         {
@@ -661,14 +672,15 @@ static int run_parallel_case(struct dma_dev_s *dev)
         }
     }
 
-  printf("  channels=8 ret=%d "
-         "(resource/IRQ dispatch evidence, not bandwidth)\n", ret);
+  printf("  channels=%u ret=%d "
+         "(resource/IRQ dispatch evidence, not bandwidth)\n", g_nchannels,
+         ret);
   return ret;
 }
 
 static int run_null_callback_case(struct dma_dev_s *dev)
 {
-  struct dma_chan_s *chan = DMA_GET_CHAN(dev, 3);
+  struct dma_chan_s *chan = DMA_GET_CHAN(dev, g_channels[3]);
   size_t residual = DMA_SMALL_BYTES;
   unsigned int i;
   int config_ret = -EBUSY;
@@ -737,7 +749,7 @@ static int run_null_callback_case(struct dma_dev_s *dev)
 
 static int run_cache_alias_case(struct dma_dev_s *dev)
 {
-  struct dma_chan_s *chan = DMA_GET_CHAN(dev, 4);
+  struct dma_chan_s *chan = DMA_GET_CHAN(dev, g_channels[4]);
   uint8_t *destination_nc;
   struct dma_event_s event;
   uintptr_t source = (uintptr_t)g_source;
@@ -801,9 +813,9 @@ static int run_put_reuse_case(struct dma_dev_s *dev)
   printf("[DMA-007] owner wait, exhaustion and concurrent put\n");
   memset(channels, 0, sizeof(channels));
   memset(&waiter, 0, sizeof(waiter));
-  for (i = 0; i < DMA_CHANNEL_COUNT; i++)
+  for (i = 0; i < g_nchannels; i++)
     {
-      channels[i] = DMA_GET_CHAN(dev, i);
+      channels[i] = DMA_GET_CHAN(dev, g_channels[i]);
       if (channels[i] == NULL)
         {
           ret = -EIO;
@@ -812,7 +824,7 @@ static int run_put_reuse_case(struct dma_dev_s *dev)
     }
 
   waiter.dev = dev;
-  waiter.ident = DMA_CHANNEL_COUNT - 1;
+  waiter.ident = g_channels[g_nchannels - 1];
   if (ret >= 0)
     {
       thread_ret = pthread_create(&waiter_thread, NULL, dma_get_thread,
@@ -838,10 +850,10 @@ static int run_put_reuse_case(struct dma_dev_s *dev)
       ret = -EIO;
     }
 
-  if (channels[DMA_CHANNEL_COUNT - 1] != NULL)
+  if (channels[g_nchannels - 1] != NULL)
     {
-      DMA_PUT_CHAN(dev, channels[DMA_CHANNEL_COUNT - 1]);
-      channels[DMA_CHANNEL_COUNT - 1] = NULL;
+      DMA_PUT_CHAN(dev, channels[g_nchannels - 1]);
+      channels[g_nchannels - 1] = NULL;
     }
 
   if (ret >= 0)
@@ -864,7 +876,7 @@ static int run_put_reuse_case(struct dma_dev_s *dev)
       DMA_PUT_CHAN(dev, waiter.chan);
     }
 
-  for (i = 0; i < DMA_CHANNEL_COUNT; i++)
+  for (i = 0; i < g_nchannels; i++)
     {
       if (channels[i] != NULL)
         {
@@ -877,7 +889,7 @@ static int run_put_reuse_case(struct dma_dev_s *dev)
       return ret;
     }
 
-  owned = DMA_GET_CHAN(dev, 6);
+  owned = DMA_GET_CHAN(dev, g_channels[g_nchannels - 2]);
   if (owned == NULL)
     {
       return -EIO;
@@ -947,7 +959,7 @@ static int run_put_reuse_case(struct dma_dev_s *dev)
       return ret;
     }
 
-  owned = DMA_GET_CHAN(dev, 6);
+  owned = DMA_GET_CHAN(dev, g_channels[g_nchannels - 2]);
   if (owned == NULL)
     {
       return -EIO;
@@ -955,7 +967,7 @@ static int run_put_reuse_case(struct dma_dev_s *dev)
 
   memset(&waiter, 0, sizeof(waiter));
   waiter.dev = dev;
-  waiter.ident = 6;
+  waiter.ident = g_channels[g_nchannels - 2];
   thread_ret = pthread_create(&waiter_thread, NULL, dma_get_thread, &waiter);
   if (thread_ret != 0)
     {
@@ -987,7 +999,7 @@ static int run_put_reuse_case(struct dma_dev_s *dev)
       DMA_PUT_CHAN(dev, waiter.chan);
     }
 
-  printf("  ninth-waiter=blocked/woken concurrent-put=single-post ret=%d\n",
+  printf("  extra-waiter=blocked/woken concurrent-put=single-post ret=%d\n",
          ret);
   return ret;
 }
@@ -1032,8 +1044,27 @@ int main(int argc, char *argv[])
       return RESULT_FAIL;
     }
 
+  /* Globals keep their values between runs of a built-in app */
+
+  g_nchannels = 0;
+  for (i = 0; i < DMA_CHANNEL_COUNT; i++)
+    {
+      if ((BL616CL_DMA0_RESERVED & (1u << i)) == 0)
+        {
+          g_channels[g_nchannels++] = i;
+        }
+    }
+
   printf("DMA0 test: USB2 is command/log transport; "
          "DMA assertions are local\n");
+  printf("DMA0 test: %u free channels, skipping assigned 0x%02x\n",
+         g_nchannels, (unsigned int)BL616CL_DMA0_RESERVED);
+  if (g_nchannels < DMA_TEST_MIN_CHANNELS)
+    {
+      printf("DMA0 test needs %u free channels\n", DMA_TEST_MIN_CHANNELS);
+      return RESULT_FAIL;
+    }
+
   for (i = 0; i < sizeof(tests) / sizeof(tests[0]); i++)
     {
       if (run_case(&tests[i], dev) != OK)
