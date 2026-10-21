@@ -1,0 +1,32 @@
+menuconfig BL_MCU_PERIPHERAL_TESTS_I2S
+	tristate "MCU peripheral I2S tests"
+	default n
+	depends on BL616CL_AVE_V10_AUDIO
+	depends on !AUDIO_MULTI_SESSION
+	---help---
+		Play generated tones through /dev/audio/pcm0 and record from the
+		board microphone through /dev/audio/pcm_in0, the two ES8388 codec
+		devices on I2S0 of BL616CL-AVE-V10, with the audio ioctl interface.
+		The tone, rate, restart and record cases check that every buffer
+		comes back, the stream completes and the measured frame rate is
+		within 2 % of the requested rate; a recording must also be free of
+		isolated spikes. The other cases check empty FINAL buffers and that
+		24 and 32-bit samples are rejected.
+		Listen to the speaker to confirm the tone and the played-back
+		recording.
+
+if BL_MCU_PERIPHERAL_TESTS_I2S
+
+config BL_MCU_PERIPHERAL_TESTS_I2S_PROGNAME
+	string "Program name"
+	default "mcu_i2s_test"
+
+config BL_MCU_PERIPHERAL_TESTS_I2S_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_I2S_STACKSIZE
+	int "Stack size"
+	default 4096
+
+endif
