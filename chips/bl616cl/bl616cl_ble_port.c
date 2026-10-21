@@ -186,7 +186,7 @@ int bl616cl_ble_controller_start(void)
   wlinfo("BLE controller %s\n", btble_controller_get_lib_ver());
 
   /* The task priority argument is FreeRTOS numbering and is not used;
-   * btblecontroller_task_new() applies CONFIG_BL_COMPONENT_BLE_PRIORITY.
+   * btblecontroller_task_new() applies CONFIG_BL616CL_WIRELESS_BLE_PRIORITY.
    */
 
   btble_controller_init(0);
@@ -241,8 +241,8 @@ int btblecontroller_task_new(ble_task_entry_t entry, const char *name,
   g_ble_task.entry = entry;
   g_ble_task.arg   = arg;
 
-  pid = kthread_create(name, CONFIG_BL_COMPONENT_BLE_PRIORITY,
-                       CONFIG_BL_COMPONENT_BLE_STACKSIZE, ble_task_main,
+  pid = kthread_create(name, CONFIG_BL616CL_WIRELESS_BLE_PRIORITY,
+                       CONFIG_BL616CL_WIRELESS_BLE_STACKSIZE, ble_task_main,
                        NULL);
   if (pid < 0)
     {

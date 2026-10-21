@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 config BL_COMPONENT_MACSW
-	bool "Bouffalo macsw"
+	bool
 	depends on ARCH_CHIP_BL616CL
+	help
+	  Selected by BL616CL_WIRELESS_WIFI. Builds the macsw MAC firmware
+	  core, from source or from the prebuilt archive.
 
 config MACSW_SELECT
 	string

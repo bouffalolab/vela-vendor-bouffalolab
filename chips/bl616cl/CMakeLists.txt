@@ -113,7 +113,7 @@ endif()
 
 # Wi-Fi STA port on top of the wl80211 component: netdev, adapter, efuse MAC
 # and macsw platform hooks.
-if(CONFIG_BL_COMPONENT_WL80211)
+if(CONFIG_BL616CL_WIRELESS_WIFI)
   list(
     APPEND
     SRCS
@@ -138,7 +138,7 @@ if(CONFIG_BL_COMPONENT_WL80211)
     arch PRIVATE CONFIG_MACSW_SELECT_INCLUDE="macsw_${CONFIG_MACSW_SELECT}_config.h")
 endif()
 
-if(CONFIG_BL_COMPONENT_BLE)
+if(CONFIG_BL616CL_WIRELESS_BLE)
   list(APPEND SRCS bl616cl_ble.c bl616cl_ble_port.c)
 
   set(BL616CL_VENDOR_DIR ${CMAKE_CURRENT_LIST_DIR}/../..)

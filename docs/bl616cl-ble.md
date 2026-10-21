@@ -27,8 +27,9 @@ mible 命令 / 应用
 | `apps/wireless_tests/mible/` | `mible` 测试命令 |
 | `boards/.../configs/ble/defconfig` | 只开 BLE、zblue 和 `mible` 的配置 |
 
-组件开关 `CONFIG_BL_COMPONENT_BLE` 依赖 `UART_BTH4` 和非零 EM，并 select
-`BL_COMPONENT_RFPARAM`。
+开关是芯片功能 `CONFIG_BL616CL_WIRELESS_BLE`（在 `BL616CL_WIRELESS` 下），依赖
+`UART_BTH4` 和非零 EM，select 组件 `BL_COMPONENT_BLE`；`BL616CL_WIRELESS` select
+`BL_COMPONENT_RFPARAM`。组件符号没有 prompt，不写在 defconfig 中。
 
 ## controller 库
 
@@ -82,7 +83,7 @@ Wi-Fi 时由 Wi-Fi adapter 完成。
 
 | 线程 | 优先级 | 栈 | 说明 |
 |---|---|---|---|
-| `btblecontroller` | 200 | 3072 | 内核线程，`CONFIG_BL_COMPONENT_BLE_PRIORITY`/`_STACKSIZE` |
+| `btblecontroller` | 200 | 3072 | 内核线程，`CONFIG_BL616CL_WIRELESS_BLE_PRIORITY`/`_STACKSIZE` |
 | `sysworkq` | 110 | 4064 | zblue 系统工作队列 |
 | `BT Driver /dev/ttyHCI0` | 108 | 3032 | `h4.c` 接收线程 |
 | `mible` | 100 | 4096 | 测试命令，`CONFIG_BL_WIRELESS_TESTS_MIBLE_*` |
@@ -98,7 +99,7 @@ controller 线程在每次 BLE 中断后运行链路层调度，阻塞在自己�
 ./vela build ai-m64p-32s-kit/ble -j14
 ```
 
-在 `nsh` 的基础上打开 `BL_COMPONENT_BLE`、`BL616CL_EM_16K`、zblue
+在 `nsh` 的基础上打开 `BL616CL_WIRELESS_BLE`、`BL616CL_EM_16K`、zblue
 （`BT_H4`、`BT_CENTRAL`、`BT_PERIPHERAL`、`BT_GATT_CLIENT`、`BT_MAX_CONN=2`）、
 `UART_BTH4`（RX 4096、TX 1024）和 `BL_WIRELESS_TESTS_MIBLE`。调试项只留
 `ARCH_STACKDUMP` 和 `BOARD_RESET_ON_ASSERT=2`，zblue 日志只开 error

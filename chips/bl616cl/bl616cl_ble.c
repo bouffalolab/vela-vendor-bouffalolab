@@ -48,7 +48,7 @@
 #include "hci_onchip.h"
 #include "bl616cl_ble.h"
 
-#ifndef CONFIG_BL_COMPONENT_WL80211
+#ifndef CONFIG_BL616CL_WIRELESS_WIFI
 /* rfparam_adapter.h has legacy non-prototype declarations. */
 
 #  pragma GCC diagnostic push
@@ -385,7 +385,7 @@ static void bl616cl_ble_close(FAR struct bt_driver_s *drv)
 
 int bl616cl_ble_initialize(void)
 {
-#ifndef CONFIG_BL_COMPONENT_WL80211
+#ifndef CONFIG_BL616CL_WIRELESS_WIFI
   int ret;
 
   /* With Wi-Fi enabled the Wi-Fi adapter loads the RF parameters */

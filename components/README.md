@@ -2,6 +2,22 @@
 
 中间件 / 可复用组件。每个组件一个**独立子目录** + **独立库**（独立 `.a`，可单独打包发布）。
 
+## Kconfig
+
+组件符号 `BL_COMPONENT_<NAME>` 不带 prompt，不出现在 menuconfig 里，也不写进
+defconfig；由用到它的芯片功能 `select`，例如 `chips/bl616cl/Kconfig` 的
+`BL616CL_WIRELESS_WIFI` 选择 macsw、wl80211 和 supplicant。组件之间的依赖写在组件
+自己的 Kconfig 里。每层目录的 `Kconfig` 用 `rsource "*/Kconfig"` 读入下一层，不生成
+菜单；新组件目录放一个 `Kconfig` 就会被读入。
+
+```kconfig
+# components/bar/Kconfig
+config BL_COMPONENT_BAR
+	bool
+	help
+	  Selected by BL616CL_<FEATURE>.
+```
+
 ## 普通组件（源码在本仓）
 
 ```cmake

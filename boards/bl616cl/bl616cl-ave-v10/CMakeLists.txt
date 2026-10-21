@@ -87,7 +87,7 @@ add_custom_command(
 set(BL616CL_POST_BUILD_OUTPUTS ${BL616CL_POSTPROCESS_STAMP})
 
 # Warn when Wi-Fi hot list entries in ld.script no longer match the image.
-if(CONFIG_BL_COMPONENT_WL80211)
+if(CONFIG_BL616CL_WIRELESS_WIFI)
   set(BL616CL_LAYOUT_CHECK
       "${BOUFFALOLAB_VENDOR_DIR}/tools/bl616cl/perf/layout_check.py")
   set(BL616CL_LAYOUT_STAMP "${CMAKE_BINARY_DIR}/nuttx.layout_checked")

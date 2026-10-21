@@ -41,7 +41,7 @@
 
 ## 构建时检查
 
-打开 `BL_COMPONENT_WL80211` 的配置在链接后运行 `layout_check.py`，目前只有
+打开 `BL616CL_WIRELESS_WIFI` 的配置在链接后运行 `layout_check.py`，目前只有
 `wifi`；其他配置没有 Wi-Fi 代码，列表匹配不到任何函数，不做检查。输出一行：
 
 ```text

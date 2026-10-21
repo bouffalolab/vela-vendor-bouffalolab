@@ -30,11 +30,11 @@
 
 #include "bflb_efuse.h"
 
-#ifdef CONFIG_BL_COMPONENT_WL80211
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI
 #include "bl616cl_wlan.h"
 #endif
 
-#ifdef CONFIG_BL_COMPONENT_BLE
+#ifdef CONFIG_BL616CL_WIRELESS_BLE
 #include "bl616cl_ble.h"
 #endif
 
@@ -154,7 +154,7 @@ int bl616cl_bringup(void)
 
   bl616cl_board_initialize();
 
-#ifdef CONFIG_BL_COMPONENT_WL80211
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI
   ret = bl616cl_wlan_sta_initialize();
   if (ret < 0)
     {
@@ -162,7 +162,7 @@ int bl616cl_bringup(void)
     }
 #endif
 
-#ifdef CONFIG_BL_COMPONENT_BLE
+#ifdef CONFIG_BL616CL_WIRELESS_BLE
   ret = bl616cl_ble_initialize();
   if (ret < 0)
     {

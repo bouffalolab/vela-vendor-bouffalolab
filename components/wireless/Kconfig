@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# No menu: component symbols have no prompt and are selected by the chip
+# features (see chips/bl616cl/Kconfig, BL616CL_WIRELESS).
+
+rsource "*/Kconfig"

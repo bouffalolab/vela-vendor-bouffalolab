@@ -97,7 +97,7 @@ components/wireless/
 
 `wifi/` 下每个组件目录只有公共子仓及对应的 `CMakeLists.txt`、`Kconfig`；BL616CL 专用实现在 `chips/bl616cl`。
 
-顶层只做一层 `nuttx_add_subdirectory()` 和 Kconfig 菜单生成。每个组件 wrapper 自己根据 `CONFIG_BL_COMPONENT_*` 选择是否接入，避免 vendor 顶层直接拉入所有无线源码。
+顶层只做一层 `nuttx_add_subdirectory()`，Kconfig 用 `rsource "*/Kconfig"` 读入各组件，不生成菜单。组件符号 `BL_COMPONENT_*` 没有 prompt，由芯片功能开关 `BL616CL_WIRELESS_WIFI` select；每个组件 wrapper 自己根据 `CONFIG_BL_COMPONENT_*` 选择是否接入，避免 vendor 顶层直接拉入所有无线源码。
 
 ### 4.2 macsw wrapper
 
@@ -148,7 +148,7 @@ components/wireless/wifi/wl80211/wl80211/   # public 子仓
 └── rtos_al_nuttx.c          # NuttX RTOS 抽象
 ```
 
-BL616CL 专用实现编入 `arch`（`chips/bl616cl/CMakeLists.txt`，`CONFIG_BL_COMPONENT_WL80211`）：
+BL616CL 专用实现编入 `arch`（`chips/bl616cl/CMakeLists.txt`，`CONFIG_BL616CL_WIRELESS_WIFI`）：
 
 ```text
 chips/bl616cl/
@@ -172,7 +172,7 @@ public 与 chip 之间的接口：chip 实现 `bl616_wifi_event_handler()`、`bl
 - `src/crypto/sha1-pbkdf2-nuttx.c`；
 - Vela mbedTLS crypto 适配源。
 
-wrapper 不执行公共仓库面向 Bouffalo SDK 的原始 CMake，也不编译 FreeRTOS port 或 test 目录。Kconfig 通过 `BL_COMPONENT_WPA_SUPPLICANT` 选择 mbedTLS 依赖，包括 PKCS5、CTR、ECDH、ECDSA、SHA512 等配置。
+wrapper 不执行公共仓库面向 Bouffalo SDK 的原始 CMake，也不编译 FreeRTOS port 或 test 目录。Kconfig 通过 `BL_COMPONENT_WPA_SUPPLICANT` 选择 mbedTLS 依赖，包括 PKCS5、CTR、ECDH、ECDSA、SHA512 等配置，以及 `DEV_URANDOM`；硬件 TRNG 由芯片侧的 `BL616CL_WIRELESS_WIFI` 选择。
 
 `os_nuttx.c` 将：
 
@@ -230,7 +230,7 @@ vendor/bouffalolab/tools/bl616cl/export_wifi_prebuilt.sh
 
 ### 5.1 启动和 netdev 注册
 
-`boards/bl616cl/common/src/bl616cl_bringup.c` 在 `CONFIG_BL_COMPONENT_WL80211` 打开时调用：
+`boards/bl616cl/common/src/bl616cl_bringup.c` 在 `CONFIG_BL616CL_WIRELESS_WIFI` 打开时调用：
 
 ```c
 bl616cl_wlan_sta_initialize();   /* chips/bl616cl/bl616cl_wlan.h */
@@ -453,7 +453,7 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 
 ### 9.2 Flash OTP rfparam
 
-`components/wireless/rfparam/CMakeLists.txt` 从 drivers 树选择以下源文件，生成 `bl_rfparam` 库（`BL_COMPONENT_RFPARAM`，由 `BL_COMPONENT_WL80211` select）：
+`components/wireless/rfparam/CMakeLists.txt` 从 drivers 树选择以下源文件，生成 `bl_rfparam` 库（`BL_COMPONENT_RFPARAM`，由 `BL616CL_WIRELESS` select）：
 
 - `rfparam_adapter.c`；
 - `rfparam_bl616cl_flash_otp.c`；
@@ -471,9 +471,7 @@ BL616CL rfparam 流程没有天线增益、发射功率和 country 相关接口�
 
 `boards/bl616cl/ai-m64p-32s-kit/configs/nsh/defconfig` 恢复为 Wi-Fi 接入前的最简配置。它不应包含：
 
-- `CONFIG_BL_COMPONENT_MACSW`；
-- `CONFIG_BL_COMPONENT_WL80211`；
-- `CONFIG_BL_COMPONENT_WPA_SUPPLICANT`；
+- `CONFIG_BL616CL_WIRELESS` / `CONFIG_BL616CL_WIRELESS_WIFI`；
 - `CONFIG_DRIVERS_WIRELESS` / `CONFIG_DRIVERS_IEEE80211`；
 - `CONFIG_NETDEV_WIRELESS_IOCTL`；
 - `CONFIG_WIRELESS_WAPI`；
@@ -484,9 +482,7 @@ BL616CL rfparam 流程没有天线增益、发射功率和 country 相关接口�
 
 `boards/bl616cl/ai-m64p-32s-kit/configs/wifi/defconfig` 承载完整 STA 目标，包括：
 
-- `CONFIG_BL_COMPONENT_MACSW=y`；
-- `CONFIG_BL_COMPONENT_WL80211=y`；
-- `CONFIG_BL_COMPONENT_WPA_SUPPLICANT=y`；
+- `CONFIG_BL616CL_WIRELESS=y`、`CONFIG_BL616CL_WIRELESS_WIFI=y`：后者 select macsw、wl80211、supplicant 三个组件和 `BL616CL_TRNG`，组件符号不写在 defconfig 中；
 - WAPI、WEXT、无线 driver；
 - DHCP、DNS、IPv4、TCP/UDP 和 buffered write；
 - `CONFIG_NETUTILS_IPERF=y`；
@@ -499,7 +495,7 @@ BL616CL rfparam 流程没有天线增益、发射功率和 country 相关接口�
 - `CONFIG_NSH_READLINE=y`；
 - `CONFIG_READLINE_TABCOMPLETION=y`；
 - `CONFIG_READLINE_CMD_HISTORY=y`；
-- `CONFIG_BL616CL_TRNG=y`、`CONFIG_DEV_URANDOM=y`：由 `BL_COMPONENT_WPA_SUPPLICANT` 在 Kconfig 中 `select`，不写在 defconfig 中；`DEV_URANDOM` 默认 `DEV_URANDOM_ARCH`，同时启用 `/dev/random`。
+- `CONFIG_BL616CL_TRNG=y`、`CONFIG_DEV_URANDOM=y`：分别由 `BL616CL_WIRELESS_WIFI` 和 `BL_COMPONENT_WPA_SUPPLICANT` 在 Kconfig 中 `select`，不写在 defconfig 中；`DEV_URANDOM` 默认 `DEV_URANDOM_ARCH`，同时启用 `/dev/random`。
 
 此前 `e74909a feat(bl616): enable WiFi in nsh` 将 Wi-Fi 选项错误地加入 `nsh`。本次配置收尾已恢复 `nsh`，并将 Wi-Fi、iperf、Tab 补全和命令历史集中到 `wifi/defconfig`。defconfig 应继续通过 menuconfig/savedefconfig 生成，不能直接维护生成的 `.config`。
 

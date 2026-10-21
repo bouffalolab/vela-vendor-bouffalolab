@@ -4,4 +4,3 @@
 # One-level opt-in discovery, matching the components root.
 
 nuttx_add_subdirectory()
-nuttx_generate_kconfig(MENUDESC "Wireless")

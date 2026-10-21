@@ -7,4 +7,3 @@
 # automatically. See README.md, including how to wrap an independent git repo.
 
 nuttx_add_subdirectory()
-nuttx_generate_kconfig(MENUDESC "Bouffalo Components")
