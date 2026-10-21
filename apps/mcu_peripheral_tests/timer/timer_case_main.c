@@ -8,8 +8,9 @@
  *   TIMER-004  PWM duty ramp / breathing LED        (/dev/pwm0)
  *   TIMER-005  timer lifecycle and rejected requests (/dev/timer0)
  *
- * 001/002/005 use the selected timer node; 003/004 use /dev/pwm0. 006-009
- * exercise tick, poll, notification lifetime and dual-instance contracts.
+ * 001/002/005 use the selected timer node; 003/004 use /dev/pwm0 and are
+ * built only with CONFIG_PWM. 006-009 exercise tick, poll, notification
+ * lifetime and dual-instance contracts.
  * Timer measurements are software checks; PWM cases need a scope.
  ****************************************************************************/
 
@@ -35,7 +36,9 @@
 #include <fixedmath.h>
 #include <nuttx/clock.h>
 #include <nuttx/timers/timer.h>
-#include <nuttx/timers/pwm.h>
+#ifdef CONFIG_PWM
+#  include <nuttx/timers/pwm.h>
+#endif
 #include <nuttx/ioexpander/gpio.h>
 
 #include <arch/chip/bl616cl_timer.h>
@@ -685,6 +688,7 @@ static int run_case_002(const struct app_config_s *cfg)
   return -EIO;
 }
 
+#ifdef CONFIG_PWM
 /* Fill a one-channel PWM request. With CONFIG_PWM_MULTICHAN the duty goes
  * to the channel selected by -C. The BL616CL PWM driver rejects
  * PWM_CPOL_NDEF/PWM_DCPOL_NDEF.
@@ -879,6 +883,7 @@ static int run_case_004(const struct app_config_s *cfg)
   printf("  [TIMER-004] DONE (LED breathing + logic analyzer ramp)\n\n");
   return 0;
 }
+#endif /* CONFIG_PWM */
 
 /****************************************************************************
  * TIMER-005 : lifecycle and rejected requests
@@ -1450,6 +1455,16 @@ int main(int argc, char *argv[])
       return ERROR;
     }
 
+#ifndef CONFIG_PWM
+  if (strcmp(cfg.case_id, CASE_003) == 0 ||
+      strcmp(cfg.case_id, CASE_004) == 0)
+    {
+      printf("Case %s needs /dev/pwm0, but CONFIG_PWM is not set\n",
+             cfg.case_id);
+      return ERROR;
+    }
+#endif
+
   printf("MCU Peripheral Timer Tests\n");
   printf("Case: %s Timer: %s PWM: %s\n",
          cfg.case_id, cfg.timer_devpath, cfg.pwm_devpath);
@@ -1596,6 +1611,7 @@ int main(int argc, char *argv[])
         }
     }
 
+#ifdef CONFIG_PWM
   /* TIMER-003 (PWM precision) */
 
   if (strcmp(cfg.case_id, CASE_ALL) == 0 ||
@@ -1635,6 +1651,12 @@ int main(int argc, char *argv[])
           return ERROR;
         }
     }
+#else
+  if (strcmp(cfg.case_id, CASE_ALL) == 0)
+    {
+      printf("[TIMER-003/004] skipped: CONFIG_PWM is not set\n");
+    }
+#endif
 
   printf("Timer Summary: executed=%d passed=%d failed=%d -> %s\n",
          executed, passed, executed - passed,

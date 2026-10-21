@@ -14,7 +14,8 @@ TIMER0 可与任一 owner 并存。
 
 1. 固件启动后确认出现 `NuttShell (NSH)` 和 `nsh>`。
 2. 执行 `ls /dev`；单实例 case 必须存在 `-d` 指定节点，TIMER-009 必须同时
-   存在 `timer0` 和 `timer1`，PWM case 必须存在 `pwm0`。
+   存在 `timer0` 和 `timer1`，PWM case 必须存在 `pwm0`。没有 `CONFIG_PWM` 的固件
+   （如 AVE-V10）不编译 003/004：`-c 003`、`-c 004` 直接报错返回，`all` 跳过它们。
 3. 001/002 加 `-g /dev/gpio12` 时，将示波器接到 GPIO12；方波周期为 timer 周期的 2 倍。
 4. 003/004 将仪器接到 PWM 输出脚；软件 DONE 不能替代波形精度证据。
 
@@ -277,7 +278,12 @@ nsh  1224/1224  TIMER0 + oneshot，无 TIMER1 普通实例
 
 ## all 模式
 
-`mcu_timer_test -c all` 会执行 001、002、005~009、003、004。009 只适用于 dual
+`mcu_timer_test -c all` 会执行 001、002、005~009、003、004；没有 `CONFIG_PWM` 时
+不含 003/004，打印一行 `[TIMER-003/004] skipped`，summary 只统计执行的 7 项。009 只适用于 dual
 配置；在其他配置应按编号单独选择适用 case，不能把预期缺少资源写成硬件失败。003/004 仍需外部仪器判定，所以软件 summary 全 PASS
 不能独立证明 PWM 精度满足阈值。USB2 日志能证明 callback、状态和软件计时合同，
 不能证明绝对 IRQ 边沿精度或硬件抖动。
+
+2026-10-21：AVE-V10 `nsh-peripherals`（没有 `CONFIG_PWM`）的 `-c all` 执行 7 项全部
+PASS，并打印 skipped 行；原来 003/004 因打不开 `/dev/pwm0` 判 FAIL。M64P
+`nsh-peripherals` 的 `-c all` 仍执行 9 项。
