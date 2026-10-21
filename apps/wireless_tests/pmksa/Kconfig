@@ -1,4 +1,4 @@
-config BL_WIRELESS_TESTS_PMKSA
+menuconfig BL_WIRELESS_TESTS_PMKSA
 	bool "Wi-Fi PMKSA ioctl test command"
 	default n
 	depends on NETDEV_WIRELESS_IOCTL && BUILTIN

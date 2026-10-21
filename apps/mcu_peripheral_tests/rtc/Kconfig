@@ -1,4 +1,4 @@
-config BL_MCU_PERIPHERAL_TESTS_RTC
+menuconfig BL_MCU_PERIPHERAL_TESTS_RTC
 	bool "MCU peripheral RTC tests"
 	default n
 	depends on BL616CL_RTC

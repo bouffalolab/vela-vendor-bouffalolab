@@ -1,4 +1,4 @@
-config BL_MCU_PERIPHERAL_TESTS_SPI
+menuconfig BL_MCU_PERIPHERAL_TESTS_SPI
 	tristate "MCU peripheral SPI tests"
 	default n
 	depends on SPI && SPI_EXCHANGE && BL616CL_SPI

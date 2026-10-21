@@ -101,7 +101,7 @@ menuconfig BL616CL_UART
 
 if BL616CL_UART
 
-config BL616CL_UART0
+menuconfig BL616CL_UART0
 	bool "UART0"
 	default y
 	select UART0_SERIALDRIVER
@@ -126,10 +126,13 @@ config BL616CL_UART0_TXPIN
 
 endif # BL616CL_UART0
 
-config BL616CL_UART1
+# UART1 depends on the UART0 driver symbol, not on BL616CL_UART0, so that
+# the menu shows it beside UART0 instead of inside the UART0 menu.
+
+menuconfig BL616CL_UART1
 	bool "UART1"
 	default n
-	depends on BL616CL_UART0
+	depends on UART0_SERIALDRIVER
 	select UART1_SERIALDRIVER
 	---help---
 		Build the UART1 standard serial lower-half. Board code owns pin
@@ -149,7 +152,7 @@ endif # BL616CL_UART1
 
 endif # BL616CL_UART
 
-config BL616CL_WDT
+menuconfig BL616CL_WDT
 	bool "Watchdog Timer (WDT)"
 	default n
 	select WATCHDOG
@@ -160,12 +163,15 @@ config BL616CL_WDT
 		is 63999 ms with the default 32 kHz clock. Capture support
 		is selected automatically when automonitor uses capture.
 
+if BL616CL_WDT
+
 config BL616CL_WDT_CAPTURE
 	bool "Watchdog interrupt capture"
 	default n
-	depends on BL616CL_WDT
 	---help---
 		Enable watchdog interrupt capture mode and the WDT IRQ handler.
+
+endif # BL616CL_WDT
 
 config BL616CL_SEC_ENG
 	bool
@@ -174,7 +180,7 @@ config BL616CL_SEC_ENG
 		Shared SEC_ENG support: the SEC peripheral clock and the engine
 		locks. Selected by the drivers that use the security engine.
 
-config BL616CL_CRYPTO
+menuconfig BL616CL_CRYPTO
 	bool "SEC_ENG hardware crypto driver"
 	default y
 	depends on CRYPTO_CRYPTODEV_HARDWARE
@@ -213,7 +219,7 @@ config BL616CL_SEC_ENG_BOUNCE_SIZE
 		at a time. Must be a multiple of 128. The engine does not snoop the
 		CPU data cache, so data is copied through this buffer.
 
-config BL616CL_SEC_ENG_DIRECT
+menuconfig BL616CL_SEC_ENG_DIRECT
 	bool "Run large requests on the caller's buffers"
 	default y
 	---help---
@@ -225,13 +231,16 @@ config BL616CL_SEC_ENG_DIRECT
 		cache lines. Other requests, flash and PSRAM buffers, and AES-XTS
 		use the bounce buffer.
 
+if BL616CL_SEC_ENG_DIRECT
+
 config BL616CL_SEC_ENG_DIRECT_MIN
 	int "Smallest request run on the caller's buffers"
 	default 256
-	depends on BL616CL_SEC_ENG_DIRECT
 	---help---
 		Below this size the cache maintenance costs more than the copy
 		through the bounce buffer saves.
+
+endif # BL616CL_SEC_ENG_DIRECT
 
 endif # BL616CL_CRYPTO
 
@@ -250,7 +259,7 @@ config BL616CL_TRNG
 		from /dev/random (MBEDTLS_ENTROPY_HARDWARE_ALT) instead of
 		getrandom(), whatever DEV_URANDOM implementation is selected.
 
-config BL616CL_PERFMON
+menuconfig BL616CL_PERFMON
 	bool "Performance monitor"
 	default n
 	---help---
@@ -261,16 +270,19 @@ config BL616CL_PERFMON
 		through arch/chip/bl616cl_perfmon.h; see the perfmon app.  It costs
 		about 1.2 KiB of RAM and two CSR reads per interrupt.
 
+if BL616CL_PERFMON
+
 config BL616CL_PERFMON_PCSAMPLE
 	bool "Tick PC sampling"
 	default y
-	depends on BL616CL_PERFMON
 	---help---
 		On every machine timer interrupt, count the interrupted PC in a
 		histogram that the caller provides, or count an idle tick when
 		the idle task was interrupted.  Code that runs with interrupts
 		disabled, other interrupt handlers included, is never sampled;
 		its time lands on the code that runs next.
+
+endif # BL616CL_PERFMON
 
 config BL616CL_WLAN_RX_ZEROCOPY
 	bool "Wi-Fi RX zero-copy"
@@ -301,7 +313,7 @@ config BL616CL_FW_TASK_PRIORITY
 		rate and UDP TX lost 1-2 Mbit/s; below it (90) UDP TX lost 6-12
 		Mbit/s.
 
-config BL616CL_DMA0
+menuconfig BL616CL_DMA0
 	bool "DMA0 generic DMA adapter"
 	default n
 	depends on DMA
@@ -316,8 +328,9 @@ config BL616CL_DMA0
 		drivers and of application code, are assigned in "DMA0 channel
 		assignment"; the build fails if two users share one.
 
+if BL616CL_DMA0
+
 menu "DMA0 channel assignment"
-	depends on BL616CL_DMA0
 
 comment "A driver keeps its channel; channels are never shared"
 
@@ -348,6 +361,8 @@ config BL616CL_DMA0_APP_CHANNELS
 		with an SDK driver fails the build, and tests leave them alone.
 
 endmenu # DMA0 channel assignment
+
+endif # BL616CL_DMA0
 
 menuconfig BL616CL_I2C
 	bool "I2C master"
@@ -506,7 +521,7 @@ config BL616CL_ONESHOT
 	---help---
 		Enable the BL616CL TIMER1 one-shot lower-half driver.
 
-config BL616CL_TIMER
+menuconfig BL616CL_TIMER
 	bool "Timer"
 	default n
 	select TIMER
@@ -532,7 +547,7 @@ config BL616CL_TIMER1
 
 endif # BL616CL_TIMER
 
-config BL616CL_GPIO
+menuconfig BL616CL_GPIO
 	bool "GPIO Controller (ioexpander)"
 	default n
 	select IOEXPANDER

@@ -6,7 +6,7 @@ config ARCH_BOARD_AI_M64P_32S_KIT
 		Board identity, defined only while this board is selected. Test
 		apps that need this board's wiring depend on it.
 
-menuconfig AI_M64P_KIT_UART1
+config AI_M64P_KIT_UART1
 	bool "Ai-M64P-32S-Kit UART1"
 	default n
 	depends on BL616CL_UART0
@@ -38,7 +38,7 @@ menuconfig AI_M64P_KIT_PWM
 
 if AI_M64P_KIT_PWM
 
-config AI_M64P_KIT_PWM_CH0
+menuconfig AI_M64P_KIT_PWM_CH0
 	bool "Channel 0"
 	default n
 	---help---
@@ -60,7 +60,7 @@ config AI_M64P_KIT_PWM_CH0_NEG_PIN
 
 endif # AI_M64P_KIT_PWM_CH0
 
-config AI_M64P_KIT_PWM_CH1
+menuconfig AI_M64P_KIT_PWM_CH1
 	bool "Channel 1"
 	default n
 	---help---
@@ -82,7 +82,7 @@ config AI_M64P_KIT_PWM_CH1_NEG_PIN
 
 endif # AI_M64P_KIT_PWM_CH1
 
-config AI_M64P_KIT_PWM_CH2
+menuconfig AI_M64P_KIT_PWM_CH2
 	bool "Channel 2"
 	default n
 	---help---
@@ -104,7 +104,7 @@ config AI_M64P_KIT_PWM_CH2_NEG_PIN
 
 endif # AI_M64P_KIT_PWM_CH2
 
-config AI_M64P_KIT_PWM_CH3
+menuconfig AI_M64P_KIT_PWM_CH3
 	bool "Channel 3"
 	default y
 	---help---
@@ -138,7 +138,7 @@ menuconfig AI_M64P_KIT_I2C
 
 if AI_M64P_KIT_I2C
 
-config AI_M64P_KIT_I2C0
+menuconfig AI_M64P_KIT_I2C0
 	bool "Register I2C0"
 	default y
 	select BL616CL_I2C0
@@ -157,7 +157,7 @@ config AI_M64P_KIT_I2C0_SDA_PIN
 
 endif # AI_M64P_KIT_I2C0
 
-config AI_M64P_KIT_I2C1
+menuconfig AI_M64P_KIT_I2C1
 	bool "Register I2C1"
 	default n
 	select BL616CL_I2C1
@@ -187,7 +187,7 @@ menuconfig AI_M64P_KIT_SPI
 
 if AI_M64P_KIT_SPI
 
-config AI_M64P_KIT_SPI0
+menuconfig AI_M64P_KIT_SPI0
 	bool "Register SPI0"
 	default y
 	select BL616CL_SPI0
@@ -227,7 +227,7 @@ config AI_M64P_KIT_SPI0_TARGET_INDEX
 	range 0 65535
 	default 0
 
-config AI_M64P_KIT_SPI0_TARGET1
+menuconfig AI_M64P_KIT_SPI0_TARGET1
 	bool "SPI0 target 1"
 	default n
 	help

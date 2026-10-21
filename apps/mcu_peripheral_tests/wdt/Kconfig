@@ -1,4 +1,4 @@
-config BL_MCU_PERIPHERAL_TESTS_WDT
+menuconfig BL_MCU_PERIPHERAL_TESTS_WDT
 	tristate "MCU peripheral WDT tests"
 	default n
 	depends on WATCHDOG && BOARDCTL_RESET_CAUSE

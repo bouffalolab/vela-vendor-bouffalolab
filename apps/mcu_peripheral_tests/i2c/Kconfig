@@ -1,4 +1,4 @@
-config BL_MCU_PERIPHERAL_TESTS_I2C
+menuconfig BL_MCU_PERIPHERAL_TESTS_I2C
 	tristate "MCU peripheral I2C tests"
 	default n
 	depends on I2C && I2C_DRIVER && BL616CL_I2C

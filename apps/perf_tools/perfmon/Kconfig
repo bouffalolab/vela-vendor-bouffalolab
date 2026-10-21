@@ -1,4 +1,4 @@
-config BL_PERF_TOOLS_PERFMON
+menuconfig BL_PERF_TOOLS_PERFMON
 	tristate "BL616CL perfmon command"
 	default n
 	depends on BL616CL_PERFMON

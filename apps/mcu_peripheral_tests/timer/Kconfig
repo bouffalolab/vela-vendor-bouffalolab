@@ -1,4 +1,4 @@
-config BL_MCU_PERIPHERAL_TESTS_TIMER
+menuconfig BL_MCU_PERIPHERAL_TESTS_TIMER
 	tristate "MCU peripheral timer tests"
 	default n
 	depends on TIMER && !DISABLE_SIGNALS

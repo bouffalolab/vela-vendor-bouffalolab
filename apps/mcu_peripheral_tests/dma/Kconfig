@@ -1,4 +1,4 @@
-config BL_MCU_PERIPHERAL_TESTS_DMA
+menuconfig BL_MCU_PERIPHERAL_TESTS_DMA
 	tristate "MCU peripheral DMA tests"
 	default n
 	depends on BUILD_FLAT && BUILTIN

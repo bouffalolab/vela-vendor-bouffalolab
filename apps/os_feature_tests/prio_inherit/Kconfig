@@ -1,4 +1,4 @@
-config BL_OS_FEATURE_TESTS_PRIO_INHERIT
+menuconfig BL_OS_FEATURE_TESTS_PRIO_INHERIT
 	bool "Mutex priority inheritance test"
 	default n
 	depends on BUILD_FLAT && BUILTIN

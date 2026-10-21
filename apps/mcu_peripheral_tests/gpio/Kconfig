@@ -1,4 +1,4 @@
-config BL_MCU_PERIPHERAL_TESTS_GPIO
+menuconfig BL_MCU_PERIPHERAL_TESTS_GPIO
 	tristate "MCU peripheral GPIO tests"
 	default n
 	depends on DEV_GPIO && !DISABLE_SIGNALS

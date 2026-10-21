@@ -1,4 +1,4 @@
-config BL_MCU_PERIPHERAL_TESTS_CRYPTO
+menuconfig BL_MCU_PERIPHERAL_TESTS_CRYPTO
 	bool "MCU peripheral crypto tests"
 	default n
 	depends on BL616CL_CRYPTO_AES

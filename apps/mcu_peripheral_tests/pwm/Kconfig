@@ -1,4 +1,4 @@
-config BL_MCU_PERIPHERAL_TESTS_PWM
+menuconfig BL_MCU_PERIPHERAL_TESTS_PWM
 	tristate "MCU peripheral PWM tests"
 	default n
 	depends on AI_M64P_KIT_PWM && BL616CL_PWM

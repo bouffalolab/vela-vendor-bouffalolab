@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-config BL_COMPONENT_BLE
+menuconfig BL_COMPONENT_BLE
 	bool "Bouffalo BLE controller"
 	depends on ARCH_CHIP_BL616CL
 	depends on !BL616CL_EM_NONE

@@ -1,4 +1,4 @@
-config BL_MCU_PERIPHERAL_TESTS_UART
+menuconfig BL_MCU_PERIPHERAL_TESTS_UART
 	tristate "MCU peripheral UART tests"
 	default n
 	depends on SERIAL && SERIAL_TERMIOS && BL616CL_UART1

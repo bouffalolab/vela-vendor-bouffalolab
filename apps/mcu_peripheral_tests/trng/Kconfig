@@ -1,4 +1,4 @@
-config BL_MCU_PERIPHERAL_TESTS_TRNG
+menuconfig BL_MCU_PERIPHERAL_TESTS_TRNG
 	bool "MCU peripheral TRNG tests"
 	default n
 	depends on BL616CL_TRNG && (DEV_RANDOM || DEV_URANDOM_ARCH)
