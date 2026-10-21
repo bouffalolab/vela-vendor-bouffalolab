@@ -43,7 +43,8 @@ OpenVela `I2C_TRANSFER()` 接受消息数组并要求整组传输原子。公共
 
 ```text
 board_late_initialize()
-  -> ai_m64p_kit_i2c_initialize()
+  -> bl616cl_bringup() -> bl616cl_board_initialize()
+  -> ai_m64p_kit_i2c_initialize() 或 bl616cl_ave_v10_i2c_initialize()
   -> bl616cl_i2cbus_initialize(bus, scl, sda)
   -> i2c_register(bus, lower)
   -> /dev/i2c0 或 /dev/i2c1
@@ -58,10 +59,16 @@ I2CIOC_TRANSFER
   -> cleanup + unlock
 ```
 
+某条总线初始化或注册失败时，板级代码记一条 `ERROR` 日志，其它总线和后面的外设照常
+初始化。
+
 代码归属：
 
 - `chips/bl616cl/bl616cl_i2c.c`：实例资源、消息翻译、mutex 和错误窗口；
 - `boards/bl616cl/ai-m64p-32s-kit/src/ai_m64p_kit_i2c.c`：pin owner 和节点注册；
+- `boards/bl616cl/bl616cl-ave-v10/src/bl616cl_ave_v10_i2c.c`：AVE-V10 的 I2C0 节点注册。
+  ES8388 驱动（`bl616cl_ave_v10_audio.c`）再调用一次 `bl616cl_i2cbus_initialize(0, ...)`，
+  拿到同一个实例，实例按引用计数共享，两边的传输由同一把实例 mutex 串行；
 - `cmake/bl616cl_lhal.cmake`：仅在实例开启时编入同步仓的 `bflb_i2c.c`；
 - `apps/mcu_peripheral_tests/i2c/`：独立 `libapps_mcu_i2c_test.a` 和一个测试 main；
 - `drivers/`：保持未修改。
@@ -324,11 +331,14 @@ I2C1-only 临时配置没有该节点，因此该 case 不计为通过。RTC 本
 ## 当前限制和验收状态
 
 - I2C1-only 的构建、裁剪、烧录、启动和真实无 target 超时路径已通过。
-- I2C0-only 在 GPIO4/5 上已确认启动和无 target 地址波形；正向 target 仍缺。
+- I2C0-only 在 GPIO4/5 上已确认启动和无 target 地址波形。正向 target 已在 AVE-V10
+  的 ES8388 上验证（见“正向 target”），M64P 上仍缺。
 - 2026-10-14 起 `nsh-peripherals` 同时注册 I2C0（SCL 30、SDA 31）和 I2C1（GPIO4/5）：
   两条总线的 `hw probe --no-target`（`ret=-110`）都 PASS；
   `hw dual` 仍缺两路 target，GPIO30/31 上也还没有逻辑分析仪波形。
-- 外接 EEPROM 和上拉尚未冻结，除无 target probe 外的 `hw` case 均未取得实测 PASS。
+- M64P 的外接 EEPROM 和上拉尚未冻结，除无 target probe 外的 `hw` case 在 M64P 上均未
+  取得实测 PASS。AVE-V10 上 `hw probe`、`hw combined`、单字节 `hw eeprom` 和
+  `hw concurrent` 已对 ES8388 PASS；多字节读和 `hw boundary` 仍需 EEPROM。
 - 串口 PASS 只证明协议调用成功，不证明实际 SCL 频率、ACK/NACK、repeated-start
   波形、电气质量或 EEPROM 数据保持。
 - 完成 I2C 验收仍需补齐 I2C1 实物总线、oneshot/RTC 回归；若要验收双实例，还需

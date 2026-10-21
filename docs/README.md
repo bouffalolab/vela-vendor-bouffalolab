@@ -47,7 +47,11 @@
 - [BL616CL Wi-Fi 热函数布局与回归](bl616cl-hot-code-layout.md)：`ld.script` 热函数
   列表的构成、构建时检查，以及组件更新后重新确认收益的步骤。
 - [BL616CL DMA0](bl616cl-dma.md)：说明 OpenVela generic DMA adapter、八通道
-  mem2mem、共享 IRQ、cache ownership、裁剪、实板验证和后续 consumer 边界。
+  mem2mem 与外设方向单次传输、共享 IRQ、cache ownership、裁剪、实板验证和 consumer
+  边界。
+- [BL616CL I2S0 与 ES8388 音频](bl616cl-i2s.md)：I2S0 master lower-half 的时钟与
+  引脚规则、DMA 收发流程、Kconfig、NuttX ES8388 驱动修复，以及 AVE-V10 播放、录音
+  实测和限制（44.1 kHz 偏快 1.2%），以及 ES8388 录音噪声、偶发数据错位的定位与修复。
 - [BL616CL 普通 Timer 与 TIMER1 验证](bl616cl-timer.md)：说明 TIMER0/TIMER1
   最大能力交集、oneshot owner 互斥、tick/poll/multi-fd 测试、
   五配置裁剪和 USB2 实测边界。

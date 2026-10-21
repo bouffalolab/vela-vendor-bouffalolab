@@ -33,7 +33,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | 时钟 | 1 kHz OS tick；MTimer alarm lower-half；通用 `up_perf_*` 纳秒接口 | `bl616cl_timerisr.c`；`nuttx/drivers/timers/arch_alarm.c` |
 | 内存 | 内部 SRAM 单 heap、默认 allocator、procfs meminfo | `bl616cl_allocateheap.c`；`nuttx/mm/` |
 | 启动 | chip early init（含 XIP flash 80 MHz 采样校准）、board late init、ROMFS/NSH | `chips/bl616cl/bl616cl_start.c`、`bl616cl_flash.c`；`boards/bl616cl/common/` |
-| 外设 | UART0/UART1、GPIO、timer0/TIMER1、oneshot、watchdog、TRNG、RTC、DMA0；I2C/SPI/PWM 软件路径按实物边界声明 | `chips/bl616cl/`；`boards/bl616cl/`；`cmake/bl616cl_lhal.cmake` |
+| 外设 | UART0/UART1、GPIO、timer0/TIMER1、oneshot、watchdog、TRNG、RTC、DMA0、I2S0（AVE-V10 ES8388）；I2C/SPI/PWM 软件路径按实物边界声明 | `chips/bl616cl/`；`boards/bl616cl/`；`cmake/bl616cl_lhal.cmake` |
 | 诊断 | assertions、stack/backtrace、CPU/IRQ/critical monitor、MM record、stack canary、coredump、Note RAM trace、generic KASAN、UBSAN runtime | `configs/nsh/defconfig`；`vendor/bouffalolab/docs/` |
 
 当前 `nsh` 已选择 `CONFIG_SCHED_CPULOAD_SYSCLK=y`，并用独立的
@@ -556,11 +556,11 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | P05 | SPI0/SPI1 master | SPI0 已验证；SPI1 blocked | 每实例选项、pin、mode、CS policy | polling lower-half 和裁剪已验证；SPI0 短接环回、CS/CLK、CPOL/CPHA、bit order 和 MISO/MOSI 对调已实测；SPI1 pin/target 仍待资源 |
 | P06 | PWM | 软件闭环与 G4 波形已通过，P1 | `BL616CL_PWM`、`AI_M64P_KIT_PWM`（按通道选正/负引脚）、测试 app 独立裁剪；`PWM_MULTICHAN` 可选，排除 pulse/fixed/deadtime | PWM0 CH0–CH3 正/负输出（负输出为正输出反相，无死区；全是正输出时自动用单端引脚布局）、continuous、整数频率、duty、cpol/dcpol、live update 和 multi-fd 已完成三态构建、裁剪和现役回归；`nsh-peripherals` 4 通道实机用例曾全部 PASS（旧版 9 个 case；去掉超时注入后现行 8 个 case 于 2026-10-16 全部 PASS，含 `-g` 回环电平检查）；逻辑分析仪已测单通道 100 Hz～10 kHz 的 frequency/duty、STOP/close 电平和更新毛刺，以及多通道同频、各通道 duty、逐样本互补、只配负输出和启停电平 |
 | P07 | ADC | 需要适配，P2 | ADC、channel/pin、poll/DMA 分层 | analog lower-half；校准、量程、连续采样、溢出；外部基准电压 |
-| P08 | DMA0 | 已验证 | `BL616CL_DMA0` 默认关闭；测试 app 独立；首版依赖 `!DMA_LINK` | 八通道 fixed-ident、1/2/4-byte mem2mem、TC 完成、cache ownership 和并发生命周期；error 注入和完成前 stop 原依赖已删除的测试钩子，当前未覆盖；外设 consumer/LLI/cyclic 延后 |
+| P08 | DMA0 | 已验证 | `BL616CL_DMA0` 默认关闭；测试 app 独立；首版依赖 `!DMA_LINK`；通道在 `DMA0 channel assignment` 中固定分配给 SDK 驱动和应用代码，重复分配编译失败 | 八通道 fixed-ident、1/2/4-byte mem2mem、TC 完成、cache ownership 和并发生命周期；mem2dev/dev2mem 单次传输与回调内续传由 I2S0 播放、录音实测；error 注入和完成前 stop 原依赖已删除的测试钩子，当前未覆盖；其它外设 consumer、LLI/cyclic 延后。见 [bl616cl-dma.md](bl616cl-dma.md) |
 | P09 | AES/SHA `/dev/crypto` 与 mbedTLS ALT；GMAC、PKA、CRC32 | AES/SHA 已验证；GMAC/PKA 延后；CRC32 不支持 | `BL616CL_CRYPTO`、`_AES`、`_SHA` 分别裁剪；bounce 大小与直连可配；软件驱动关闭；ALT 逐项开 | AES-CBC/CTR/XTS、SHA-1/2 经 `hwcr_init()` 注册；cmocka、`mcu_crypto_test`、`mbedselftest` 在直连开/关两种 KASAN 构建通过；超时恢复实测；CRC32 硬件语义不符；`wifi` 实测 ALT 不缩短连接时间（SHA1 ALT 使 WPA2 慢约 1.6 s），AES/SHA ALT 不开；用到 mbedTLS 时默认打开熵源 ALT（读 `/dev/random`）。见 [bl616cl-crypto.md](bl616cl-crypto.md) |
 | P10 | EFUSE/unique ID | 需要适配，P2 | read 与 irreversible program 分离；默认只读 | 明确 NuttX ABI；只读实测、越界/权限；烧写需单独授权和治具 |
 | P11 | SPI flash MTD | 需要适配，P2 | `BL616CL_FLASH_MTD`、partition/fs 独立 | XIP 并发、擦写临界区、cache、边界、掉电恢复；不得覆盖 boot/app/MFG |
-| P12 | I2S、AUADC、AUDAC | 延后 | controller/方向/DMA/channel 分层 | 依赖 DMA/cache、codec/clock/pin；采样率、欠载/溢出、长时音频 |
+| P12 | I2S、AUADC、AUDAC | I2S0 已验证（AVE-V10）；AUADC/AUDAC 延后 | `BL616CL_I2S`（buffer 数；TX/RX DMA 通道在 `DMA0 channel assignment`）、板级 `BL616CL_AVE_V10_AUDIO`、测试 app 独立 | I2S0 master、16 bit 双声道、MCLK 经 CLKOUT；NuttX ES8388 驱动注册 `pcm0`/`pcm_in0`，11025–48000 Hz 播放帧率、启停、录音实测（44.1 kHz 快 1.2%；录音 256 次启动无数据错误）；欠载/溢出、长时音频、收发同时进行未覆盖。见 [bl616cl-i2s.md](bl616cl-i2s.md) |
 | P13 | SDH/SDIO | 延后 | host/bus-width/pin/card-detect | 模组未确认卡座与连线；需 DMA/cache、文件系统和热插拔回归 |
 | P14 | 原生 USB device/host | 延后 | role/PHY/class 分层 | `/dev/ttyUSB2` 是 USB-UART；需确认 USB pin/PHY、枚举、重连和吞吐 |
 | P15 | EMAC | 延后 | MAC/PHY/RMII pin/clock | device table 有 MAC，但当前板未确认 PHY；需 cache/DMA 和网络压力 |
@@ -613,11 +613,15 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
   TC、NULL callback、stop/residual、cache alias、owner wait、并发 put 和 callback
   drain；最终汇总为 `passed=8 failed=0`。其中 TC+error 优先级和 stop/residual
   依赖 chip 测试钩子（软件注入 IRQ、enable 前挂起），已随钩子删除；现行 DMA-001..007
-  只用公共接口，2026-10-16 在 BL616CL-AVE-V10 上为 `passed=7 failed=0`。
+  只用公共接口，2026-10-16 在 BL616CL-AVE-V10 上为 `passed=7 failed=0`。2026-10-20
+  通道改为固定分配后，测试跳过已分配给 SDK 驱动的通道：Ai-M64P-32S-Kit 用全部 8 个
+  通道，BL616CL-AVE-V10 跳过 I2S0 持有的 CH0/CH1、用其余 6 个，两板各连跑两遍均为
+  `passed=7 failed=0`。
 - cache 边界：cached/non-cache alias 只证明调用方执行 clean/invalidate 后的可见性，
   DMA adapter 不代替 client 维护 cache。
-- 外设 consumer、pause/resume、cyclic、LLI/link/insert 保持延后；后续必须按 UART、
-  I2C、SPI、ADC、MTD 或 crypto 分别建立 owner、request、cache 和实物验证闭环。
+- 第一个外设 consumer 是 I2S0（mem2dev/dev2mem，见 P12），初始化时取得通道并一直
+  持有。其它外设 consumer、pause/resume、cyclic、LLI/link/insert 保持延后；后续必须
+  按 UART、I2C、SPI、ADC、MTD 或 crypto 分别建立 owner、request、cache 和实物验证闭环。
 
 ### P09 AES/SHA 实测结论（2026-10-10）
 

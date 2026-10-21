@@ -28,7 +28,7 @@ I-cache 为 32 KiB，D-cache 为 16 KiB；BL616CL 1.0 手册中的 16 KiB/8 KiB 
 | 超大 range 分块 | 纳入 | 对齐后按 `INT32_MAX` 内最大块调用 uint32 LHAL |
 | runtime toggle 幂等性 | 纳入 | 读取 MHCR 后只在状态变化时调用 enable/disable |
 | cache 容量 getter | 纳入 | 重新确认的芯片规格为 I=32 KiB、D=16 KiB |
-| DMA cache policy | 部分纳入 | DMA0 公共 mem2mem adapter 已接入；公共 API 提供 clean/invalidate，具体外设 consumer 仍由调用方定义 ownership |
+| DMA cache policy | 部分纳入 | DMA0 adapter 不维护 cache，公共 API 提供 clean/invalidate，由 consumer 定义 ownership；目前只有 I2S0 一个外设 consumer（见 [bl616cl-i2s.md](bl616cl-i2s.md)） |
 
 ## 调用链与归属
 
@@ -110,8 +110,11 @@ defconfig 由 menuconfig/savedefconfig 生成，不手工维护 `.config`。
 
 - cache 容量使用重新确认的芯片规格。后续芯片 revision 或 cache 配置变化时，应先
   更新权威规格和 getter，再重新审查依赖该容量的调用方。
-- DMA0 公共 mem2mem adapter 已接入；外设 consumer 尚未接入。具体 consumer 的
-  buffer policy、descriptor cache 属性、request owner 和并发取消仍需独立适配与验证。
+- DMA0 已接入 mem2mem 和 I2S0 的外设方向。I2S0 自己维护 cache：播放 buffer 交给
+  DMA 前 clean，录音 buffer 交给 DMA 前和完成后各 invalidate 一次。audio buffer 由
+  `apb_alloc()` 按 cache line 对齐分配，I2S0 再把录音长度取整到 cache line，DMA 写入
+  的 line 不与 CPU 数据共享。其它外设 consumer 的 buffer policy、descriptor
+  cache 属性、request owner 和并发取消仍需各自适配与验证。
 - pure D-cache invalidate-all 前必须先处理当前执行栈的 dirty ownership；测试 trampoline
   位于 XIP，切换到 `.nocache_noinit_ram` 中的专用栈后再调用公共接口。
 - range API 不宣称对 MMIO、non-cacheable alias 或跨 RAM/XIP 区间生效；调用方必须先
