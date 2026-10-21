@@ -40,6 +40,7 @@
 #include <nuttx/net/udp.h>
 
 #include "wl80211.h"
+#include "macsw_plat.h"
 #include "macsw/wl80211_mac.h"
 
 /* DEFINES
@@ -859,8 +860,37 @@ int wl80211_lwip_init(void)
 
 extern void *__attribute__((weak)) _wifi_log_flag;
 
+/* NuttX retains its existing syslog policy; the SDK runtime CLI is not ported. */
+int wifi_verbosity_set(int level)
+{
+  (void)level;
+  return -ENOTSUP;
+}
+
+int wifi_verbosity_get(void)
+{
+  return &_wifi_log_flag ? WIFI_DIAG_DEBUG : WIFI_DIAG_OFF;
+}
+
+bool wifi_verbosity_enabled(uint8_t severity)
+{
+#if defined(CONFIG_MACSW_LOG_NO_PRINT) || defined(CONFIG_LOG_DISABLE)
+  (void)severity;
+  return false;
+#else
+  int threshold = wifi_verbosity_get();
+
+  return threshold != WIFI_DIAG_OFF && severity <= threshold;
+#endif
+}
+
+#undef wifi_syslog
 void wifi_syslog(int priority, const char *fmt, ...)
 {
+#if defined(CONFIG_MACSW_LOG_NO_PRINT) || defined(CONFIG_LOG_DISABLE)
+  (void)priority;
+  (void)fmt;
+#else
   if (&_wifi_log_flag)
     {
       va_list arg;
@@ -869,4 +899,5 @@ void wifi_syslog(int priority, const char *fmt, ...)
       vsyslog(LOG_DEBUG, fmt, arg);
       va_end(arg);
     }
+#endif
 }

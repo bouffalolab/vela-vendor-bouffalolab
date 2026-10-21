@@ -17,14 +17,14 @@
 #define MACSW_P2P_DEBUG(...) do { if (0) bl_fw_printf(__VA_ARGS__); } while (0)
 #endif
 
-/* Deferred 5 GHz RF cal logs. Set CFG_RFCAL_DEBUG to 0 to silence [RFCAL]. */
+/* Deferred 5 GHz RF cal diagnostics follow the MAC automatic log threshold. */
 #ifndef CFG_RFCAL_DEBUG
 #define CFG_RFCAL_DEBUG 1
 #endif
 #if defined(CFG_RFCAL_DEBUG) && CFG_RFCAL_DEBUG
-#define RFCAL_PRINTF(...) printf(__VA_ARGS__)
+#define RFCAL_PRINTF(...) wifi_syslog(3, __VA_ARGS__)
 #define RFCAL_LOG(fmt, ...) \
-    bl_fw_printf("[RFCAL] t_us=%lu " fmt "\r\n", \
+    wifi_syslog(3, "[RFCAL] t_us=%lu " fmt "\r\n", \
                  (unsigned long)hal_machw_time(), ##__VA_ARGS__)
 #else
 #define RFCAL_PRINTF(...) do { if (0) printf(__VA_ARGS__); } while (0)
@@ -121,12 +121,14 @@
 #define __MIB __attribute__ ((section("MACHWMIB")))
 #endif
 
+#ifndef IS_ENABLED
 #define _ZERO_WITH_COMMA_1 0,
 #define _second_arg(__ignored, val, ...) val
 #define _is_enabled(x)                __is_enabled(x)
 #define __is_enabled(val)             ___is_enabled(_ZERO_WITH_COMMA_##val)
 #define ___is_enabled(junk_or_comma)  _second_arg(junk_or_comma 1, 0)
 #define IS_ENABLED(config)            _is_enabled(config)
+#endif
 
 #define MACSW_HOOK(x, ...) do { \
   extern int __WEAK macsw_hook_##x (const char *f, ...); \
@@ -1184,13 +1186,16 @@ extern const struct llc_snap_short llc_bridge_tunnel_hdr;
 
 /// Default active scan time on each channel, in us, when the scan duration is 0.
 /// Probe Requests are spaced by this time divided by the probe count, and at
-/// least 20 ms apart. A requested count may not all be sent before the channel
-/// time ends.
+/// least SCAN_PROBE_MIN_INTERVAL apart. A requested count may not all be sent
+/// before the channel time ends.
 #define SCAN_ACTIVE_DURATION    110000
 
 /// Default passive scan time on each channel, in us, when the scan duration
 /// is 0 and the channel is passive, NO_IR, or radar.
 #define SCAN_PASSIVE_DURATION   110000
+
+/// Minimum spacing between Probe Requests on a channel, in us.
+#define SCAN_PROBE_MIN_INTERVAL 20000
 
 
 /// Array converting a TID to its associated AC
@@ -1872,6 +1877,10 @@ struct sm_connect_req
     uint8_t uapsd_queues;
     /// VIF index
     uint8_t vif_idx;
+    /// Auth/Assoc timeout in seconds. 0 disables it. Not an EAPOL timer.
+    /// The caller passes at most 299: one ke_timer delay must stay under 300 s.
+    /// Must stay before ie_len: FT copies up to offsetof(..., ie_len).
+    uint16_t auth_assoc_timeout_sec;
     /// Length of the association request IEs
     uint16_t ie_len;
     /// Buffer containing the additional information elements to be put in the
@@ -3129,6 +3138,8 @@ enum sm_msg_tag
     SM_STATUS_IND,
     /// Coex protection watchdog timeout (single timer)
     SM_HANDSHAKE_WAIT_TIMEOUT_IND,
+    /// Internal. The connect time is up; do not start another Auth/Assoc retry.
+    SM_AUTH_ASSOC_TIMEOUT_IND,
 };
 
 enum {
@@ -4518,6 +4529,11 @@ uint8_t mm_vif_to_mfp_key(uint8_t key_idx, uint8_t vif_idx);
 void mm_timer_set(struct mm_timer_tag *timer, uint32_t value);
 void mm_timer_clear(struct mm_timer_tag *timer);
 uint32_t mm_env_get(void);
+
+/** Automatic key dump, enabled at DEBUG verbosity. */
+void mm_sec_keydump(void);
+/** Explicit key query; ignores runtime verbosity, not FW log build clipping. */
+void mm_sec_keydump_console(void);
 
 void me_init_chan(struct mac_chan_op *chan);
 
