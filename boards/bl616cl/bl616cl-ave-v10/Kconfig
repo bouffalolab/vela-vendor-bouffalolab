@@ -18,3 +18,42 @@ config BL616CL_AVE_V10_I2C0
 		Register I2C0 as /dev/i2c0 on GPIO20 (SCL) and GPIO11 (SDA). The
 		board wires the ES8388 codec (address 0x10) and the camera
 		connector SCCB to this bus with 4.7 kOhm pull-ups to 3.3 V.
+
+menuconfig BL616CL_AVE_V10_AUDIO
+	bool "BL616CL-AVE-V10 ES8388 audio (/dev/audio/pcm0, pcm_in0)"
+	default n
+	depends on AUDIO_ES8388 && BL616CL_DMA0
+	select BL616CL_AVE_V10_I2C0
+	select BL616CL_I2S
+	---help---
+		Register the ES8388 codec (I2C0 address 0x10, I2S0 with MCLK on
+		GPIO1, BCLK 4, FS 5, DI 6, DO 7) as /dev/audio/pcm0 for playback and
+		/dev/audio/pcm_in0 for recording; use one at a time.
+
+		The speaker amplifier takes ROUT1 and ROUT2 as a differential pair,
+		the on-board microphone is on LIN2, and the speaker lines come back
+		attenuated to LIN1 and RIN1. The ES8388 output and input channel
+		options select the codec path; this menu shows what the current
+		choice gives on this board. The board README lists every choice.
+
+if BL616CL_AVE_V10_AUDIO
+
+comment "Speaker: ES8388 output Line 2 drives it from ROUT2"
+	depends on ES8388_OUTPUT_CHANNEL_LINE2
+
+comment "Speaker: ES8388 output Line 1 drives it from ROUT1 (untested)"
+	depends on ES8388_OUTPUT_CHANNEL_LINE1
+
+comment "Speaker: nearly silent, output Both cancels at the amplifier"
+	depends on ES8388_OUTPUT_CHANNEL_ALL
+
+comment "Recording: ES8388 input Line 2 is the on-board microphone"
+	depends on ES8388_INPUT_CHANNEL_LINE2
+
+comment "Recording: ES8388 input Line 1 is the speaker feedback (untested)"
+	depends on ES8388_INPUT_CHANNEL_LINE1
+
+comment "Recording: input Differential is the speaker feedback (untested)"
+	depends on ES8388_INPUT_CHANNEL_DIFFERENTIAL
+
+endif # BL616CL_AVE_V10_AUDIO

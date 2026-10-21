@@ -32,6 +32,16 @@
 #define BL616CL_AVE_V10_I2C0_SCL_PIN 20
 #define BL616CL_AVE_V10_I2C0_SDA_PIN 11
 
+/* ES8388 on I2C0 and I2S0. MCLK is CLKOUT1 on GPIO1. */
+
+#define BL616CL_AVE_V10_ES8388_ADDR      0x10
+#define BL616CL_AVE_V10_ES8388_I2C_FREQ  400000
+#define BL616CL_AVE_V10_I2S_MCLK_PIN     1
+#define BL616CL_AVE_V10_I2S_BCLK_PIN     4
+#define BL616CL_AVE_V10_I2S_FS_PIN       5
+#define BL616CL_AVE_V10_I2S_DI_PIN       6
+#define BL616CL_AVE_V10_I2S_DO_PIN       7
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
@@ -55,6 +65,28 @@
  ****************************************************************************/
 
 int bl616cl_ave_v10_i2c_initialize(void);
+#endif
+
+#ifdef CONFIG_BL616CL_AVE_V10_AUDIO
+
+/****************************************************************************
+ * Name: bl616cl_ave_v10_audio_initialize
+ *
+ * Description:
+ *   Register the ES8388 codec on I2C0 and I2S0 as /dev/audio/pcm0
+ *   (playback) and /dev/audio/pcm_in0 (recording from the on-board
+ *   microphone on LIN2/RIN2).
+ *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ENODEV if the I2C bus, I2S or codec cannot be
+ *   initialized, or the negated errno value from audio_register().
+ *
+ ****************************************************************************/
+
+int bl616cl_ave_v10_audio_initialize(void);
 #endif
 
 #endif /* __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_BL616CL_AVE_V10_BL616CL_AVE_V10_H */

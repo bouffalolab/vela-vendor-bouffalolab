@@ -24,6 +24,10 @@ if(CONFIG_BL616CL_AVE_V10_I2C0)
   list(APPEND SRCS bl616cl_ave_v10_i2c.c)
 endif()
 
+if(CONFIG_BL616CL_AVE_V10_AUDIO)
+  list(APPEND SRCS bl616cl_ave_v10_audio.c)
+endif()
+
 nuttx_add_romfs(
   NAME
   etc
