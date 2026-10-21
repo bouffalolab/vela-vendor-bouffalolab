@@ -118,11 +118,16 @@ python3 vendor/bouffalolab/tools/bl616cl/perf/perfmon_report.py \
   glue 函数和 `memcpy` 一组都让某个方向在每种填充下下降；net 一组有升有降，
   和调度一组一起加时 TCP TX 下降。最后只保留了 NuttX 调度一组，见移植方案
   12.9。
+- UDP 中 `memcpy` 占 20% 以上的样本，但样本集中在每轮拷 32 字节的字拷贝
+  循环里，接收方向还有源、目的地址差 2 字节时的移位拷贝循环。一次拷贝中
+  循环一直在 cache 里，时间花在搬数据上，放进列表只能省调用入口的几次
+  取指。
 
 2026-09-25 的采样中，当前列表已包含所有达到阈值的 Wi-Fi 函数，只有
 `mm_timer_*`、`rc_*` 等低于 0.1% 的函数没有列入。R2 之后的采样又列出
 `wl80211_output`、`bl616cl_wifi_sta_txdone`、`wlan_sta_tx_done`，A/B 后没有
-加入。
+加入。2026-10-21 macsw、wl80211 更新后的采样也没有新的候选，A/B 见移植
+方案 12.9。
 
 ### 4. A/B 确认收益
 

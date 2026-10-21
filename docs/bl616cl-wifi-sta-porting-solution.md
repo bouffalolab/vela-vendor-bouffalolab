@@ -800,6 +800,19 @@ R2 之后按模块继续排列。perfmon 采样选出四组候选，每组单独
 - glue 使 UDP RX 过载在每种填充下都下降，libc 使 UDP TX 在每种填充下都下降，不采用。net 的结果有升有降；与 sched 一起放时 TCP TX 在三种填充下都下降，而且热区增大到 48 KiB，超过 I-cache，不采用。
 - 加入 sched 后 `layout_check` 输出 `106/106 Wi-Fi hot entries placed at 0x80008000, 35.9 KiB`，热区各段的地址与 A/B 中的 sched 镜像一致。
 
+macsw、wl80211 更新并重新导出预编译包后（2026-10-21）按回归步骤复查。STA 接收改走 `wl80211_register_input_cb()` 后 `wl80211_tcpip_input()` 不再被调用，已从列表删去，`layout_check` 输出 `105/105 Wi-Fi hot entries placed at 0x80008000, 36.2 KiB`。perfmon 采样中达到阈值的 Wi-Fi 函数都已在列表中，没有新增候选。新旧预编译包的镜像在同一时段交替各测 2 次，新包四个方向为旧包的 −1%～+4%。A/B 用 WPA3-SAE AP、不带 perfmon 的镜像，hot/base 交替烧录，每个镜像 3×20 秒，表中为中位数（Mbps）：
+
+| 场景 | base（填充 0 / 0x1e0 / 0x9a0） | hot（填充 0 / 0x1e0 / 0x9a0） |
+| --- | --- | --- |
+| TCP TX | 18.7 / 19.0 / 19.1 | 20.2 / 19.1 / 20.0 |
+| UDP TX | 41.4 / 40.3 / 44.4 | 44.3 / 40.1 / 46.0 |
+| TCP RX | 21.2 / 21.2 / 21.6 | 22.4 / 21.8 / 22.7 |
+| UDP RX | 43.1 / 46.9 / 47.0 | 56.2 / 43.9 / 54.1 |
+
+- TCP 在三种填充下都不低于 base，TCP RX +3%～+6%。填充 0 和 0x9a0 下 UDP 也更高（UDP RX +30%、+15%）；填充 0x1e0 下 UDP TX 持平、UDP RX 低 6.5%，未达到验收标准。
+- hot 自身随填充 UDP TX 40.1～46.0、UDP RX 43.9～56.2，UDP 主要受列表之外的代码位置影响。以往的分组实验中没有在每种填充下都改善的组，列表保持不变。
+- 与上面带 perfmon 的 A/B 不可直接比较：镜像配置和 AP 加密方式都不同。
+
 ### 12.10 RX 零拷贝
 
 同一 AP（open），`wifi` 打开（R2）与关闭（基线）`CONFIG_BL616CL_WLAN_RX_ZEROCOPY`，其余相同；按 12.9 的做法在 Wi-Fi 热函数之后插入 0、0x1e0、0x9a0 字节填充。每个镜像 3×20 秒，表中为中位数（Mbps，UDP RX 为主机 `-b 60M` 过载发送）：
