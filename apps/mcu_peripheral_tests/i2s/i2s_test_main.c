@@ -118,7 +118,7 @@ struct i2s_source_s
  * queued buffer is kept here.
  *
  * The rate leaves out the end of the stream: once the ES8388 driver has
- * its last buffer back it resets the codec over polled I2C at a higher
+ * its last buffer back it resets the codec over I2C at a higher
  * priority than this task, which delays the last returns by several
  * milliseconds. Playback skips the final buffer and the one before it
  * (the final one may be short); recording skips the buffers returned

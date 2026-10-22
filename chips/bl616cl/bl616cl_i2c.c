@@ -29,9 +29,17 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <sys/param.h>
 
+#include <nuttx/arch.h>
+#include <nuttx/clock.h>
 #include <nuttx/i2c/i2c_master.h>
+#include <nuttx/irq.h>
 #include <nuttx/mutex.h>
+#include <nuttx/semaphore.h>
+#include <nuttx/spinlock.h>
+
+#include <arch/irq.h>
 
 #include "bl616cl_sdk.h"
 #include "bl616cl_glb.h"
@@ -52,6 +60,20 @@
 #define BL616CL_I2C_MAX_LENGTH        1024
 #define BL616CL_I2C_MAX_PREFIX        16
 
+#ifndef CONFIG_I2C_POLLED
+/* Fixed margin of a group timeout, on top of twice the bus time */
+
+#define BL616CL_I2C_TIMEOUT_MS        100
+
+/* Interrupts that end a group. INTEN and INTSTS use the same bits for
+ * these and for the FIFO interrupts.
+ */
+
+#define BL616CL_I2C_INT_ERRORS \
+  (I2C_INTEN_NACK | I2C_INTEN_ARB | I2C_INTEN_FER | I2C_INTEN_TIMEOUT)
+#define BL616CL_I2C_INT_EVENTS (I2C_INTEN_END | BL616CL_I2C_INT_ERRORS)
+#endif
+
 #define BL616CL_I2C_GPIO_CFG(function) \
   ((function) | GPIO_ALTERNATE | GPIO_PULLUP | GPIO_SMT_EN | GPIO_DRV_1)
 
@@ -68,6 +90,20 @@ struct bl616cl_i2c_priv_s
   uint8_t port;
   uint8_t scl_pin;
   uint8_t sda_pin;
+#ifndef CONFIG_I2C_POLLED
+  sem_t done;               /* Posted by the ISR when a group ends */
+  struct i2c_msg_s *msgs;   /* Running group; the last message is the data */
+  uint32_t intmask;         /* Interrupts unmasked for the running group */
+  uint32_t status;          /* Raw interrupt status when the group ended */
+  int result;               /* Result of the last group */
+  uint16_t txlen;           /* Write stream length: prefix, then data */
+  uint16_t txpos;           /* Write stream bytes queued in the TX FIFO */
+  uint16_t rxpos;           /* Data bytes read from the RX FIFO */
+  uint8_t count;            /* Messages in the running group (1 or 2) */
+  uint8_t prefix;           /* Prefix (sub-address) bytes before the data */
+  uint8_t irq;
+  bool busy;                /* A group is running and owns the ISR */
+#endif
 };
 
 /****************************************************************************
@@ -120,6 +156,10 @@ static struct bl616cl_i2c_priv_s g_bl616cl_i2c0 =
   .ops = &g_bl616cl_i2c_ops,
   .lock = NXMUTEX_INITIALIZER,
   .port = 0,
+#ifndef CONFIG_I2C_POLLED
+  .done = SEM_INITIALIZER(0),
+  .irq = BL616CL_IRQ_NUM_I2C0,
+#endif
 };
 #endif
 
@@ -129,6 +169,10 @@ static struct bl616cl_i2c_priv_s g_bl616cl_i2c1 =
   .ops = &g_bl616cl_i2c_ops,
   .lock = NXMUTEX_INITIALIZER,
   .port = 1,
+#ifndef CONFIG_I2C_POLLED
+  .done = SEM_INITIALIZER(0),
+  .irq = BL616CL_IRQ_NUM_I2C1,
+#endif
 };
 #endif
 
@@ -238,8 +282,9 @@ static int bl616cl_i2c_group_count(const struct i2c_msg_s *msgs, int count,
  * Returned Value:
  *   Zero (OK) on success; a negated errno value on failure. Errors: -EINVAL
  *   for malformed messages or a pair with different address or frequency;
- *   -EOPNOTSUPP for 10-bit addressing or an unsupported NOSTOP/NOSTART
- *   usage.
+ *   -EOPNOTSUPP for 10-bit addressing, an unsupported NOSTOP/NOSTART usage
+ *   or, in interrupt mode, a continued write longer than 1024 bytes with
+ *   its prefix.
  *
  ****************************************************************************/
 
@@ -296,6 +341,16 @@ static int bl616cl_i2c_validate(struct i2c_msg_s *msgs, int count)
               return -EINVAL;
             }
 
+#ifndef CONFIG_I2C_POLLED
+          /* A continued write goes out as one packet of prefix and data */
+
+          if (msgs[i + 1].flags == I2C_M_NOSTART &&
+              msgs[i].length + msgs[i + 1].length > BL616CL_I2C_MAX_LENGTH)
+            {
+              return -EOPNOTSUPP;
+            }
+#endif
+
           i++;
         }
     }
@@ -303,6 +358,7 @@ static int bl616cl_i2c_validate(struct i2c_msg_s *msgs, int count)
   return OK;
 }
 
+#ifdef CONFIG_I2C_POLLED
 /****************************************************************************
  * Name: bl616cl_i2c_transport_transfer
  *
@@ -417,6 +473,322 @@ static int bl616cl_i2c_call(struct bl616cl_i2c_priv_s *priv,
 
   return ret;
 }
+#else
+/****************************************************************************
+ * Name: bl616cl_i2c_timeout
+ *
+ * Description:
+ *   Return how long a group may take: a fixed margin plus twice its
+ *   nominal bus time (9 bits per byte, one address byte per message).
+ *
+ * Input Parameters:
+ *   msgs  - Messages of the group
+ *   count - Number of messages in the group (1 or 2)
+ *
+ * Returned Value:
+ *   The timeout in system ticks.
+ *
+ ****************************************************************************/
+
+static clock_t bl616cl_i2c_timeout(const struct i2c_msg_s *msgs, int count)
+{
+  uint64_t bytes = count;
+  int i;
+
+  for (i = 0; i < count; i++)
+    {
+      bytes += msgs[i].length;
+    }
+
+  return MSEC2TICK(BL616CL_I2C_TIMEOUT_MS) +
+         USEC2TICK(bytes * 9 * 2 * USEC_PER_SEC / msgs[0].frequency) + 1;
+}
+
+/****************************************************************************
+ * Name: bl616cl_i2c_fill_tx
+ *
+ * Description:
+ *   Queue as much of the write stream (the prefix, then the data message;
+ *   only the sub-address for a prefix + read) as fits in the TX FIFO, and
+ *   mask the TX FIFO interrupt once all of it is queued; a prefix + read
+ *   then continues on the RX FIFO interrupt. The FIFO takes 32-bit words:
+ *   the words that hold prefix bytes are assembled here, the rest is
+ *   written from the data buffer.
+ *
+ * Input Parameters:
+ *   priv - I2C port private state
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+static void bl616cl_i2c_fill_tx(struct bl616cl_i2c_priv_s *priv)
+{
+  uint8_t *prefix = priv->msgs[0].buffer;
+  uint8_t *data = priv->msgs[priv->count - 1].buffer;
+
+  while (priv->txpos < priv->prefix)
+    {
+      uint8_t word[4];
+      uint32_t n = MIN(4, priv->txlen - priv->txpos);
+      uint32_t i;
+
+      for (i = 0; i < n; i++)
+        {
+          uint32_t pos = priv->txpos + i;
+
+          word[i] = pos < priv->prefix ? prefix[pos] :
+                                         data[pos - priv->prefix];
+        }
+
+      if (bflb_i2c_fifo_write(priv->dev, word, n) == 0)
+        {
+          return;
+        }
+
+      priv->txpos += n;
+    }
+
+  if (priv->txpos < priv->txlen)
+    {
+      priv->txpos += bflb_i2c_fifo_write(priv->dev,
+                                         data + priv->txpos - priv->prefix,
+                                         priv->txlen - priv->txpos);
+    }
+
+  if (priv->txpos >= priv->txlen)
+    {
+      priv->intmask &= ~I2C_INTEN_TX_FIFO;
+      bflb_i2c_int_mask(priv->dev, I2C_INTEN_TX_FIFO, true);
+
+      if ((priv->msgs[priv->count - 1].flags & I2C_M_READ) != 0)
+        {
+          priv->intmask |= I2C_INTEN_RX_FIFO;
+          bflb_i2c_int_mask(priv->dev, I2C_INTEN_RX_FIFO, false);
+        }
+    }
+}
+
+/****************************************************************************
+ * Name: bl616cl_i2c_finish
+ *
+ * Description:
+ *   End the running group: record the raw status and the result, stop the
+ *   controller (this also clears the FIFOs and the status and masks every
+ *   interrupt) and wake the waiting thread. Called from the ISR.
+ *
+ * Input Parameters:
+ *   priv   - I2C port private state
+ *   result - Result of the group
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+static void bl616cl_i2c_finish(struct bl616cl_i2c_priv_s *priv, int result)
+{
+  priv->status = bflb_i2c_get_intstatus(priv->dev);
+  bflb_i2c_deinit(priv->dev);
+  priv->result = result;
+  priv->busy = false;
+  nxsem_post(&priv->done);
+}
+
+/****************************************************************************
+ * Name: bl616cl_i2c_interrupt
+ *
+ * Description:
+ *   I2C interrupt handler. Moves the write stream or the read data between
+ *   the buffers and the FIFOs, then ends the group on END or on an error.
+ *   The raw status always shows TX FIFO ready, so only the interrupts
+ *   unmasked for the group count.
+ *   Any NACK, arbitration loss, FIFO error or master timeout fails the group
+ *   with -ETIMEDOUT.
+ *
+ * Input Parameters:
+ *   irq     - IRQ number (unused)
+ *   context - Interrupt context (unused)
+ *   arg     - I2C port private state
+ *
+ * Returned Value:
+ *   Zero (OK) always.
+ *
+ ****************************************************************************/
+
+static int bl616cl_i2c_interrupt(int irq, void *context, void *arg)
+{
+  struct bl616cl_i2c_priv_s *priv = arg;
+  struct i2c_msg_s *msg;
+  uint32_t status;
+
+  if (!priv->busy)
+    {
+      bflb_i2c_int_mask(priv->dev, I2C_INTEN_ALL, true);
+      return OK;
+    }
+
+  msg = &priv->msgs[priv->count - 1];
+  status = bflb_i2c_get_intstatus(priv->dev) & priv->intmask;
+
+  if ((status & I2C_INTSTS_TX_FIFO) != 0)
+    {
+      bl616cl_i2c_fill_tx(priv);
+    }
+
+  /* The last bytes may still be in the RX FIFO when END comes */
+
+  if ((status & (I2C_INTSTS_RX_FIFO | I2C_INTSTS_END)) != 0 &&
+      (msg->flags & I2C_M_READ) != 0)
+    {
+      priv->rxpos += bflb_i2c_fifo_read(priv->dev,
+                                        msg->buffer + priv->rxpos,
+                                        msg->length - priv->rxpos);
+      if (priv->rxpos >= msg->length)
+        {
+          priv->intmask &= ~I2C_INTEN_RX_FIFO;
+          bflb_i2c_int_mask(priv->dev, I2C_INTEN_RX_FIFO, true);
+        }
+    }
+
+  if ((status & BL616CL_I2C_INT_ERRORS) != 0)
+    {
+      bl616cl_i2c_finish(priv, -ETIMEDOUT);
+    }
+  else if ((status & I2C_INTSTS_END) != 0)
+    {
+      bool done = (msg->flags & I2C_M_READ) != 0 ?
+                  priv->rxpos >= msg->length : priv->txpos >= priv->txlen;
+
+      bl616cl_i2c_finish(priv, done ? OK : -ETIMEDOUT);
+    }
+
+  return OK;
+}
+
+/****************************************************************************
+ * Name: bl616cl_i2c_call
+ *
+ * Description:
+ *   Run one group of one or two NuttX messages in LHAL interrupt mode. A
+ *   prefix + read pair passes the prefix as an LHAL NOSTOP sub-address
+ *   (repeated start before the read). A write, with or without a prefix,
+ *   goes out as one packet whose data is the prefix followed by the write.
+ *   LHAL configures the packets, unmasks the FIFO interrupt for the
+ *   direction of the first message (TX unless the group is a plain read)
+ *   and starts; the ISR queues the sub-address of a prefix + read and
+ *   switches it to the RX FIFO, moves the data and wakes the thread. On
+ *   timeout the controller is stopped here.
+ *
+ * Input Parameters:
+ *   priv  - I2C port private state
+ *   msgs  - Messages of the group
+ *   count - Number of messages in the group (1 or 2)
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure: -ETIMEDOUT on
+ *   NACK, arbitration loss, FIFO error or timeout.
+ *
+ ****************************************************************************/
+
+static int bl616cl_i2c_call(struct bl616cl_i2c_priv_s *priv,
+                            struct i2c_msg_s *msgs, int count)
+{
+  struct bflb_i2c_msg_s lhal[2];
+  irqstate_t flags;
+  bool read = (msgs[count - 1].flags & I2C_M_READ) != 0;
+  int lcount = 1;
+  int ret;
+
+  /* With a sub-address the controller fetches the write data right after
+   * it, and an empty TX FIFO then is an underflow (FER) that can put stale
+   * bytes on the bus. A single packet does not start its data before the
+   * first word is queued, so a write never uses the sub-address.
+   */
+
+  lhal[0].addr = msgs[0].addr;
+  lhal[0].buffer = msgs[0].buffer;
+  lhal[0].length = msgs[0].length;
+  if (read && count == 2)
+    {
+      lhal[0].flags = I2C_M_NOSTOP;
+      lhal[1].addr = msgs[1].addr;
+      lhal[1].flags = I2C_M_READ | I2C_M_INT;
+      lhal[1].buffer = msgs[1].buffer;
+      lhal[1].length = msgs[1].length;
+      lcount = 2;
+    }
+  else
+    {
+      lhal[0].flags = (read ? I2C_M_READ : 0) | I2C_M_INT;
+      if (count == 2)
+        {
+          lhal[0].length += msgs[1].length;
+        }
+    }
+
+  bflb_i2c_init(priv->dev, msgs[0].frequency);
+  nxsem_reset(&priv->done, 0);
+  priv->msgs = msgs;
+  priv->count = count;
+  priv->prefix = count == 2 ? msgs[0].length : 0;
+  priv->txlen = read ? priv->prefix : lhal[0].length;
+  priv->txpos = 0;
+  priv->rxpos = 0;
+  priv->intmask = BL616CL_I2C_INT_EVENTS |
+                  (priv->txlen == 0 ? I2C_INTEN_RX_FIFO : I2C_INTEN_TX_FIFO);
+  priv->busy = true;
+
+  /* LHAL unmasks the FIFO interrupt and starts the controller; the ISR may
+   * already queue the write before this returns.
+   */
+
+  ret = bflb_i2c_transfer(priv->dev, lhal, lcount);
+
+  /* bflb_i2c_int_mask() is a read-modify-write, and so is the ISR's */
+
+  flags = enter_critical_section();
+  if (ret < 0)
+    {
+      priv->status = bflb_i2c_get_intstatus(priv->dev);
+      bflb_i2c_deinit(priv->dev);
+      priv->busy = false;
+    }
+  else
+    {
+      bflb_i2c_int_mask(priv->dev, BL616CL_I2C_INT_EVENTS, false);
+    }
+
+  leave_critical_section(flags);
+
+  if (ret >= 0)
+    {
+      nxsem_tickwait_uninterruptible(&priv->done,
+                                     bl616cl_i2c_timeout(msgs, count));
+
+      flags = enter_critical_section();
+      if (priv->busy)
+        {
+          priv->status = bflb_i2c_get_intstatus(priv->dev);
+          bflb_i2c_deinit(priv->dev);
+          priv->busy = false;
+          priv->result = -ETIMEDOUT;
+        }
+
+      ret = priv->result;
+      leave_critical_section(flags);
+    }
+
+  if (ret < 0)
+    {
+      i2cerr("ERROR: I2C%d transfer failed: ret=%d status=%08" PRIx32 "\n",
+             priv->port, ret, priv->status);
+    }
+
+  return ret;
+}
+#endif
 
 /****************************************************************************
  * Name: bl616cl_i2c_transfer
@@ -434,7 +806,7 @@ static int bl616cl_i2c_call(struct bl616cl_i2c_priv_s *priv,
  * Returned Value:
  *   Zero (OK) on success; a negated errno value on failure. Errors: -EINVAL
  *   or -EOPNOTSUPP from validation; -ENODEV if the port is not initialized;
- *   -ETIMEDOUT on a bus timeout.
+ *   -ETIMEDOUT on NACK, arbitration loss, FIFO error or timeout.
  *
  ****************************************************************************/
 
@@ -488,8 +860,8 @@ out:
  *
  * Description:
  *   Initialize an I2C port. The first call sets up clocks and the SCL/SDA
- *   pins and starts the controller at 100 kHz. Later calls with the same pins
- *   only take a reference.
+ *   pins, starts the controller at 100 kHz and, in interrupt mode, attaches
+ *   its interrupt. Later calls with the same pins only take a reference.
  *
  * Input Parameters:
  *   port    - I2C port number (0 or 1)
@@ -498,8 +870,8 @@ out:
  *
  * Returned Value:
  *   An I2C master handle on success; NULL if the pins or port are invalid,
- *   the port is not enabled, the pins differ from an existing user, or a
- *   device lookup fails.
+ *   the port is not enabled, the pins differ from an existing user, a device
+ *   lookup fails or the interrupt cannot be attached.
  *
  ****************************************************************************/
 
@@ -558,6 +930,23 @@ struct i2c_master_s *bl616cl_i2cbus_initialize(int port, uint8_t scl_pin,
   bflb_gpio_init(gpio, sda_pin, BL616CL_I2C_GPIO_CFG(function));
   bflb_i2c_init(priv->dev, BL616CL_I2C_DEFAULT_FREQUENCY);
 
+#ifndef CONFIG_I2C_POLLED
+  /* bflb_i2c_init() masks every I2C interrupt; each group unmasks its own */
+
+  if (irq_attach(priv->irq, bl616cl_i2c_interrupt, priv) < 0)
+    {
+      bflb_i2c_deinit(priv->dev);
+      bflb_gpio_deinit(gpio, scl_pin);
+      bflb_gpio_deinit(gpio, sda_pin);
+      bflb_peripheral_clock_control(peripheral, false);
+      priv->dev = NULL;
+      nxmutex_unlock(&priv->lock);
+      return NULL;
+    }
+
+  up_enable_irq(priv->irq);
+#endif
+
   priv->scl_pin = scl_pin;
   priv->sda_pin = sda_pin;
   priv->refs = 1;
@@ -570,7 +959,8 @@ struct i2c_master_s *bl616cl_i2cbus_initialize(int port, uint8_t scl_pin,
  *
  * Description:
  *   Drop one reference to an I2C port. The last reference de-initializes the
- *   controller, releases the pins and gates the peripheral clock.
+ *   controller, detaches its interrupt in interrupt mode, releases the pins
+ *   and gates the peripheral clock.
  *
  * Input Parameters:
  *   dev - Device structure as returned by bl616cl_i2cbus_initialize()
@@ -623,6 +1013,10 @@ int bl616cl_i2cbus_uninitialize(struct i2c_master_s *dev)
 
   gpio = bflb_device_get_by_name(BFLB_NAME_GPIO);
   bflb_i2c_deinit(priv->dev);
+#ifndef CONFIG_I2C_POLLED
+  up_disable_irq(priv->irq);
+  irq_detach(priv->irq);
+#endif
   if (gpio != NULL)
     {
       bflb_gpio_deinit(gpio, priv->scl_pin);

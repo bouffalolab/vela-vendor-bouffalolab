@@ -353,10 +353,11 @@ menuconfig BL616CL_I2C
 	default n
 	select I2C
 	select I2C_DRIVER
-	select I2C_POLLED
 	---help---
-		Enable the BL616CL polling I2C master lower-half. Board code owns
-		the pin selection and /dev/i2cN registration.
+		Enable the BL616CL I2C master lower-half. Transfers are interrupt
+		driven by default; set I2C_POLLED (Device Drivers -> I2C Driver
+		Support) to poll instead. Board code owns the pin selection and
+		/dev/i2cN registration.
 
 if BL616CL_I2C
 

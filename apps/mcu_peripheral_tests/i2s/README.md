@@ -18,7 +18,7 @@ ES8388，codec 是 slave，BL616CL 输出 MCLK、BCLK 和 FS。喇叭只接 ROUT
 - 流能正常结束。
 - 实测帧率与请求值相差不超过 2%（芯片没有音频 PLL，44.1 kHz 快 1.2%）。帧率按 buffer
   归还时间计算：从第一个归还的 buffer 算到最后一个计入的 buffer。ES8388 驱动在拿回
-  最后一个 buffer 后用轮询 I2C 复位 codec，工作线程优先级 252 高于测试线程，最后两个
+  最后一个 buffer 后通过 I2C 复位 codec，工作线程优先级 252 高于测试线程，最后两个
   buffer 的归还会晚几毫秒，所以播放不计最后两个 buffer，录音不计 `AUDIOIOC_STOP`
   之后归还的 buffer。因此一次播放至少要 4 个 buffer（每个 2048 帧）：不足时没有可计时
   的 buffer，判 `FAIL ret=-61`（`ENODATA`）；只有 4 个时只计 1 个 buffer，归还时间的

@@ -4,7 +4,7 @@
 
 ## 背景与范围
 
-BL616CL LHAL 是同步 polling master，文档频率范围为 305 Hz 至 400 kHz；P0 适配只开放已纳入验证的 100 kHz/400 kHz、7-bit 地址和 1..1024 字节传输。OpenVela 的 `struct i2c_msg_s` 还包含 `I2C_M_NOSTOP`、`I2C_M_NOSTART`、10-bit 地址等通用标志；适配层必须在访问硬件前检查这些标志，不能把公共 flags 原样传给 LHAL。
+BL616CL I2C lower-half 默认用 LHAL 中断模式传输，`CONFIG_I2C_POLLED=y` 时用 LHAL 同步 polling，LHAL 文档频率范围为 305 Hz 至 400 kHz；P0 适配只开放已纳入验证的 100 kHz/400 kHz、7-bit 地址和 1..1024 字节传输。OpenVela 的 `struct i2c_msg_s` 还包含 `I2C_M_NOSTOP`、`I2C_M_NOSTART`、10-bit 地址等通用标志；适配层必须在访问硬件前检查这些标志，不能把公共 flags 原样传给 LHAL。
 
 本 app 覆盖以下可重复的交集：
 
@@ -87,7 +87,7 @@ mcu_i2c_test hw probe --bus 0 --addr 0x50 --freq 400000
 mcu_i2c_test hw probe --bus 0 --addr 0x52 --freq 100000 --no-target
 ```
 
-`--no-target` 使用单字节 write 触发 BL616CL LHAL 的 NACK/timeout 路径；正向 target probe 仍使用单字节 read。该命令只有在指定地址返回冻结合同中的 `-ETIMEDOUT` 时 PASS；`-ENODEV`、`-EINVAL`、`-EOPNOTSUPP` 等本地参数或资源错误均 FAIL。如果意外收到 ACK 也 FAIL。地址必须由接线表确认不存在，且代码只允许普通地址范围 0x08..0x77，不能选择广播或保留地址。
+`--no-target` 使用单字节 write 触发地址 NACK 路径；正向 target probe 仍使用单字节 read。该命令只有在指定地址返回冻结合同中的 `-ETIMEDOUT` 时 PASS；`-ENODEV`、`-EINVAL`、`-EOPNOTSUPP` 等本地参数或资源错误均 FAIL。如果意外收到 ACK 也 FAIL。地址必须由接线表确认不存在，且代码只允许普通地址范围 0x08..0x77，不能选择广播或保留地址。
 
 I2C1-only 在未连接 target 的 GPIO12/13 上实测：
 
@@ -97,8 +97,8 @@ I2C_TEST RESULT mode=hw case=probe PASS bus=1 addr=0x52 freq=100000 expected=no-
 nsh>
 ```
 
-该输出证明真实控制器超时从 LHAL toolchain errno 116 规范化为 OpenVela errno 110；
-没有逻辑分析仪和上拉，不能据此判断实际 SCL 或 NACK 波形。
+该输出是轮询方式的记录（等满 LHAL 的 100 ms 后报超时）；中断方式收到 NACK 立即返回
+同一个 `-ETIMEDOUT`。没有逻辑分析仪和上拉，不能据此判断实际 SCL 或 NACK 波形。
 
 ### `hw combined`
 
