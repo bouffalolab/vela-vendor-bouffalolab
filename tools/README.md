@@ -22,3 +22,16 @@
 
 编译和 UART 烧录统一通过仓库根目录的 `vela` 执行；它调用的固件后处理和
 FlashCube 运行资产来自 `bflb_flash_tools/`。
+
+在 SDK 根目录启动 Neovim/clangd 时，可合并现有构建的编译数据库：
+
+```bash
+python3 vendor/bouffalolab/tools/merge_compile_commands.py \
+  --prefer ai-m64p-32s-kit_wifi
+```
+
+脚本扫描 `cmake_out/*/compile_commands.json`，按源文件真实路径去重，生成根目录的
+`compile_commands.json`；保留原记录的 `directory` 和编译参数。共享源码优先采用
+`--prefer` 指定的构建，其余构建按目录名排序补充缺少的文件；不指定时全部按目录名排序。
+输入读取失败时保留旧文件，成功后原子替换；构建更新或清理后需重新运行脚本。
+同一源文件的不同宏配置不能同时生效，切换主要开发目标时应更换 `--prefer`。
