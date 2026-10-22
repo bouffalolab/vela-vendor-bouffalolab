@@ -292,8 +292,9 @@ menuconfig BL616CL_DMA0
 	---help---
 		Enable the BL616CL DMA0 adapter for the OpenVela generic DMA API.
 		It supports fixed-channel one-shot memory-to-memory and peripheral
-		request transfers. Linked lists, cyclic transfers, and pause/resume
-		are intentionally excluded.
+		request transfers; with LLI nodes also longer one-shot transfers,
+		cyclic transfers and pause/resume of cyclic transfers. The generic
+		DMA_LINK interface is not supported.
 
 		Each channel belongs to one user for good. All channels, of SDK
 		drivers and of application code, are assigned in "DMA0 channel
@@ -332,6 +333,18 @@ config BL616CL_DMA0_APP_CHANNELS
 		with an SDK driver fails the build, and tests leave them alone.
 
 endmenu # DMA0 channel assignment
+
+config BL616CL_DMA0_LLI_NODES
+	int "DMA0 LLI nodes"
+	default 16
+	range 0 255
+	---help---
+		Linked-list nodes shared by all DMA0 channels, 16 bytes each. A
+		one-shot transfer longer than 4095 units takes one node per 4064
+		units after the first; a cyclic transfer takes one node per period,
+		or more for periods longer than 4095 units. A transfer gets its
+		nodes when it starts and returns them when it ends. 0 limits
+		one-shot transfers to 4095 units and disables cyclic transfers.
 
 endif # BL616CL_DMA0
 

@@ -86,13 +86,15 @@
  *   put_chan on.
  *
  *   This accessor is the chip discovery contract for generic DMA clients;
- *   the standard DMA API does not provide device discovery. DMA0 currently
- *   supports one-shot memory-to-memory, memory-to-peripheral and
- *   peripheral-to-memory transfers with equal 1, 2, or 4-byte widths and
- *   source/destination steps of zero or one width. Peripheral transfers
- *   take the LHAL DMA_REQUEST_* number as dst_drq (to the device) or
- *   src_drq (from the device). Clients own all cache clean and invalidate
- *   operations for their buffers.
+ *   the standard DMA API does not provide device discovery. DMA0 supports
+ *   memory-to-memory, memory-to-peripheral and peripheral-to-memory
+ *   transfers with equal 1, 2, or 4-byte widths and source/destination
+ *   steps of zero or one width. Peripheral transfers take the LHAL
+ *   DMA_REQUEST_* number as dst_drq (to the device) or src_drq (from the
+ *   device). One-shot transfers longer than 4095 units, cyclic transfers
+ *   and pause/resume of cyclic transfers need
+ *   CONFIG_BL616CL_DMA0_LLI_NODES. Clients own all cache clean and
+ *   invalidate operations for their buffers.
  *
  * Input Parameters:
  *   None
