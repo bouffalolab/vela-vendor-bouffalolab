@@ -450,7 +450,7 @@ WPA3、PS/coex、AP/P2P 等从 G5 基线另开任务，不扩大首版验收。
 - `vendor/bouffalolab/chips/bl616cl/include/irq.h:43-60`
 - `vendor/bouffalolab/chips/bl616cl/CMakeLists.txt:21-82`
 - `vendor/bouffalolab/boards/bl616cl/common/src/bl616cl_bringup.c:70-115`
-- `vendor/bouffalolab/boards/bl616cl/ai-m64p-32s-kit/scripts/ld.script:26-34,174-189`
+- `vendor/bouffalolab/boards/bl616cl/common/scripts/ld.script`
 - `vendor/bouffalolab/boards/bl616cl/ai-m64p-32s-kit/configs/nsh/defconfig`
 
 ### Bouffalo SDK 参考源

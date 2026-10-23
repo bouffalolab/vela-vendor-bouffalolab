@@ -31,6 +31,9 @@ target_link_options(nuttx PRIVATE -Wl,--build-id=none
 
 get_filename_component(BOUFFALOLAB_VENDOR_DIR "${NUTTX_BOARD_ABS_DIR}/../../.."
                        ABSOLUTE)
+get_filename_component(BL616CL_LD_SCRIPT
+                       "${NUTTX_BOARD_ABS_DIR}/../common/scripts/ld.script"
+                       ABSOLUTE)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(BL616CL_PARTITION_CONFIG
     "${NUTTX_BOARD_ABS_DIR}/config/partition_cfg_4M.toml")
@@ -101,7 +104,7 @@ if(CONFIG_BL616CL_WIRELESS_WIFI)
     OUTPUT ${BL616CL_LAYOUT_STAMP}
     COMMAND
       ${Python3_EXECUTABLE} ${BL616CL_LAYOUT_CHECK} --ld-script
-      ${NUTTX_BOARD_ABS_DIR}/scripts/ld.script --map
+      ${BL616CL_LD_SCRIPT} --map
       ${CMAKE_BINARY_DIR}/nuttx.map
     COMMAND ${CMAKE_COMMAND} -E touch ${BL616CL_LAYOUT_STAMP}
     DEPENDS ${CMAKE_BINARY_DIR}/final_nuttx ${BL616CL_LAYOUT_CHECK}
@@ -120,4 +123,4 @@ file(GLOB EXTRA_LIBS
 
 set_property(GLOBAL APPEND PROPERTY NUTTX_EXTRA_LIBRARIES ${EXTRA_LIBS})
 
-set_property(GLOBAL PROPERTY LD_SCRIPT ${NUTTX_BOARD_ABS_DIR}/scripts/ld.script)
+set_property(GLOBAL PROPERTY LD_SCRIPT ${BL616CL_LD_SCRIPT})

@@ -8,7 +8,7 @@
 
 ## 布局构成
 
-`boards/bl616cl/ai-m64p-32s-kit/scripts/ld.script` 的 `.text` 段：
+`boards/bl616cl/common/scripts/ld.script`（各板共用）的 `.text` 段：
 
 ```text
 .text ALIGN(LOADADDR(.data) + SIZEOF(.data), 32K) :
@@ -96,7 +96,7 @@ python3 vendor/bouffalolab/tools/bl616cl/perf/wifi_bench.py <out>/prof \
 ```sh
 python3 vendor/bouffalolab/tools/bl616cl/perf/perfmon_report.py \
   --map <out>/img/nuttx.map --elf <out>/img/final_nuttx --hot wifi \
-  --ld-script vendor/bouffalolab/boards/bl616cl/ai-m64p-32s-kit/scripts/ld.script \
+  --ld-script vendor/bouffalolab/boards/bl616cl/common/scripts/ld.script \
   <out>/prof/*.perfmon
 ```
 

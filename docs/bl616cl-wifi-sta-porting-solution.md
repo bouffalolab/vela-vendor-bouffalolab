@@ -331,7 +331,7 @@ TX/RX 的关键原则是：
 
 ## 6. Shared RAM、cache 和 linker
 
-BL616CL linker 在 `boards/bl616cl/ai-m64p-32s-kit/scripts/ld.script` 中定义 `ram_wifi`：Wi-Fi 硬件只能经 nocache 别名访问 WRAM，`ram_wifi` 就是这段 WRAM 减去 BLE EM。`.wifibss` 按实际大小放在 `ram_wifi` 顶部，堆（cached 别名）一直延伸到 `.wifibss` 起点：
+BL616CL linker 在 `boards/bl616cl/common/scripts/ld.script`（各板共用）中定义 `ram_wifi`：Wi-Fi 硬件只能经 nocache 别名访问 WRAM，`ram_wifi` 就是这段 WRAM 减去 BLE EM。`.wifibss` 按实际大小放在 `ram_wifi` 顶部，堆（cached 别名）一直延伸到 `.wifibss` 起点：
 
 ```text
 ram_wifi ORIGIN = 0x20ff8000（物理 WRAM 起点）

@@ -1,5 +1,5 @@
 /****************************************************************************
- * vendor/bouffalolab/boards/bl616cl/bl616cl-ave-v10/scripts/ld.script
+ * vendor/bouffalolab/boards/bl616cl/common/scripts/ld.script
  *
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -22,6 +22,15 @@
 
 OUTPUT_ARCH(riscv)
 ENTRY(__start)
+
+/* One script for all BL616CL boards and configurations: it describes the
+ * chip memory map and boot image. Differences come in as parameters, not
+ * as edits: __bl616cl_app_size from the board partition table,
+ * CONFIG_BL616CL_EM_SIZE and CONFIG_IDLETHREAD_STACKSIZE. Code and data
+ * that need a special place use the section attributes collected below,
+ * and the remaining RAM goes to the heap. A board with a different memory
+ * layout points LD_SCRIPT at its own script.
+ */
 
 /* BLE EM (CONFIG_BL616CL_EM_SIZE) is carved from the top of WRAM, as in
  * the Bouffalo SDK bl616cl_common.ld.in. ram_wifi is the WRAM below EM on

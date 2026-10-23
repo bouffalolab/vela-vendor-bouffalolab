@@ -15,8 +15,8 @@
 # (wifi_bench.py --perfmon then works on them); it moves the code behind
 # the Wi-Fi list, so compare -p images only with each other.
 #
-# The board ld.script is edited in place and restored on exit; do not build
-# other configs meanwhile.  See docs/bl616cl-hot-code-layout.md.
+# The shared ld.script is edited in place and restored on exit; do not
+# build other configs, of either board, meanwhile.  See docs/bl616cl-hot-code-layout.md.
 
 set -euo pipefail
 
@@ -33,7 +33,7 @@ TOOLS=$(cd "$(dirname "$0")" && pwd -P)
 VENDOR=$(cd "$TOOLS/../../.." && pwd -P)
 ROOT=$(cd "$VENDOR/../.." && pwd -P)
 BOARD=$VENDOR/boards/bl616cl/ai-m64p-32s-kit
-LD=$BOARD/scripts/ld.script
+LD=$VENDOR/boards/bl616cl/common/scripts/ld.script
 CFG=tmp-layout-ab
 OUT=$(realpath -m "$1")
 shift
