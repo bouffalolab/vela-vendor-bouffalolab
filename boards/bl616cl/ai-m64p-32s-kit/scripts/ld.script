@@ -135,7 +135,7 @@ SECTIONS
     . = ALIGN(4);
   } > ram_nocache AT > flash
 
-  .nocache_noinit (NOLOAD) :
+  .nocache_noinit (NOLOAD) : AT(ADDR(.nocache_noinit))
   {
     . = ALIGN(4);
     *(.nocache_noinit_ram)
