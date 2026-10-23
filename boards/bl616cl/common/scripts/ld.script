@@ -67,9 +67,12 @@ SECTIONS
 
   __rom_header_start__ = ORIGIN(rom_header);
   __bl616cl_cache_xip_start = ABSOLUTE(ORIGIN(rom_header));
-  /* Cache maintenance covers the hardware XIP window, not just this image. */
+  /* Cache maintenance covers the hardware XIP window, not just this image:
+   * 64 MiB, BL616CL_FLASH_XIP_END in the LHAL memory map, whatever the
+   * flash size of the board.
+   */
 
-  __bl616cl_cache_xip_end = ABSOLUTE(ORIGIN(rom_header) + 4M);
+  __bl616cl_cache_xip_end = ABSOLUTE(ORIGIN(rom_header) + 64M);
   __bl616cl_cache_ram_start = ABSOLUTE(ORIGIN(ram));
 
   .init ORIGIN(rom_header) :
