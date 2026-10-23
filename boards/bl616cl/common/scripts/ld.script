@@ -32,6 +32,25 @@ ENTRY(__start)
  * layout points LD_SCRIPT at its own script.
  */
 
+/* Layout
+ *
+ *   fw_header   0x7ffff000  boot header, 4 KiB before the XIP base
+ *   rom_header  0x80000000  reset entry, multi-bin table, RF parameters,
+ *                           version block, code run before the caches
+ *   flash       0x80001800  load images of the RAM sections, then .text
+ *                           from a 32 KiB boundary, .rodata, init array,
+ *                           startup copy and zero tables
+ *   ram_nocache 0x20fc0400  .nocache_data, .nocache_noinit
+ *   ram         0x60fc0400  the same RAM, cacheable alias: a hole for the
+ *                           nocache sections, .ram_code, .ram_rodata,
+ *                           .data, .noinit, .bss, idle stack, then heap
+ *   ram_wifi    0x20ff8000  WRAM below EM, .wifibss at its top
+ *
+ * bl616cl_section_load() copies the .copy.table entries and zeroes the
+ * .zero.table entries at startup. NOLOAD sections get an explicit RAM
+ * LMA so that they do not inherit the flash offset of the section before.
+ */
+
 /* BLE EM (CONFIG_BL616CL_EM_SIZE) is carved from the top of WRAM, as in
  * the Bouffalo SDK bl616cl_common.ld.in. ram_wifi is the WRAM below EM on
  * the nocache alias, the only view the Wi-Fi hardware uses. .wifibss sits
@@ -41,17 +60,22 @@ ENTRY(__start)
  */
 
 __LD_CONFIG_EM_SEL = CONFIG_BL616CL_EM_SIZE * 1024;
+
+/* OCRAM above 0x20fc0400 (223 KiB) and the WRAM below EM, which follow
+ * each other on both RAM aliases.
+ */
+
 __bl616cl_ram_size = 224K - 1K + 160K - __LD_CONFIG_EM_SEL;
 
 MEMORY
 {
-  fw_header (rx)  : ORIGIN = 0x7ffff000, LENGTH = 4K
-  rom_header (rx)  : ORIGIN = 0x80000000, LENGTH = 6K
-  flash (rx) : ORIGIN = 0x80001800,
-               LENGTH = __bl616cl_app_size - 4K - 6K
+  fw_header   (rx)  : ORIGIN = 0x7ffff000, LENGTH = 4K
+  rom_header  (rx)  : ORIGIN = 0x80000000, LENGTH = 6K
+  flash       (rx)  : ORIGIN = 0x80001800,
+                      LENGTH = __bl616cl_app_size - 4K - 6K
   ram_nocache (!rx) : ORIGIN = 0x20fc0400, LENGTH = __bl616cl_ram_size
-  ram (!rx) : ORIGIN = 0x60fc0400, LENGTH = __bl616cl_ram_size
-  ram_wifi (wxa) : ORIGIN = 0x20ff8000, LENGTH = 160K - __LD_CONFIG_EM_SEL
+  ram         (!rx) : ORIGIN = 0x60fc0400, LENGTH = __bl616cl_ram_size
+  ram_wifi    (wxa) : ORIGIN = 0x20ff8000, LENGTH = 160K - __LD_CONFIG_EM_SEL
 }
 
 /* Let ld derive program headers from section attributes. Script-generated
@@ -70,15 +94,17 @@ SECTIONS
     KEEP(*(.fw_header))
   } > fw_header
 
-  __rom_header_start__ = ORIGIN(rom_header);
-  __bl616cl_cache_xip_start = ABSOLUTE(ORIGIN(rom_header));
-  /* Cache maintenance covers the hardware XIP window, not just this image:
-   * 64 MiB, BL616CL_FLASH_XIP_END in the LHAL memory map, whatever the
-   * flash size of the board.
+  /* Cache maintenance ranges (bl616cl_cache.c, bl616cl_sec_eng.c). The
+   * XIP range is the hardware window, not just this image: 64 MiB,
+   * BL616CL_FLASH_XIP_END in the LHAL memory map, whatever the flash size
+   * of the board. The RAM range ends at the heap limit, set further down.
    */
 
+  __bl616cl_cache_xip_start = ABSOLUTE(ORIGIN(rom_header));
   __bl616cl_cache_xip_end = ABSOLUTE(ORIGIN(rom_header) + 64M);
   __bl616cl_cache_ram_start = ABSOLUTE(ORIGIN(ram));
+
+  __rom_header_start__ = ORIGIN(rom_header);
 
   .init ORIGIN(rom_header) :
   {
@@ -228,10 +254,6 @@ SECTIONS
     . = ALIGN(4);
     _edata = ABSOLUTE(.);
   } > ram AT > flash
-
-  /* Give NOLOAD sections an explicit RAM LMA so they do not inherit the
-   * preceding flash-backed data mapping.
-   */
 
   .noinit (NOLOAD) : AT(ADDR(.noinit))
   {
@@ -519,6 +541,8 @@ SECTIONS
   ASSERT(((ADDR(.copy.table) | ADDR(.zero.table)) & 3) == 0,
          "BL616CL startup tables must be word aligned")
 
+  /* Boot image format */
+
   ASSERT(SIZEOF(.fw_header) == 256,
          "BL616CL firmware header must be 256 bytes")
   ASSERT(SIZEOF(.init) <= 512, "BL616CL reset entry exceeds ROM header")
@@ -528,24 +552,33 @@ SECTIONS
          "BL616CL version offset is invalid")
   ASSERT(__rom_header_used_end__ <= __rom_header_end__,
          "BL616CL pre-cache code exceeds ROM header")
+
+  /* Flash layout */
+
+  ASSERT(__bl616cl_app_size > 4K + 6K,
+         "BL616CL application partition is too small")
   ASSERT(LOADADDR(.nocache_data) == ORIGIN(flash),
          "BL616CL RAM load images must follow the ROM header")
   ASSERT(ADDR(.text) == ALIGN(LOADADDR(.data) + SIZEOF(.data), 32K),
          "BL616CL XIP text must follow the RAM load images")
   ASSERT(__rom_end__ <= ORIGIN(flash) + LENGTH(flash),
          "BL616CL flash image overflow")
-  ASSERT(__ram_nocache_end__ <= ORIGIN(ram_nocache) + LENGTH(ram_nocache),
-         "BL616CL nocache RAM overflow")
-  ASSERT(__HeapBase < __HeapLimit, "BL616CL cacheable RAM overflow")
-  ASSERT(__bl616cl_app_size > 4K + 6K,
-         "BL616CL application partition is too small")
+
+  /* RAM layout */
+
   ASSERT(__LD_CONFIG_EM_SEL == 0 || __LD_CONFIG_EM_SEL == 16K ||
          __LD_CONFIG_EM_SEL == 32K, "BL616CL EM size is invalid")
+  ASSERT(__ram_nocache_end__ <= ORIGIN(ram_nocache) + LENGTH(ram_nocache),
+         "BL616CL nocache RAM overflow")
+  ASSERT((__StackTop & 15) == 0, "BL616CL idle stack must be 16-byte aligned")
+  ASSERT(__HeapBase < __HeapLimit, "BL616CL cacheable RAM overflow")
   ASSERT(ADDR(.wifibss) >= 0x20ff8000,
          "BL616CL .wifibss must stay in WRAM")
   ASSERT(ADDR(.wifibss) + SIZEOF(.wifibss) <= __ram_wifi_end,
          "BL616CL .wifibss overlaps EM")
-  ASSERT((__StackTop & 15) == 0, "BL616CL idle stack must be 16-byte aligned")
+
+  /* Linking */
+
   ASSERT(SIZEOF(.rela.dyn) == 0, "BL616CL image needs dynamic relocations")
 
   /DISCARD/ :
