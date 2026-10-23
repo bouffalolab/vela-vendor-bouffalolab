@@ -58,13 +58,13 @@ vendor/bouffalolab/vela build \
 mcu_dma_test
 ```
 
-程序按 DMA-001 到 DMA-007、DMA-009 到 DMA-013 顺序执行（编号 DMA-008 不再使用）。
+程序按 DMA-001 到 DMA-007、DMA-009 到 DMA-014 顺序执行（编号 DMA-008 不再使用）。
 每个 case 自己申请固定 channel、配置、启动、等待完成并释放；任一断言失败会打印该
-case 的负 errno，但仍继续运行其余 case，最终以 `DMA0 summary` 汇总。完成判据是十二
-项均打印 `PASS ret=0`，汇总为 `passed=12 failed=0 skipped=0`，且没有 panic、assert
-或意外复位。LLI 节点少于 6 个时不编译 DMA-009..013，启动时打印
-`DMA0 test: <n> LLI nodes, DMA-009 to DMA-013 need 6`，汇总为
-`passed=7 failed=0 skipped=5`。
+case 的负 errno，但仍继续运行其余 case，最终以 `DMA0 summary` 汇总。完成判据是十三
+项均打印 `PASS ret=0`，汇总为 `passed=13 failed=0 skipped=0`，且没有 panic、assert
+或意外复位（跑完后 `resetcause` 应为 `power_on`）。LLI 节点少于 6 个时不编译
+DMA-009..013，启动时打印 `DMA0 test: <n> LLI nodes, DMA-009 to DMA-013 need 6`，汇总为
+`passed=8 failed=0 skipped=5`。
 
 DMA0 通道按使用者固定分配（见 `docs/bl616cl-dma.md` 的“通道分配”），分配给 SDK
 驱动或应用代码的通道一直被持有。测试启动时按 `<arch/chip/bl616cl_dma.h>` 的
@@ -86,10 +86,10 @@ buffer 按 32 字节对齐。这里验证的是调用方履行该协议后的 ca
 保护。
 
 DMA-001、DMA-004、DMA-007 的「实测关键数据」来自用例精简前的固件（当时 8 项），输出
-格式未变的行予以保留；DMA-002、DMA-003 和 DMA-009..013 的数据来自 2026-10-22 的固件。
-2026-10-20 改为按空闲通道运行后，在 AVE-V10（6 个通道）和 Ai-M64P-32S-Kit（8 个通道）
-上各连跑两次，均为 `passed=7 failed=0`；2026-10-22 加入链式传输后两板各连跑两次，
-均为 `passed=12 failed=0 skipped=0`。记录见 `docs/bl616cl-dma.md`。
+格式未变的行予以保留；DMA-002、DMA-003 和 DMA-009..014 的数据来自 2026-10-22、10-23
+的固件。2026-10-20 改为按空闲通道运行后，在 AVE-V10（6 个通道）和 Ai-M64P-32S-Kit
+（8 个通道）上各连跑两次，均为 `passed=7 failed=0`；2026-10-23 的最终固件两板各连跑
+五次，均为 `passed=13 failed=0 skipped=0`。记录见 `docs/bl616cl-dma.md`。
 
 ## DMA-001：width、step、数据和 TC 回调
 
@@ -279,14 +279,21 @@ hold=0 3-seg=-12 2-seg=0 3-seg=-12 after-stop=0 after-put=0
    写错位置能看出来）。callback 检查 `len` 按顺序为下一个 period 结束处的偏移。
 2. 启动后靠中断运行到装载超过 1100 个节点（LLI 计数至少回绕一次）。
 3. 长窗口：暂停，等 5 ms 让已结束 period 的中断处理完，记下 callback 数和位置
-   （`len - residual`）。关中断，循环“resume、读位置、pause”，把每次读到的位置差累加
-   成走过的距离（两次读之间 DMA 走不到一圈），直到走过 1100 个节点以上，计数在窗口
-   内回绕；开中断再等 5 ms。callback 增量必须等于走过的 period 结束次数，最后一次的
-   `len` 必须是最后经过的 period 结束处的偏移。这一步独立于驱动的回调计数，能发现
+   （`len - residual`）。然后一步一步走：每步关中断、resume 后紧接 pause、开中断，
+   在暂停状态下读位置，把位置差累加成走过的距离，直到走过 1100 个节点以上，计数在
+   窗口内回绕；最后再等 5 ms。callback 增量必须等于走过的 period 结束次数，最后一次
+   的 `len` 必须是最后经过的 period 结束处的偏移。这一步独立于驱动的回调计数，能发现
    计数回绕时多发或漏发的回调。
+   - DMA 只在 resume 到 pause 之间运行，关中断保证这一段不被拉长；读位置放在暂停后，
+     读寄存器的耗时不算进 DMA 运行时间。每步走过的距离要小于半圈，否则报
+     `-ERANGE`，避免一步跨过整圈而少算。输出里的 `max-step` 是每步的最大距离，
+     实测 1 字节宽 240–296 字节、4 字节宽 512–1184 字节，环长约 16 KB。
+   - 早期版本在整个窗口内关中断、在 DMA 运行中读位置。最快的 4 字节宽环在读位置
+     较慢时会在两次读之间跑完整圈，距离少算后窗口一直关着中断走到读次数上限，喂狗
+     被耽误，模组被看门狗复位（`resetcause` 为 `rtc_watchdog`）。
 4. 4 个短窗口：做法同上，但先把目的 buffer 清零，只走 1.5 个 period。除 callback 检查
    外，要求两次暂停位置之间的字节等于源、其余字节仍为 0，用内存实际写入独立验证
-   residual。每个环的长短窗口共做约 9300–9600 次 pause/resume。
+   residual。每个环的长短窗口共做约 3.6 万次 pause/resume。
 5. 再跑一圈多一个 period（整个 buffer 重新写满），按表中方式 stop。之后 20 ms 内不再
    有 callback、residual 不变且不超过 `len`，整个 buffer 等于源、保护区不变；callback
    内 stop 时 callback 数正好停在设定值。
@@ -294,10 +301,10 @@ hold=0 3-seg=-12 2-seg=0 3-seg=-12 after-stop=0 after-put=0
 实测关键数据（Ai-M64P-32S-Kit）：
 
 ```text
-width=1 periods=4 x 4064 callbacks=2236 toggles=9537 mismatches=0 residual=14632 stop=callback ret=0
-width=1 periods=2 x 8164 callbacks=1119 toggles=9593 mismatches=0 residual=2100 stop=task ret=0
-width=2 periods=2 x 8192 callbacks=2236 toggles=9546 mismatches=0 residual=8072 stop=task ret=0
-width=4 periods=2 x 8192 callbacks=4543 toggles=9519 mismatches=0 residual=15632 stop=task ret=0
+width=1 periods=4 x 4064 callbacks=2237 toggles=36269 max-step=296 mismatches=0 residual=10268 stop=callback ret=0
+width=1 periods=2 x 8164 callbacks=1119 toggles=36359 max-step=296 mismatches=0 residual=4448 stop=task ret=0
+width=2 periods=2 x 8192 callbacks=2227 toggles=36250 max-step=480 mismatches=0 residual=2400 stop=task ret=0
+width=4 periods=2 x 8192 callbacks=4509 toggles=36194 max-step=1184 mismatches=0 residual=15728 stop=task ret=0
 [DMA-011] PASS ret=0
 ```
 
@@ -340,19 +347,43 @@ residual=7668 copied=8716 callbacks=0
 [DMA-013] PASS ret=0
 ```
 
-## 最终实测汇总
+## DMA-014：通道被前面的回调重启
 
-2026-10-22 加入链式传输后，两板 `nsh-peripherals` 各连跑两次 `mcu_dma_test`，均为
-`DMA0 summary: passed=12 failed=0 skipped=0`；AVE-V10 随后 `mcu_i2s_test all` 为
-`I2S summary: PASS failed=0`。`nuttx.bin` SHA256：
+一次 DMA 中断按通道号从小到大处理状态位。前一个通道的回调可能停掉后面的通道并启动
+新传输，而后面通道的状态位是它上一次传输留下的，不能算到新传输头上。
+
+流程：
+
+1. 前两个空闲通道（编号小的 A、编号大的 B）各启动 128 字节短传输。关中断等两个都在
+   硬件上完成，再开中断，让一次中断同时看到两个完成位。
+2. A 的回调里 stop B，并在 B 上启动 4-byte 16380 字节的新传输（单段，不需要 LLI
+   节点）。
+3. B 的新传输必须真正传完才回调，且只回调一次：result 为 16380、residual=0、目的
+   数据全部正确。
+
+修复前同一固件实测：B 的回调立刻到来，报告 16380 字节完成，实际只写了 1776 字节。
+
+实测关键数据：
 
 ```text
-Ai-M64P-32S-Kit  22404d8cfe527fbc3770d494f15b3bea4c680d6124a3e9800a8f0f974fc8d34f
-BL616CL-AVE-V10  78d53a7950c479805872f7beeba60f2c42bf8a3d0e58414249a457d5b493a601
+restart ret=0 callbacks=1; new transfer callbacks=1 result=16380 residual=0 copied=16380 ret=0
+[DMA-014] PASS ret=0
+```
+
+## 最终实测汇总
+
+2026-10-23 的最终固件，两板 `nsh-peripherals` 各连跑五次 `mcu_dma_test`，均为
+`DMA0 summary: passed=13 failed=0 skipped=0`，全程没有复位（`resetcause` 为
+`power_on`）；AVE-V10 随后 `mcu_i2s_test all` 为 `I2S summary: PASS failed=0`。
+`nuttx.bin` SHA256：
+
+```text
+Ai-M64P-32S-Kit  ed3631fb059974b1f56aec9202c1924dda7b317b23ba3eb06c63cf090edf2428
+BL616CL-AVE-V10  f680935587b1284c9c9ffe77b4af67fa247b2eaaa7486290a931b2398938f4aa
 ```
 
 把 `CONFIG_BL616CL_DMA0_LLI_NODES` 设为 0 的临时配置在 Ai-M64P-32S-Kit 上为
-`passed=7 failed=0 skipped=5`（DMA-002 的 4096 units 返回 `-E2BIG`，DMA-003 的 cyclic
+`passed=8 failed=0 skipped=5`（DMA-002 的 4096 units 返回 `-E2BIG`，DMA-003 的 cyclic
 返回 `-ENOTSUP`）。
 
 以下为用例精简前固件的记录。Ai-M64P-32S-Kit 使用 `/dev/ttyUSB2`、2000000 baud。
@@ -383,10 +414,16 @@ nsh>
 - 外设方向目前只有 I2S0 一个 consumer（TX、RX 各一个通道，初始化后一直持有），用
   单段 one-shot；长 one-shot、cyclic 和 pause/resume 只在 mem2mem 上实测。
 - `start_link` 不支持；pause/resume 只用于 cyclic，one-shot 返回 `-ENOTSUP`。
-- 硬件 error IRQ 没有可重复的触发方法，error 回调（`-EIO`、residual）没有测试覆盖。
+- 硬件 error IRQ 触发不到，error 回调（`-EIO`、residual）没有测试覆盖。2026-10-23 在
+  Ai-M64P-32S-Kit 上用临时程序试过：总线译码错误应答关闭（产品默认）和打开两种设置
+  下，DMA 读 RAM 末尾之后、`0x30000000`，读跨 RAM 末尾的两段，写 ROM、写 4 MB flash
+  之外的 XIP 窗口，全部正常完成，没有 DMA error，也没有总线错误中断。
 - 单段 mem2mem 太快，无法在 RUNNING 状态下观测；传输中 stop/residual 和 RUNNING 时
   `-EBUSY` 靠长传输和 cyclic 覆盖（DMA-012、DMA-013）。
-- task 上下文 put 等待 in-flight callback 退出、callback 中 put 被拒绝，均无测试覆盖。
+- put 等待 in-flight callback 的路径在 BL616CL 上走不到：callback 都在 DMA 中断里执行，
+  芯片单核、没有开中断嵌套（`CONFIG_ARCH_HIPRI_INTERRUPT`），task 里的 put 不会与
+  callback 同时执行。callback 中 put 被拒绝是针对编程错误的 `DEBUGASSERT`，开断言的
+  固件会直接 panic，也不做测试。
 - 节点数为 0 的路径只用临时配置验证过，没有常设配置。
 - cache maintenance 属于 client；每个未来 consumer 必须独立定义 buffer ownership、
   descriptor 属性和 clean/invalidate 时机。

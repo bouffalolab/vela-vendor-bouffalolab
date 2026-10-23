@@ -187,6 +187,7 @@ struct bl616cl_dma_chan_s
   uint16_t counter;             /* LLI counter at the last position read */
   uint16_t done;                /* Cyclic: segments finished at the last
                                  * position read, modulo 1024 */
+  uint8_t generation;           /* Transfers started, modulo 256 */
   uint8_t index;
   uint8_t width;
   uint8_t callbacks_inflight;
@@ -838,7 +839,18 @@ static void bl616cl_dma_report_periods(struct bl616cl_dma_chan_s *channel)
 
 static void bl616cl_dma_process_irq(uint8_t tc_status, uint8_t error_status)
 {
+  uint8_t generation[BL616CL_DMA_CHANNEL_COUNT];
   uint8_t index;
+
+  /* The status belongs to the transfers running now. A callback below may
+   * stop a later channel and start another transfer on it, which the
+   * generation tells apart.
+   */
+
+  for (index = 0; index < BL616CL_DMA_CHANNEL_COUNT; index++)
+    {
+      generation[index] = g_bl616cl_dma_channels[index].generation;
+    }
 
   for (index = 0; index < BL616CL_DMA_CHANNEL_COUNT; index++)
     {
@@ -848,6 +860,7 @@ static void bl616cl_dma_process_irq(uint8_t tc_status, uint8_t error_status)
       void *arg = NULL;
       ssize_t result = 0;
       irqstate_t flags;
+      bool running;
 
       if ((tc_status & (1u << index)) == 0 &&
           (error_status & (1u << index)) == 0)
@@ -856,7 +869,9 @@ static void bl616cl_dma_process_irq(uint8_t tc_status, uint8_t error_status)
         }
 
       flags = spin_lock_irqsave(&g_bl616cl_dma_lock);
-      if (channel->state == BL616CL_DMA_RUNNING &&
+      running = channel->state == BL616CL_DMA_RUNNING &&
+                channel->generation == generation[index];
+      if (running &&
           ((error_status & (1u << index)) != 0 || channel->periods == 0))
         {
           bool error = (error_status & (1u << index)) != 0;
@@ -876,7 +891,7 @@ static void bl616cl_dma_process_irq(uint8_t tc_status, uint8_t error_status)
               channel->callbacks_inflight++;
             }
         }
-      else if (channel->state == BL616CL_DMA_RUNNING)
+      else if (running)
         {
           bl616cl_dma_position(channel);
         }
@@ -1330,6 +1345,7 @@ static int bl616cl_dma_submit(struct bl616cl_dma_chan_s *channel,
   channel->period = 0;
   channel->counter = 0;
   channel->done = 0;
+  channel->generation++;
 
   /* Segment 0 goes to the channel registers. A one-shot transfer links
    * it to the nodes of the other segments; a cyclic one also has a node

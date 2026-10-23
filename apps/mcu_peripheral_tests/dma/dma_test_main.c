@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/param.h>
 #include <unistd.h>
 
 #include <nuttx/cache.h>
@@ -1062,6 +1063,145 @@ static int run_put_reuse_case(struct dma_dev_s *dev)
   return ret;
 }
 
+/* A lower channel's callback stops a higher channel and starts a new
+ * transfer on it, after the higher channel's last transfer also finished
+ * in the same interrupt.
+ */
+
+struct dma_restart_s
+{
+  struct dma_chan_s *other;
+  struct dma_event_s *other_event;
+  size_t length;
+  volatile unsigned int callbacks;
+  volatile int ret;
+};
+
+static void dma_restart_callback(struct dma_chan_s *chan, void *arg,
+                                 ssize_t len)
+{
+  struct dma_restart_s *restart = arg;
+
+  (void)chan;
+  (void)len;
+  restart->callbacks++;
+  DMA_STOP(restart->other);
+  restart->other_event->callbacks = 0;
+  restart->other_event->result = 0;
+  restart->ret = DMA_START(restart->other, dma_callback,
+                           restart->other_event, (uintptr_t)g_destination,
+                           (uintptr_t)g_source, restart->length);
+}
+
+static int run_stale_status_case(struct dma_dev_s *dev)
+{
+  struct dma_chan_s *lower = DMA_GET_CHAN(dev, g_channels[0]);
+  struct dma_chan_s *higher = DMA_GET_CHAN(dev, g_channels[1]);
+  struct dma_restart_s restart;
+  struct dma_event_s lower_event;
+  struct dma_event_s higher_event;
+  size_t length = DMA_TRANSFER_MAX_UNITS * 4u;
+  size_t copied;
+  unsigned int i;
+  irqstate_t flags;
+  int ret;
+
+  printf("[DMA-014] channel restarted by an earlier callback\n");
+  memset(&restart, 0, sizeof(restart));
+  memset(&lower_event, 0, sizeof(lower_event));
+  memset(&higher_event, 0, sizeof(higher_event));
+  restart.other = higher;
+  restart.other_event = &higher_event;
+  restart.length = length;
+  restart.ret = -EIO;
+  fill_pattern(g_source, length, 0x77);
+  up_clean_dcache((uintptr_t)g_source, (uintptr_t)g_source + length);
+  prepare_destination(g_destination, length);
+  fill_pattern(g_parallel_source[0], DMA_SMALL_BYTES, 0x11);
+  fill_pattern(g_parallel_source[1], DMA_SMALL_BYTES, 0x22);
+  up_clean_dcache((uintptr_t)g_parallel_source,
+                  (uintptr_t)g_parallel_source + sizeof(g_parallel_source));
+  up_flush_dcache((uintptr_t)g_parallel_destination,
+                  (uintptr_t)g_parallel_destination +
+                  sizeof(g_parallel_destination));
+  ret = configure_mem2mem(lower, 1, 1, 1);
+  if (ret >= 0)
+    {
+      ret = configure_mem2mem(higher, 4, 4, 4);
+    }
+
+  /* Both short transfers finish before the interrupt is taken, so one
+   * interrupt sees both terminal counts. The lower channel is handled
+   * first, and its callback starts the long transfer on the higher one.
+   */
+
+  if (ret >= 0)
+    {
+      flags = enter_critical_section();
+      ret = DMA_START(higher, dma_callback, &higher_event,
+                      (uintptr_t)g_parallel_destination[1],
+                      (uintptr_t)g_parallel_source[1], DMA_SMALL_BYTES);
+      if (ret >= 0)
+        {
+          ret = DMA_START(lower, dma_restart_callback, &restart,
+                          (uintptr_t)g_parallel_destination[0],
+                          (uintptr_t)g_parallel_source[0],
+                          DMA_SMALL_BYTES);
+        }
+
+      for (i = 0; ret >= 0 && i < DMA_WINDOW_READS &&
+           (DMA_RESIDUAL(lower) != 0 || DMA_RESIDUAL(higher) != 0); i++)
+        {
+        }
+
+      leave_critical_section(flags);
+      if (ret >= 0 && i == DMA_WINDOW_READS)
+        {
+          ret = -ETIMEDOUT;
+        }
+    }
+
+  /* The new transfer runs to the end and completes once */
+
+  if (ret >= 0)
+    {
+      ret = wait_for_callback(&higher_event);
+    }
+
+  usleep(2000);
+  if (ret >= 0 &&
+      (restart.callbacks != 1 || restart.ret != OK ||
+       higher_event.callbacks != 1 ||
+       higher_event.result != (ssize_t)length ||
+       DMA_RESIDUAL(higher) != 0))
+    {
+      ret = -EIO;
+    }
+
+  if (ret >= 0)
+    {
+      ret = check_destination(g_source, g_destination, length);
+    }
+
+  /* Bytes the new transfer really wrote */
+
+  up_invalidate_dcache((uintptr_t)g_destination,
+                       (uintptr_t)g_destination + length);
+  for (copied = 0; copied < length &&
+       g_destination[copied] == g_source[copied]; copied++)
+    {
+    }
+
+  printf("  restart ret=%d callbacks=%u; new transfer callbacks=%u "
+         "result=%ld residual=%lu copied=%lu ret=%d\n", restart.ret,
+         restart.callbacks, higher_event.callbacks,
+         (long)higher_event.result, (unsigned long)DMA_RESIDUAL(higher),
+         (unsigned long)copied, ret);
+  DMA_PUT_CHAN(dev, lower);
+  DMA_PUT_CHAN(dev, higher);
+  return ret;
+}
+
 #if DMA_LLI_NODES >= DMA_LLI_TEST_NODES
 struct dma_cyclic_s
 {
@@ -1431,21 +1571,21 @@ static size_t cyclic_position(const struct dma_cyclic_s *cyclic)
 }
 
 /* Check a running cyclic transfer against what it did: from a paused
- * position, let the DMA move run bytes on, pausing and resuming around
- * every read of the position, and pause it there. The reads are frequent
- * enough to add up the distance over several rounds of the buffer. One
- * callback must have come for each period end passed, the last one with
- * the offset of that end. In a window shorter than the buffer, which is
- * cleared first, exactly the bytes passed must hold the source.
+ * position, let the DMA move run bytes on in short steps, and add up the
+ * distance over several rounds of the buffer. One callback must have come
+ * for each period end passed, the last one with the offset of that end.
+ * In a window shorter than the buffer, which is cleared first, exactly
+ * the bytes passed must hold the source.
  */
 
 static int check_cyclic_window(struct dma_cyclic_s *cyclic, size_t run,
-                               unsigned int *toggles)
+                               unsigned int *toggles, size_t *max_step)
 {
   size_t length = cyclic->period * cyclic->periods;
   size_t start;
   size_t at;
   size_t next;
+  size_t step;
   size_t moved = 0;
   size_t end;
   size_t i;
@@ -1473,11 +1613,12 @@ static int check_cyclic_window(struct dma_cyclic_s *cyclic, size_t run,
                       (uintptr_t)g_destination + length);
     }
 
-  /* Nothing may come between two reads long enough for the DMA to go
-   * round the buffer.
+  /* A step runs the DMA only from a resume to the next pause, with
+   * interrupts off so that nothing stretches it, and reads the position
+   * while paused. A step must stay well under the buffer, or the distance
+   * could miss a whole round.
    */
 
-  flags = enter_critical_section();
   at = start;
   while (ret >= 0 && moved < run)
     {
@@ -1487,17 +1628,26 @@ static int check_cyclic_window(struct dma_cyclic_s *cyclic, size_t run,
           break;
         }
 
+      flags = enter_critical_section();
       ret = DMA_RESUME(cyclic->chan);
-      next = cyclic_position(cyclic);
-      moved += (next + length - at) % length;
-      at = next;
       if (ret >= 0)
         {
           ret = DMA_PAUSE(cyclic->chan);
         }
+
+      leave_critical_section(flags);
+      next = cyclic_position(cyclic);
+      step = (next + length - at) % length;
+      if (step >= length / 2)
+        {
+          ret = -ERANGE;
+        }
+
+      *max_step = MAX(*max_step, step);
+      moved += step;
+      at = next;
     }
 
-  leave_critical_section(flags);
   *toggles += reads;
   usleep(5000);
   next = cyclic_position(cyclic);
@@ -1547,6 +1697,7 @@ static int run_cyclic_ring(struct dma_cyclic_s *cyclic, unsigned int width,
 {
   size_t length = cyclic->period * cyclic->periods;
   unsigned int toggles = 0;
+  size_t max_step = 0;
   unsigned int stopped;
   unsigned int i;
   size_t residual;
@@ -1582,13 +1733,14 @@ static int run_cyclic_ring(struct dma_cyclic_s *cyclic, unsigned int width,
   if (ret >= 0)
     {
       ret = check_cyclic_window(cyclic, DMA_CYCLIC_LOADS *
-                                DMA_SEGMENT_UNITS * width, &toggles);
+                                DMA_SEGMENT_UNITS * width, &toggles,
+                                &max_step);
     }
 
   for (i = 0; ret >= 0 && i < DMA_CYCLIC_WINDOWS; i++)
     {
       ret = check_cyclic_window(cyclic, cyclic->period * 3u / 2u,
-                                &toggles);
+                                &toggles, &max_step);
     }
 
   /* One more round, so that the whole buffer holds the source again */
@@ -1624,10 +1776,11 @@ static int run_cyclic_ring(struct dma_cyclic_s *cyclic, unsigned int width,
     }
 
   printf("  width=%u periods=%u x %lu callbacks=%u toggles=%u "
-         "mismatches=%u residual=%lu stop=%s ret=%d\n", width,
-         cyclic->periods, (unsigned long)cyclic->period, stopped, toggles,
-         cyclic->mismatches, (unsigned long)residual,
-         stop_in_callback ? "callback" : "task", ret);
+         "max-step=%lu mismatches=%u residual=%lu stop=%s ret=%d\n",
+         width, cyclic->periods, (unsigned long)cyclic->period, stopped,
+         toggles, (unsigned long)max_step, cyclic->mismatches,
+         (unsigned long)residual, stop_in_callback ? "callback" : "task",
+         ret);
   return ret;
 }
 
@@ -1907,6 +2060,7 @@ int main(int argc, char *argv[])
     { "DMA-012", run_pause_case },
     { "DMA-013", run_stop_case },
 #endif
+    { "DMA-014", run_stale_status_case },
   };
 
   struct dma_dev_s *dev;

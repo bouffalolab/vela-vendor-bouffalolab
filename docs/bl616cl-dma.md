@@ -22,7 +22,7 @@ pause/resume，仍走 OpenVela 标准 DMA 接口，供 SPI 大块传输、UART R
 | mem2mem one-shot | 纳入 | 1/2/4-byte 同宽，step=0 或 width；≤4095 units 单段，更长的拆成 LLI 段（见“链式传输”） |
 | mem2dev、dev2mem one-shot | 纳入 | DRQ 用 LHAL `DMA_REQUEST_*`，只放在外设一侧；外设方向 burst 固定 INCR1，DMA 做流控 |
 | TC IRQ | 纳入 | raw IRQ 31 -> NuttX IRQ 47，共享 snapshot/clear |
-| error IRQ 状态机 | 已实现，无测试覆盖 | error 优先、`-EIO`、residual；硬件 error 无法稳定触发 |
+| error IRQ 状态机 | 已实现，硬件触发不到 | error 优先、`-EIO`、residual；地址类总线错误不会返回给 DMA（实测，见“限制”） |
 | stop/residual | 纳入 | byte residual 按硬件位置计算；传输中 stop 后 residual 与目的端实际写入一致（mem2mem 实测） |
 | callback 生命周期 | 纳入 | NULL callback 有测试；callback 内可对本通道 start 下一段（I2S 连续流依赖此行为并已实测；占满节点池的长传输在 callback 里连续重启有测试）；cyclic callback 内 stop 有测试；callback 内 put 拒绝、put 等待 callback 退出无测试 |
 | cache ownership | 纳入合同 | client clean/invalidate；cached/non-cache alias 可见性；LLI 节点由 adapter 维护 |
@@ -140,13 +140,16 @@ DMA0 的 8 个通道按外设固定分配：一个通道只给一个外设，外
 5. one-shot TC callback 返回原请求字节数，无论拆成几段都只回调一次；residual 单位
    为字节。error callback 返回 `-EIO`，residual 为未传输字节数（实现行为，当前无测试
    覆盖）。
-6. ISR 先 snapshot 并 clear 全部 TC/error 位，再在锁外回调；同一 channel 同时出现
-   TC/error 时 error 优先且只回调一次（实现行为，当前无测试覆盖）。
+6. ISR 先 snapshot 并 clear 全部 TC/error 位，再按通道号从小到大处理、在锁外回调；
+   同一 channel 同时出现 TC/error 时 error 优先且只回调一次（实现行为，当前无测试
+   覆盖）。前面通道的回调停掉并重启后面的通道时，后面通道在 snapshot 里的旧状态位
+   属于被替换的传输，按每次 start 递增的通道世代号识别并忽略（DMA-014 覆盖）。
 7. callback 运行时通道已是 COMPLETE 或 ERROR，可以在 callback 里对本通道
    `DMA_START` 下一段；put 先把通道置为 RELEASING，之后的 start 被拒绝。
-   并发或重复 put 只 post 一次。task-context put 会等待 in-flight callback 退出再释放；
-   在中断（含 callback）上下文调用 put 触发 `DEBUGASSERT`，未开断言时直接返回，不改变
-   channel（这两点为实现行为，当前无测试覆盖）。
+   并发或重复 put 只 post 一次。task-context put 会等待 in-flight callback 退出再释放，
+   这是为多核或中断嵌套准备的，BL616CL 单核且不开中断嵌套，put 与 callback 不会同时
+   执行；在中断（含 callback）上下文调用 put 触发 `DEBUGASSERT`，未开断言时直接返回，
+   不改变 channel。
 8. DMA 不自动维护 client buffer cache。启动前由 client clean producer，DMA 写入前及
    CPU 读取前由 client invalidate consumer，并保证 partial cache line ownership。
 9. `DMA_START_CYCLIC(len, period_len)`：`len` 必须是 `period_len` 的整数倍，两者按
@@ -195,6 +198,9 @@ cyclic 传输用链表节点（LLI，每个 16 字节：源、目的、下一节
   TransferSize 冻结并与目的端实际写入一致；清 E 后再置 E 会丢数据；置 H 后冻结、
   清 H 后从原位继续。CxCONFIG bit21 LLI_MUTEX 的作用是让硬件停在下一个节点边界，
   adapter 不用它。
+- 中断频率：cyclic 每个 period 一次中断。mem2mem 全速运行时 period 太小会让中断占满
+  CPU，实测 64 字节 period 的环让看门狗复位，8 KB period 的 4 字节宽环也会让任务
+  长时间抢不到 CPU；外设方向由外设节拍限速，period 按允许的中断频率选。
 - 外设对应：I2C、UART TX、短 SPI 用 ≤4095 units 的 `DMA_START`；SPI 大块传输用长
   `DMA_START`；UART RX、ADC、I2S 用 `DMA_START_CYCLIC` 加 `DMA_RESIDUAL`。DMA 不支持
   `config.timeout`，UART RX 的空闲检测要用 UART 自己的接收超时中断。
@@ -243,10 +249,10 @@ Ai-M64P-32S-Kit 使用 `/dev/ttyUSB2`、2000000 baud。测试固件 `nuttx.bin` 
 DMA0 summary: passed=8 failed=0
 ```
 
-当前用例（DMA-001..007、DMA-009..013）只用公共 DMA API，覆盖 1/2/4-byte width、
+当前用例（DMA-001..007、DMA-009..014）只用公共 DMA API，覆盖 1/2/4-byte width、
 固定/递增 step、逐字节数据和越界保护区、4095/4096 units、无效请求原子性、八通道与
 共享 TC IRQ、NULL callback、cache alias、owner 等待和并发 put，以及长 one-shot、
-节点池、cyclic、pause/resume 和传输中 stop。逐项流程和关键数据直接记录在
+节点池、cyclic、pause/resume、传输中 stop 和回调里重启其它通道。逐项流程和关键数据直接记录在
 `apps/mcu_peripheral_tests/dma/README.md`。
 
 同一固件继续完成 GPIO、timer、oneshot、WDT 非复位、RTC 和系统存活回归，未出现
@@ -286,11 +292,23 @@ TX)` 后一直等待，地址经 addr2line 指向 `bl616cl_i2s_dma_setup`。外�
 宏之前两板都失败（6 段环位置偏 2 段）；只撤回这一修正时，4 段环在长窗口失败（应有
 1101 次回调，实得 77 次），说明长窗口能发现段数整除 1024 的环上的回绕错误。
 
+2026-10-23：新增 DMA-014（通道被前面的回调重启）。修复前同一固件上该用例失败，新
+传输被旧状态位提前结束，报告 16380 字节完成、实际只写了 1776 字节；修复后通过。
+DMA-011 的窗口改为“关中断 resume 紧接 pause、暂停后读位置”，早期版本在最快的环上
+会因读位置变慢而少算一圈，长时间关中断导致看门狗复位。最终固件两板各连跑五次
+`passed=13 failed=0 skipped=0`、全程无复位，AVE-V10 的 I2S 用例照常 PASS；0 节点临时
+配置为 `passed=8 failed=0 skipped=5`。
+
 ## 限制与后续入口
 
 - USB2 是命令和日志通道，不是 DMA 数据通道；数据、IRQ 和状态由本地断言确认。
-- error IRQ 路径没有测试覆盖；需要可重复的硬件总线错误触发方法后再补。
-- put 等待 in-flight callback 没有测试覆盖。
+- error IRQ 路径触发不到，没有测试覆盖。2026-10-23 在 Ai-M64P-32S-Kit 上用临时程序
+  试过：总线译码错误应答关闭（`bl616cl_bus.c` 启动时的产品设置）和打开两种情况下，
+  DMA 读 RAM 末尾之后和 `0x30000000`、读跨 RAM 末尾的两段、写 ROM（`0x90000000`）、
+  写 4 MB flash 之外的 XIP 窗口，全部正常完成，没有 DMA error，也没有总线错误中断。
+  剩下的途径是用 TZC 把一块区域设成 DMA 不可访问，涉及系统安全配置，未做。
+- put 等待 in-flight callback 的路径在单核、不嵌套中断的 BL616CL 上走不到，没有测试；
+  callback 里 put 由 `DEBUGASSERT` 拦截，也不做测试。
 - 长 one-shot、cyclic、pause/resume 和运行中 residual 只在 mem2mem 上实测；外设方向
   （DMA 按请求节拍搬运）由各 consumer 实测，I2S 改用 cyclic 时一并验证。
 - cyclic 运行中出现 error 的同时 pause/resume，读改写 CxCONFIG 可能把硬件刚关掉的
