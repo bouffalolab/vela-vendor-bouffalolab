@@ -209,7 +209,8 @@ SECTIONS
    * transmits from directly (collection modeled after the BL4 baseline
    * .wifibss section). The start is aligned down to the section
    * alignment, so the padding inside and the size do not depend on the
-   * address.
+   * address. Startup zeroes it like .bss: its objects have no
+   * initializers, and CONFIG_IOB_SECTION must start zeroed.
    */
 
   .wifibss ((ORIGIN(ram_wifi) + LENGTH(ram_wifi) - SIZEOF(.wifibss)) &
@@ -446,6 +447,8 @@ SECTIONS
     __mem_setz_sections = ABSOLUTE(.);
     LONG(ADDR(.bss));
     LONG(ADDR(.bss) + SIZEOF(.bss));
+    LONG(ADDR(.wifibss));
+    LONG(ADDR(.wifibss) + SIZEOF(.wifibss));
     LONG(0xffffffff);
     LONG(0xffffffff);
   } > flash
@@ -474,6 +477,8 @@ SECTIONS
          "BL616CL .data copy must be word aligned")
   ASSERT(((ADDR(.bss) | SIZEOF(.bss)) & 3) == 0,
          "BL616CL .bss clear must be word aligned")
+  ASSERT(((ADDR(.wifibss) | SIZEOF(.wifibss)) & 3) == 0,
+         "BL616CL .wifibss clear must be word aligned")
   ASSERT(((ADDR(.copy.table) | ADDR(.zero.table)) & 3) == 0,
          "BL616CL startup tables must be word aligned")
 

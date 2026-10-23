@@ -363,7 +363,7 @@ TX 零拷贝镜像中（EM 0、WRAM 128K；EM 32K 时起始地址为 `0x20ff8000
 
 XIP 代码段 `.text` 的起点对齐到 32 KiB（I-cache 大小），RAM 段的 flash 镜像变大或变小时，代码的 cache set 不再跟着移动。`.text` 开头按调用顺序排列 Wi-Fi 热函数，分为任务循环、TX、TX 确认、RX 四组，再接 NuttX 信号量、work queue 和定时器函数，共约 36 KB，让这些函数集中在少数 cache set 里，中间不夹冷代码。列表以 macsw 的 `macsw_cache_affinity.ld.in` 为起点：其中 147 个函数名只有 75 个在本构建的 LTO 输出中仍是独立函数；再加上 80 MHz tick 采样里同一路径上的任务循环、host port 和 glue 函数。LTO 会给局部函数加 `.lto_priv/.isra/.constprop` 后缀，所以每个名字都同时匹配 `.text.fn` 和 `.text.fn.*`。列表直接写在 `ld.script` 中，因为 NuttX CMake 预处理链接脚本时不跟踪被 include 的文件。效果见 12.9；组件更新后的检查和回归步骤见 [bl616cl-hot-code-layout.md](bl616cl-hot-code-layout.md)。
 
-`ram_wifi` 链接在 nocache 别名上，协议栈对 IOB 的读写都不经 cache；原生 SDK 的 lwIP 内存同样从这里分配。改为零拷贝前，`.wifibss` 为 `0x1ab30`，其中 45,408 字节是 wl80211 private 的 TX pool；IOB 池移出后系统堆增加约 58.7 KB。`.wifibss` 为 NOLOAD 且启动时不清零；`CONFIG_IOB_ALLOC` 关闭时 `iob_initialize()` 写入每个节点的链表指针、分配时重置长度与偏移，不依赖清零；打开时 `iob_initialize()` 还要把 `io_free` 置空（nuttx `c016d23b0d6`），否则 `iob_free()` 会调用残留的野指针。
+`ram_wifi` 链接在 nocache 别名上，协议栈对 IOB 的读写都不经 cache；原生 SDK 的 lwIP 内存同样从这里分配。改为零拷贝前，`.wifibss` 为 `0x1ab30`，其中 45,408 字节是 wl80211 private 的 TX pool；IOB 池移出后系统堆增加约 58.7 KB。`.wifibss` 为 NOLOAD，启动时与 `.bss` 一起清零：其中的对象都没有初值，NuttX 也要求 `CONFIG_IOB_SECTION` 所在段启动时为零，原生 SDK 同样清零。以前这里不清零，打开 `CONFIG_IOB_ALLOC` 后 `iob_free()` 曾调用池 IOB 里残留的 `io_free` 野指针；nuttx `c016d23b0d6` 让 `iob_initialize()` 把 `io_free` 置空，这个修改保留。
 
 wl80211 public/private 侧的配套修改如下，BL616CL 与 openvela 需要的排在前面：
 
