@@ -20,7 +20,9 @@
 
 add_subdirectory(src)
 
+# Warn when an input section is not placed by ld.script.
 target_link_options(nuttx PRIVATE -Wl,--build-id=none
+                    -Wl,--orphan-handling=warn
                     -Wl,-u,g_ai_m64p_kit_fw_header)
 
 get_filename_component(BOUFFALOLAB_VENDOR_DIR "${NUTTX_BOARD_ABS_DIR}/../../.."

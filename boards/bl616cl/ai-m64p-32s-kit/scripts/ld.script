@@ -187,6 +187,11 @@ SECTIONS
     *(.sdata2 .sdata2.*)
     *(.tcm_data*)
     *(.gnu.linkonce.d.*)
+    /* zblue device state. Its NuttX port finds devices through tables in
+     * code, so the state only has to be initialized like other data.
+     */
+
+    *(.z_devstate .z_devstate.*)
     . = ALIGN(4);
     _edata = ABSOLUTE(.);
   } > ram AT > flash
@@ -408,6 +413,9 @@ SECTIONS
     *(.rodata .rodata.*)
     *(.srodata .srodata.*)
     *(.gnu.linkonce.r.*)
+    /* zblue init entries, which its NuttX port lists in code */
+
+    *(.z_init_*)
     . = ALIGN(4);
     /* NuttX defines _etext as the end of text plus rodata. */
 
@@ -461,6 +469,12 @@ SECTIONS
     __rom_end__ = ABSOLUTE(.);
   } > flash
 
+  /* ld assigns input relocation sections here; the static image must not
+   * need any of them at run time (see the ASSERT below).
+   */
+
+  .rela.dyn : { *(.rela.*) }
+
   /* Startup copies and clears complete 32-bit words. */
 
   ASSERT(((ADDR(.nocache_data) | LOADADDR(.nocache_data) |
@@ -509,6 +523,7 @@ SECTIONS
   ASSERT(ADDR(.wifibss) + SIZEOF(.wifibss) <= __ram_wifi_end,
          "BL616CL .wifibss overlaps EM")
   ASSERT((__StackTop & 15) == 0, "BL616CL idle stack must be 16-byte aligned")
+  ASSERT(SIZEOF(.rela.dyn) == 0, "BL616CL image needs dynamic relocations")
 
   /DISCARD/ :
   {
@@ -517,8 +532,26 @@ SECTIONS
   }
 
   .comment 0 : { *(.comment) }
+
+  /* DWARF 2-5 sections, as in the ld default script */
+
+  .debug_aranges 0 : { *(.debug_aranges) }
+  .debug_pubnames 0 : { *(.debug_pubnames) }
+  .debug_info 0 : { *(.debug_info .gnu.linkonce.wi.*) }
   .debug_abbrev 0 : { *(.debug_abbrev) }
-  .debug_info 0 : { *(.debug_info) }
-  .debug_line 0 : { *(.debug_line) }
+  .debug_line 0 : { *(.debug_line .debug_line.* .debug_line_end) }
+  .debug_frame 0 : { *(.debug_frame) }
   .debug_str 0 : { *(.debug_str) }
+  .debug_loc 0 : { *(.debug_loc) }
+  .debug_macinfo 0 : { *(.debug_macinfo) }
+  .debug_pubtypes 0 : { *(.debug_pubtypes) }
+  .debug_ranges 0 : { *(.debug_ranges) }
+  .debug_addr 0 : { *(.debug_addr) }
+  .debug_line_str 0 : { *(.debug_line_str) }
+  .debug_loclists 0 : { *(.debug_loclists) }
+  .debug_macro 0 : { *(.debug_macro) }
+  .debug_names 0 : { *(.debug_names) }
+  .debug_rnglists 0 : { *(.debug_rnglists) }
+  .debug_str_offsets 0 : { *(.debug_str_offsets) }
+  .debug_sup 0 : { *(.debug_sup) }
 }
