@@ -30,8 +30,6 @@
   时，代码所在的 cache set 不跟着移动。
 - 列表按名字匹配输入段。LTO 会给局部函数加 `.lto_priv`、`.isra`、
   `.constprop` 后缀，所以每行同时写 `.text.fn` 和 `.text.fn.*`。
-- 列表直接写在 `ld.script` 里，不用 `INCLUDE`：NuttX CMake 预处理链接脚本
-  时不跟踪被包含的文件，改了也不会重新链接。
 - 起点来源是 macsw 的 `macsw_cache_affinity.ld.in`，只保留本构建 LTO 后仍是
   独立函数的名字，再加上 tick 采样在同一路径上看到的任务循环、host port 和
   glue 函数；最后一组是同一路径上的 NuttX 信号量、work queue 和定时器函数。
@@ -162,8 +160,6 @@ vendor/bouffalolab/tools/bl616cl/perf/layout_ab.sh -b <out>/ab
   看多个位置，不能只比一次。
 - 以前用开关 NSH `mw` 命令挪动代码，现在不再有效：位移会被 256 字节对齐的
   `up_saveusercontext` 吸收。
-- 改了链接脚本用到的 CONFIG（如 `BL616CL_EM_*`）后必须
-  `vela clean`，因为 `ld.script.tmp` 只依赖脚本源文件。改列表本身不需要。
 - I-cache 为 32 KiB（见 [bl616cl-cache.md](bl616cl-cache.md)），相联度没有
   确认。对齐按 cache 总大小取，与相联度无关。
 
