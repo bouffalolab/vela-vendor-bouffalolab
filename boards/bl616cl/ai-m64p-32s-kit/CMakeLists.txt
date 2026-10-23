@@ -20,9 +20,13 @@
 
 add_subdirectory(src)
 
-# Warn when an input section is not placed by ld.script.
+# Warn when an input section is not placed by ld.script. RAM code shares
+# its load image with .data, and the image is flashed as a BIN on a core
+# without an MMU, so an RWX segment is expected; -n keeps the ELF headers
+# out of the load segments.
 target_link_options(nuttx PRIVATE -Wl,--build-id=none
-                    -Wl,--orphan-handling=warn
+                    -Wl,--orphan-handling=warn -Wl,-n
+                    -Wl,--no-warn-rwx-segments
                     -Wl,-u,g_ai_m64p_kit_fw_header)
 
 get_filename_component(BOUFFALOLAB_VENDOR_DIR "${NUTTX_BOARD_ABS_DIR}/../../.."
