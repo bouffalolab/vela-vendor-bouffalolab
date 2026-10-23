@@ -31,7 +31,7 @@ lower-half，接 NuttX 自带 ES8388 驱动，注册 `/dev/audio/pcm0`（播放�
 | MCLK 输出 | 纳入，已实测 | 经 CLKOUT 输出 I2S 参考时钟 |
 | slave、TDM、单声道 | 不纳入 | ES8388 驱动只需要 master 双声道 |
 | `timeout` 参数 | 不实现 | 与 ESP32 lower-half 相同；buffer 一定会通过 DMA 完成或出错返回 |
-| FIFO 欠载/溢出检测 | 不纳入 | 不使能 I2S 中断，没有错误上报 |
+| FIFO 欠载/溢出检测 | 不纳入 | 不使能 I2S 中断，没有错误上报；环形方式下 period 中断晚到超过余量时打印一次警告 |
 
 ## 时钟与引脚
 
@@ -87,23 +87,56 @@ LHAL 没有 Philips I2S 模式。left-justified 在 FS 为高时传左声道，P
 
 ## 缓冲与 DMA 流程
 
+两种传输方式由 `BL616CL_I2S_DMA_RING` 选择，默认用环形方式。两者共同的部分：
+
 - 初始化时申请并配置两个 DMA0 通道（默认 TX CH0、RX CH1），之后一直持有，停流也
   不归还；通道号在 `DMA0 channel assignment` 菜单里设置。
-- `send()` 和 `receive()` 引用 buffer，播放先 clean D-cache，录音先 invalidate，然后
-  排队。方向空闲时清 FIFO、连上 DMA 请求，启动第一段后再使能该方向和 master。
-- 播放接受 0 字节 buffer（包括 `AUDIO_APB_FINAL`），按队列顺序完成而不启动 DMA；
-  不足一个立体声帧的尾部字节丢弃。空流不打开数据请求。
-- 一次 DMA 最多 4095 个 32 bit word，大 buffer 分段传。DMA 完成回调在中断里立即启动
-  下一段或下一个 buffer，FIFO（16 word）在 48 kHz 下约 333 µs，中断内续传来得及。
-- 完成的 buffer 交给 HPWORK：录音 buffer 再 invalidate 一次并填 `nbytes`，先归还
-  驱动内部的 buffer 槽位，再调用 client 回调、`apb_free()`。其余槽位都被占用时，
-  回调里送下一个 buffer 也能用上刚归还的槽位，不会卡住。回调和释放都在任务上下文。
-- 两个队列都空时，worker 关掉该方向和它的 DMA 请求，另一方向也停了才关 master。
+- `send()` 和 `receive()` 引用 buffer 后排队。方向空闲时清 FIFO、连上 DMA 请求、
+  启动 DMA，最后才使能该方向和 master，所以 BCLK 和 FS 只在有流时输出，ES8388 依赖
+  这一点（见驱动修复第 4 条）。
+- 播放接受 0 字节 buffer（包括 `AUDIO_APB_FINAL`），按队列顺序完成；方向空闲时直接
+  完成，不启动 DMA。不足一个立体声帧的尾部字节丢弃。
+- 完成的 buffer 交给 HPWORK：录音 buffer 填 `nbytes`，先归还驱动内部的 buffer 槽位，
+  再调用 client 回调、`apb_free()`。其余槽位都被占用时，回调里送下一个 buffer 也能
+  用上刚归还的槽位，不会卡住。回调和释放都在任务上下文。
+- 方向没有事可做时，worker 关掉该方向和它的 DMA 请求，另一方向也停了才关 master。
   这些状态都在自旋锁里改，worker 不拿互斥锁，不会被持锁的 `send()`/`receive()` 挡住。
-  BCLK 和 FS 只在有流时输出，ES8388 依赖这一点（见驱动修复第 4 条）。
-- 录音 buffer 只用整 cache line，长度向下取整到 cache line 和帧长，避免 CPU 与 DMA
-  共享 cache line。
+- 录音 buffer 长度向下取整到 cache line 和帧长，地址要字对齐；两种方式用同一套约束。
 - 有流在跑时改 MCLK 或采样率，返回 `-EBUSY`（MCLK）或 0（采样率）。
+
+### 环形方式（默认）
+
+- 每个方向一个固定的环，放在 non-cacheable RAM：`BL616CL_I2S_RING_PERIODS` 个
+  period（默认 4），每个 `BL616CL_I2S_RING_PERIOD_BYTES` 字节（默认 1024，即 256 帧，
+  48 kHz 下 5.33 ms）。默认两个环共 8 KB 静态 RAM，堆相应变小。
+- 流开始时用 `DMA_START_CYCLIC` 让 DMA 在环上一直转，每个 period 中断一次。运行中的
+  方向每个 period 占一个 DMA0 LLI 节点（两个方向默认共 8 个，节点池默认 16 个），
+  节点池小于两倍 period 数时编译失败。
+- period 中断在 buffer 与环之间拷贝数据：buffer 一侧走 cache，环一侧走
+  non-cacheable 别名，所以不做 cache 维护。
+- 播放：方向空闲时先把整个环填满（数据不够补静音），再启动 DMA。每个 period 中断把
+  刚播完的 period 重新填上队列里的数据，队列空时填静音。后面的 buffer 开始进环时，
+  前一个 buffer 就完成；最后一个 buffer 等播完才完成（最多晚一个 period），所以 FINAL
+  完成时声音已经放完。客户端在当前 buffer 拷完之前送来下一个就不会有空隙，余量与
+  逐段方式相同。
+- 录音：period 中断把刚收完的 period 拷进排队的 buffer，buffer 满了就完成；没有
+  buffer 时这段样本丢弃。
+- 中断余量：period 中断可以晚到其余 period 的总长（默认 3 个 period，48 kHz 下约
+  16 ms，11.025 kHz 下约 70 ms）。晚到超过余量时 DMA 已经回到要补或要取的 period，
+  播放会重放旧数据、录音会丢样本；驱动用 `DMA_RESIDUAL` 检查，每个流第一次出现时打印
+  `I2S0 TX: period interrupt late, DMA lapped the ring`（录音为 `RX`）。
+- 欠载（播放数据没跟上）时输出静音；之后送来的数据要等环里已经排好的静音播完，最多
+  晚一个环的长度（默认 48 kHz 下约 21 ms）才出声。流开始时只有第一个 buffer，它比环
+  短时开头也会有一段静音。停流时环里只剩静音，不会重放旧数据。
+
+### 逐段方式（关掉 `BL616CL_I2S_DMA_RING`）
+
+- `send()` 先 clean 播放 buffer 的 D-cache，`receive()` 先 invalidate 录音 buffer，
+  录音完成后再 invalidate 一次；录音 buffer 只用整 cache line，避免 CPU 与 DMA 共享
+  cache line。
+- 一次 DMA 最多 4095 个 32 bit word，大 buffer 分段传。DMA 完成回调在中断里立即启动
+  下一段或下一个 buffer；FIFO（16 word）在 48 kHz 下只能撑约 333 µs，中断要在这段
+  时间内到达。不占额外 RAM，也不拷贝。
 
 ## Kconfig 与裁剪
 
@@ -113,6 +146,9 @@ LHAL 没有 Philips I2S 模式。left-justified 在 FS 为高时传左声道，P
 | `CONFIG_BL616CL_I2S_TX_DMA_CHANNEL` | 0 | 播放用的 DMA0 通道，在 `DMA0 channel assignment` 菜单里 |
 | `CONFIG_BL616CL_I2S_RX_DMA_CHANNEL` | 1 | 录音用的 DMA0 通道，同上；与其它 SDK 驱动重复时编译失败 |
 | `CONFIG_BL616CL_I2S_NBUFFERS` | 4 | 驱动同时持有的 buffer 数，两个方向共用 |
+| `CONFIG_BL616CL_I2S_DMA_RING` | y | 环形方式（见“缓冲与 DMA 流程”）；关掉时用逐段方式 |
+| `CONFIG_BL616CL_I2S_RING_PERIODS` | 4 | 每个环的 period 数，2..16 |
+| `CONFIG_BL616CL_I2S_RING_PERIOD_BYTES` | 1024 | 每个 period 的字节数，4 的倍数，64..16380 |
 | `CONFIG_BL616CL_AVE_V10_AUDIO` | n | AVE-V10 板级注册 `pcm0`、`pcm_in0`；依赖 `AUDIO_ES8388`、`BL616CL_DMA0`，选择 I2C0 和 `BL616CL_I2S` |
 | `CONFIG_ES8388_OUTPUT_CHANNEL_LINE2` | — | AVE-V10 `nsh-peripherals` 使用：只开 LOUT2/ROUT2，ROUT2 进功放；其它选择的效果见板级 README |
 | `CONFIG_ES8388_INPUT_CHANNEL_LINE2` | — | AVE-V10 `nsh-peripherals` 使用：麦克风在 LIN2；其它选择的效果见板级 README |
@@ -258,6 +294,33 @@ Wi-Fi 吞吐（Mbps，单次）：
 iperf 停住：UDP RX 时每段约停 10 s，整段低约 37%；采集过程中 UDP RX 约 42 Mbps，与
 无音频时相近。这是测试程序的开销，不是音频通路本身。
 
+2026-10-23 环形方式（默认）的验证，固件为 AVE-V10 `nsh-peripherals` 加打开 `mw`
+的临时配置：
+
+- 功能：`mcu_i2s_test all` 在环形和逐段两种方式下都 PASS，流内 `fifo_config_0` 只有
+  0x101、0x102。
+- 小 buffer：临时把 ES8388 buffer 改成 1024 字节。早先的实现让所有 buffer 都等播完才
+  完成，48 kHz 播放实测 19230 帧/秒（每 5 个 period 只有 2 个有声），判 FAIL；改成
+  “后面的 buffer 进环时前一个完成”之后为 48078 帧/秒，PASS。
+- 中断余量：临时在 DMA 回调里忙等。逐段方式每次回调忙等 500 µs，流内读到 TX 欠载
+  （0x121）和 RX 溢出（0x142）锁存位，而 `mcu_i2s_test` 仍判 PASS，所以这项靠锁存位
+  判定；环形方式忙等 500 µs 没有错误位；每 64 次回调忙等 20 ms（超过 3 个 period 的
+  余量）时 TX、RX 各打印一次追圈警告，FIFO 仍无错误位。
+- 压力：8 个采样率各 32 次放音加录音，另有 22050 Hz 放音后录音 128 次。除下面“限制”里的
+  录音错位（分别 1 次、2 次）外全部 PASS，流内无错误位。改动前的版本（逐段方式）22050 Hz
+  录音 512 次错位 8 次，错位率没有变化。
+- 停流：最后一个 buffer 播完后约 20 ms 才停 DMA，各采样率相同。时间花在 ES8388 的完成
+  回调里（流结束时它在这里复位 codec），这段时间环里只有静音。
+- Wi-Fi 共存：方法同上文，环形与逐段两种镜像在同一时段交替各测两轮，两轮相差 1% 以内；
+  音频全部 PASS、流内无错误位。环形方式的 DMA0 中断次数是逐段方式的 8 倍（48 kHz 放音
+  每秒约 188 次），最长 61–97 µs（逐段 79–96 µs）。相对各自无音频的吞吐，放音时两种
+  方式的降幅相近：UDP RX −16%/−21%，TCP RX 都是 −7%，UDP TX −9%/−5%。两个镜像在无
+  音频时 UDP 吞吐就不同（RX 28.0/34.6、TX 43.7/41.2 Mbps），是代码位置的差别。
+- BLE 共存：方法同上文的 8 组对测（流内读锁存位），全部 PASS，没有错误位和追圈警告；
+  DMA0 中断最长 54–73 µs，BLE 中断最长 128–362 µs。
+- 资源：两个环共 8 KB，`.nocache_noinit` 从 0x9e0 增到 0x29e0 字节，堆少 7996 字节；
+  两个方向同时运行时占 8 个 LLI 节点。
+
 ## 限制
 
 - 44.1/22.05/11.025 kHz 快约 1.23%（音调偏高约 21 音分），是没有音频 PLL 的硬限制。
@@ -269,14 +332,23 @@ iperf 停住：UDP RX 时每段约停 10 s，整段低约 37%；采集过程中 
 - 8000 Hz 不在 ES8388 驱动的 MCLK 表里，驱动不会设置 MCLK，不支持。
 - 播放方向没有数据错误的自动检测（喇叭输出无法回采），codec 时序问题是在录音方向发现
   和验证的。
+- 录音时约 1–2% 的流整条数据错位：两个声道都错 2 bit（偶尔 4 bit），读到的数值约为实际的
+  4 倍（16 倍），超出 16 bit 的部分回绕。各采样率都出现过，与是否先放音、I2C 方式、环形或
+  逐段方式、codec 状态机放开的时机、接收使能的先后都无关，改动 DMA 方式之前已存在，原因
+  未查清（2026-10-23/24 实测）。`mcu_i2s_test` 的尖峰判定只在底噪高的采样率能检出这种
+  错误，32/44.1/48 kHz 会漏判；右声道（参考端）RMS 比正常值高约 4 倍可以作为判据。
 - `pcm0` 与 `pcm_in0` 不能同时用。
 - ES8388 驱动用轮询 I2C 写 codec。开流的配置在调用 ioctl 的线程里执行；流结束时的
   复位在优先级 252 的工作线程里执行，连续占用 CPU 约 4.4 ms，期间 BLE controller
   线程也要等（见实板验证）。
-- 没有欠载/溢出检测；播放数据供不上时 FIFO 欠载，没有错误上报。
-- 下一段 DMA 由完成中断启动，48 kHz 下 FIFO 只能撑约 333 µs。中断不嵌套，BLE 中断实测
-  最长 337 µs，与这段余量相当，碰上时可能欠载或溢出；对测中没有出现。Wi-Fi 中断实测
-  最长 117 µs，与音频同时运行时也没有出现。
+- 没有 FIFO 欠载/溢出检测，不上报错误。环形方式下播放数据供不上时输出静音，period
+  中断晚到超过余量时只打印一次警告；逐段方式下 FIFO 欠载时输出什么没有确认。
+- 逐段方式的下一段 DMA 由完成中断启动，48 kHz 下 FIFO 只能撑约 333 µs。中断不嵌套，
+  BLE 中断实测最长 337–362 µs，超过这段余量，碰上时会欠载或溢出（对测中没有出现）；
+  Wi-Fi 中断实测最长 117 µs。默认的环形方式把余量放大到约 16 ms（48 kHz），代价是
+  8 KB 静态 RAM，以及每个 period 一次中断和一次拷贝。
+- 环形方式下，比环短的 buffer 会在流开头留下静音；播放中途数据供不上时，之后的数据
+  最多晚一个环的长度才出声（见“缓冲与 DMA 流程”）。
 - 只支持 16 bit 采样。32 bit 不开 LR merge 时录音偶发整段左右对调（2026-10-20：连续 40
   次录音 3 次；每次开流前软复位 I2S 后 40 次 35 次），起始 slot 由 I2S 内部状态决定，原因
   未查明；播放方向是否同样对调未验证。找到可靠的对齐方法前不开放 32 bit。

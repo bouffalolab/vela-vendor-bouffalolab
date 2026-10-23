@@ -29,11 +29,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
+#include <syslog.h>
 #include <sys/param.h>
 
 #include <nuttx/audio/audio.h>
 #include <nuttx/audio/i2s.h>
 #include <nuttx/cache.h>
+#include <nuttx/compiler.h>
 #include <nuttx/dma/dma.h>
 #include <nuttx/mutex.h>
 #include <nuttx/queue.h>
@@ -90,6 +92,25 @@
 #define BL616CL_I2S_DATA_WIDTH      16
 #define BL616CL_I2S_FRAME_BYTES     BL616CL_I2S_DMA_WIDTH
 
+/* With the ring, each direction runs one cyclic DMA transfer over a fixed
+ * buffer in non-cacheable RAM; a period of at most 4095 words takes one
+ * LLI node.
+ */
+
+#ifdef CONFIG_BL616CL_I2S_DMA_RING
+#  define BL616CL_I2S_PERIOD_BYTES  CONFIG_BL616CL_I2S_RING_PERIOD_BYTES
+#  define BL616CL_I2S_RING_BYTES \
+     (CONFIG_BL616CL_I2S_RING_PERIODS * BL616CL_I2S_PERIOD_BYTES)
+
+#  if BL616CL_I2S_PERIOD_BYTES % BL616CL_I2S_FRAME_BYTES != 0
+#    error "BL616CL_I2S_RING_PERIOD_BYTES must be a multiple of 4"
+#  endif
+
+#  if CONFIG_BL616CL_DMA0_LLI_NODES < 2 * CONFIG_BL616CL_I2S_RING_PERIODS
+#    error "BL616CL_DMA0_LLI_NODES must be at least 2 x BL616CL_I2S_RING_PERIODS"
+#  endif
+#endif
+
 #define BL616CL_I2S_GPIO_CFG \
   (GPIO_FUNC_I2S | GPIO_ALTERNATE | GPIO_PULLUP | GPIO_SMT_EN | GPIO_DRV_1)
 #define BL616CL_I2S_MCLK_GPIO_CFG \
@@ -108,9 +129,12 @@ struct bl616cl_i2s_buffer_s
   struct ap_buffer_s *apb;
   i2s_callback_t callback;
   void *arg;
-  uintptr_t addr;           /* Next byte to hand to the DMA */
-  size_t remaining;         /* Bytes not yet handed to the DMA */
+  uintptr_t addr;           /* Next byte to hand to the DMA or ring */
+  size_t remaining;         /* Bytes not yet handed to the DMA or ring */
   size_t nbytes;            /* Bytes in the transfer */
+#ifdef CONFIG_BL616CL_I2S_DMA_RING
+  uint32_t end;             /* TX: stream position after the last byte */
+#endif
   int result;
 };
 
@@ -120,7 +144,15 @@ struct bl616cl_i2s_transport_s
 {
   struct dma_chan_s *chan;  /* Taken at initialization, never released */
   sq_queue_t pend;          /* Queued, not yet started */
+#ifdef CONFIG_BL616CL_I2S_DMA_RING
+  sq_queue_t flight;        /* TX: last buffer, in the ring, not played */
+  uint8_t *ring;            /* Cyclic DMA buffer, non-cacheable */
+  uint32_t written;         /* TX: stream bytes put into the ring */
+  uint32_t played;          /* TX: stream bytes the DMA has finished */
+  bool lapped;              /* Late period reported for this stream */
+#else
   struct bl616cl_i2s_buffer_s *act; /* Being moved by the DMA */
+#endif
   sq_queue_t done;          /* Finished, callback pending */
   dma_callback_t dma_callback;
   uintptr_t fifo;           /* I2S FIFO data register */
@@ -190,6 +222,13 @@ static const struct i2s_ops_s g_bl616cl_i2s_ops =
   .i2s_setmclkfrequency = bl616cl_i2s_setmclkfrequency,
 };
 
+#ifdef CONFIG_BL616CL_I2S_DMA_RING
+static uint8_t g_bl616cl_i2s_txring[BL616CL_I2S_RING_BYTES]
+  locate_data(".nocache_noinit_ram") aligned_data(32);
+static uint8_t g_bl616cl_i2s_rxring[BL616CL_I2S_RING_BYTES]
+  locate_data(".nocache_noinit_ram") aligned_data(32);
+#endif
+
 static struct bl616cl_i2s_s g_bl616cl_i2s0 =
 {
   .dev =
@@ -206,6 +245,9 @@ static struct bl616cl_i2s_s g_bl616cl_i2s0 =
     .drq = DMA_REQUEST_I2S_TX,
     .enable = I2S_ARG_CMD_TX,
     .tx = true,
+#ifdef CONFIG_BL616CL_I2S_DMA_RING
+    .ring = g_bl616cl_i2s_txring,
+#endif
   },
   .rx =
   {
@@ -215,6 +257,9 @@ static struct bl616cl_i2s_s g_bl616cl_i2s0 =
     .drq = DMA_REQUEST_I2S_RX,
     .enable = I2S_ARG_CMD_RX,
     .tx = false,
+#ifdef CONFIG_BL616CL_I2S_DMA_RING
+    .ring = g_bl616cl_i2s_rxring,
+#endif
   },
 };
 
@@ -306,24 +351,68 @@ static void bl616cl_i2s_configure(struct bl616cl_i2s_s *priv)
  *   xpt - Transport (direction).
  *
  * Returned Value:
- *   True if a buffer is pending or active.
+ *   True if a buffer is pending, active or, with the ring, still playing.
  *
  ****************************************************************************/
 
 static bool bl616cl_i2s_busy(const struct bl616cl_i2s_transport_s *xpt)
 {
+#ifdef CONFIG_BL616CL_I2S_DMA_RING
+  return !sq_empty(&xpt->pend) || !sq_empty(&xpt->flight);
+#else
   return xpt->act != NULL || !sq_empty(&xpt->pend);
+#endif
+}
+
+/****************************************************************************
+ * Name: bl616cl_i2s_disable
+ *
+ * Description:
+ *   Disable a running direction and its DMA request, and stop the bit
+ *   clocks when the other direction is not running either. With the ring,
+ *   also stop its cyclic DMA transfer. The DMA channel stays with the
+ *   direction. Must be called with the spinlock held.
+ *
+ * Input Parameters:
+ *   priv - Driver state.
+ *   xpt - Transport (direction).
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+static void bl616cl_i2s_disable(struct bl616cl_i2s_s *priv,
+                                struct bl616cl_i2s_transport_s *xpt)
+{
+  struct bl616cl_i2s_transport_s *other;
+  uint32_t disable;
+
+  other = xpt->tx ? &priv->rx : &priv->tx;
+  disable = xpt->enable | (other->running ? 0 : I2S_ARG_CMD_MASTER);
+  bflb_i2s_feature_control(priv->i2s, I2S_CMD_DISABLE_CONTROL, disable);
+  if (xpt->tx)
+    {
+      bflb_i2s_link_txdma(priv->i2s, false);
+    }
+  else
+    {
+      bflb_i2s_link_rxdma(priv->i2s, false);
+    }
+
+#ifdef CONFIG_BL616CL_I2S_DMA_RING
+  DMA_STOP(xpt->chan);
+#endif
+  xpt->running = false;
 }
 
 /****************************************************************************
  * Name: bl616cl_i2s_idle
  *
  * Description:
- *   If a direction has no buffer pending or active, disable it and its DMA
- *   request, and stop the bit clocks when the other direction is not
- *   running either. The DMA channel stays with the direction. Everything
- *   is done under the spinlock, so the worker may call it without the
- *   mutex.
+ *   If a direction has nothing left to do (see bl616cl_i2s_busy()),
+ *   disable it. Everything is done under the spinlock, so the worker may
+ *   call it without the mutex.
  *
  * Input Parameters:
  *   priv - Driver state.
@@ -337,34 +426,248 @@ static bool bl616cl_i2s_busy(const struct bl616cl_i2s_transport_s *xpt)
 static void bl616cl_i2s_idle(struct bl616cl_i2s_s *priv,
                              struct bl616cl_i2s_transport_s *xpt)
 {
-  struct bl616cl_i2s_transport_s *other;
   irqstate_t flags;
-  uint32_t disable;
-  bool idle;
-
-  other = xpt->tx ? &priv->rx : &priv->tx;
 
   flags = spin_lock_irqsave(&priv->spinlock);
-  idle = !bl616cl_i2s_busy(xpt);
-  if (idle && xpt->running)
+  if (!bl616cl_i2s_busy(xpt) && xpt->running)
     {
-      disable = xpt->enable | (other->running ? 0 : I2S_ARG_CMD_MASTER);
-      bflb_i2s_feature_control(priv->i2s, I2S_CMD_DISABLE_CONTROL,
-                               disable);
-      if (xpt->tx)
-        {
-          bflb_i2s_link_txdma(priv->i2s, false);
-        }
-      else
-        {
-          bflb_i2s_link_rxdma(priv->i2s, false);
-        }
-
-      xpt->running = false;
+      bl616cl_i2s_disable(priv, xpt);
     }
 
   spin_unlock_irqrestore(&priv->spinlock, flags);
 }
+
+#ifdef CONFIG_BL616CL_I2S_DMA_RING
+
+/****************************************************************************
+ * Name: bl616cl_i2s_fill
+ *
+ * Description:
+ *   Fill one TX period of the ring from the pending buffers, in order, and
+ *   pad the rest with silence. A buffer whose data is all in the ring moves
+ *   to the flight queue with its end position; an empty buffer gets the
+ *   position where it is reached, so it still finishes in queue order. It
+ *   finishes as soon as the next buffer goes into the ring, so the client
+ *   can queue more while the ring still plays it; the last buffer waits
+ *   until it has been played, so a stream ends after its sound. Must be
+ *   called with the spinlock held, or with the mutex held while TX is not
+ *   running.
+ *
+ * Input Parameters:
+ *   xpt - TX transport.
+ *   period - First byte of the period in the ring.
+ *
+ * Returned Value:
+ *   True if a buffer was moved to the done queue.
+ *
+ ****************************************************************************/
+
+static bool bl616cl_i2s_fill(struct bl616cl_i2s_transport_s *xpt,
+                             uint8_t *period)
+{
+  struct bl616cl_i2s_buffer_s *bfc;
+  struct bl616cl_i2s_buffer_s *prev;
+  size_t space = BL616CL_I2S_PERIOD_BYTES;
+  size_t chunk;
+  bool done = false;
+
+  while ((bfc = (struct bl616cl_i2s_buffer_s *)sq_peek(&xpt->pend)) != NULL)
+    {
+      while ((prev = (struct bl616cl_i2s_buffer_s *)
+                     sq_remfirst(&xpt->flight)) != NULL)
+        {
+          sq_addlast(&prev->entry, &xpt->done);
+          done = true;
+        }
+
+      chunk = MIN(bfc->remaining, space);
+      memcpy(period, (const void *)bfc->addr, chunk);
+      period += chunk;
+      space -= chunk;
+      bfc->addr += chunk;
+      bfc->remaining -= chunk;
+      xpt->written += chunk;
+      if (bfc->remaining > 0)
+        {
+          break;
+        }
+
+      bfc->end = xpt->written;
+      sq_remfirst(&xpt->pend);
+      sq_addlast(&bfc->entry, &xpt->flight);
+    }
+
+  memset(period, 0, space);
+  xpt->written += space;
+  return done;
+}
+
+/****************************************************************************
+ * Name: bl616cl_i2s_fail
+ *
+ * Description:
+ *   Finish all queued buffers of one direction with an error, in order.
+ *   Must be called with the spinlock held.
+ *
+ * Input Parameters:
+ *   xpt - Transport (direction).
+ *   result - Negated errno value for the buffers.
+ *
+ * Returned Value:
+ *   True if a buffer was moved to the done queue.
+ *
+ ****************************************************************************/
+
+static bool bl616cl_i2s_fail(struct bl616cl_i2s_transport_s *xpt,
+                             int result)
+{
+  struct bl616cl_i2s_buffer_s *bfc;
+  bool done = false;
+
+  while ((bfc = (struct bl616cl_i2s_buffer_s *)
+                sq_remfirst(&xpt->flight)) != NULL ||
+         (bfc = (struct bl616cl_i2s_buffer_s *)
+                sq_remfirst(&xpt->pend)) != NULL)
+    {
+      bfc->result = result;
+      sq_addlast(&bfc->entry, &xpt->done);
+      done = true;
+    }
+
+  return done;
+}
+
+/****************************************************************************
+ * Name: bl616cl_i2s_lap
+ *
+ * Description:
+ *   Warn once per stream when the DMA is already back in the period that
+ *   the interrupt is about to refill (TX) or copy out (RX): the interrupt
+ *   came later than the other periods of the ring last, and TX replayed
+ *   old samples or RX lost some.
+ *
+ * Input Parameters:
+ *   xpt - Transport (direction).
+ *   offset - Ring offset of the period.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+static void bl616cl_i2s_lap(struct bl616cl_i2s_transport_s *xpt,
+                            size_t offset)
+{
+  size_t position;
+
+  if (xpt->lapped)
+    {
+      return;
+    }
+
+  position = (BL616CL_I2S_RING_BYTES - DMA_RESIDUAL(xpt->chan)) %
+             BL616CL_I2S_RING_BYTES;
+  if (position - offset < BL616CL_I2S_PERIOD_BYTES)
+    {
+      xpt->lapped = true;
+      syslog(LOG_WARNING, "I2S0 %s: period interrupt late, DMA lapped "
+             "the ring\n", xpt->tx ? "TX" : "RX");
+    }
+}
+
+/****************************************************************************
+ * Name: bl616cl_i2s_dma_done
+ *
+ * Description:
+ *   Handle a finished DMA period of one direction (interrupt context).
+ *   TX finishes the last buffer once it is played and refills the period
+ *   (see bl616cl_i2s_fill()); RX
+ *   copies the period into the pending buffers, finishes the full ones and
+ *   drops samples no buffer is queued for. On a DMA error all queued
+ *   buffers finish with the error and the direction is disabled. The
+ *   worker is scheduled for finished buffers.
+ *
+ * Input Parameters:
+ *   priv - Driver state.
+ *   xpt - Transport (direction).
+ *   len - Ring offset at the end of the period (0 after the last one), or
+ *         a negated errno value.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+static void bl616cl_i2s_dma_done(struct bl616cl_i2s_s *priv,
+                                 struct bl616cl_i2s_transport_s *xpt,
+                                 ssize_t len)
+{
+  struct bl616cl_i2s_buffer_s *bfc;
+  irqstate_t flags;
+  uint8_t *period;
+  size_t offset;
+  size_t chunk;
+  size_t left;
+  bool done = false;
+
+  flags = spin_lock_irqsave(&priv->spinlock);
+  DEBUGASSERT(xpt->running);
+  if (len < 0)
+    {
+      done = bl616cl_i2s_fail(xpt, len);
+      bl616cl_i2s_disable(priv, xpt);
+    }
+  else
+    {
+      offset = (len == 0 ? BL616CL_I2S_RING_BYTES : len) -
+               BL616CL_I2S_PERIOD_BYTES;
+      period = xpt->ring + offset;
+      bl616cl_i2s_lap(xpt, offset);
+      if (xpt->tx)
+        {
+          xpt->played += BL616CL_I2S_PERIOD_BYTES;
+          while ((bfc = (struct bl616cl_i2s_buffer_s *)
+                        sq_peek(&xpt->flight)) != NULL &&
+                 (int32_t)(xpt->played - bfc->end) >= 0)
+            {
+              sq_remfirst(&xpt->flight);
+              sq_addlast(&bfc->entry, &xpt->done);
+              done = true;
+            }
+
+          done |= bl616cl_i2s_fill(xpt, period);
+        }
+      else
+        {
+          left = BL616CL_I2S_PERIOD_BYTES;
+          while (left > 0 && (bfc = (struct bl616cl_i2s_buffer_s *)
+                                    sq_peek(&xpt->pend)) != NULL)
+            {
+              chunk = MIN(bfc->remaining, left);
+              memcpy((void *)bfc->addr, period, chunk);
+              period += chunk;
+              left -= chunk;
+              bfc->addr += chunk;
+              bfc->remaining -= chunk;
+              if (bfc->remaining == 0)
+                {
+                  sq_remfirst(&xpt->pend);
+                  sq_addlast(&bfc->entry, &xpt->done);
+                  done = true;
+                }
+            }
+        }
+    }
+
+  spin_unlock_irqrestore(&priv->spinlock, flags);
+
+  if (done && work_available(&priv->work))
+    {
+      work_queue(HPWORK, &priv->work, bl616cl_i2s_worker, priv, 0);
+    }
+}
+
+#else /* CONFIG_BL616CL_I2S_DMA_RING */
 
 /****************************************************************************
  * Name: bl616cl_i2s_next
@@ -490,16 +793,18 @@ static void bl616cl_i2s_dma_done(struct bl616cl_i2s_s *priv,
     }
 }
 
+#endif /* CONFIG_BL616CL_I2S_DMA_RING */
+
 /****************************************************************************
  * Name: bl616cl_i2s_txdma_callback
  *
  * Description:
- *   TX DMA completion callback (interrupt context).
+ *   TX DMA callback (interrupt context), see bl616cl_i2s_dma_done().
  *
  * Input Parameters:
  *   chan - DMA channel (unused).
  *   arg - Driver state.
- *   len - Bytes transferred, or a negated errno value.
+ *   len - DMA result, passed to bl616cl_i2s_dma_done().
  *
  * Returned Value:
  *   None.
@@ -519,12 +824,12 @@ static void bl616cl_i2s_txdma_callback(struct dma_chan_s *chan, void *arg,
  * Name: bl616cl_i2s_rxdma_callback
  *
  * Description:
- *   RX DMA completion callback (interrupt context).
+ *   RX DMA callback (interrupt context), see bl616cl_i2s_dma_done().
  *
  * Input Parameters:
  *   chan - DMA channel (unused).
  *   arg - Driver state.
- *   len - Bytes transferred, or a negated errno value.
+ *   len - DMA result, passed to bl616cl_i2s_dma_done().
  *
  * Returned Value:
  *   None.
@@ -545,8 +850,9 @@ static void bl616cl_i2s_rxdma_callback(struct dma_chan_s *chan, void *arg,
  *
  * Description:
  *   Return the finished buffers of one direction to the client (task
- *   context). A received buffer is invalidated and gets the received byte
- *   count in nbytes. The container is freed before the callback, so the
+ *   context). A received buffer gets the received byte count in nbytes;
+ *   without the ring it is invalidated first, the ring copy goes through
+ *   the cache. The container is freed before the callback, so the
  *   callback may queue the next buffer even when all containers are in
  *   use; then the buffer reference is dropped.
  *
@@ -585,8 +891,10 @@ static void bl616cl_i2s_return(struct bl616cl_i2s_s *priv,
       result = bfc->result;
       if (!xpt->tx)
         {
+#ifndef CONFIG_BL616CL_I2S_DMA_RING
           up_invalidate_dcache((uintptr_t)apb->samp,
                                (uintptr_t)apb->samp + bfc->nbytes);
+#endif
           apb->nbytes = result == OK ? bfc->nbytes : 0;
           apb->curbyte = 0;
         }
@@ -727,6 +1035,162 @@ static uint32_t bl616cl_i2s_datawidth(struct i2s_dev_s *dev, int bits)
                                           (uint32_t)-EINVAL;
 }
 
+#ifdef CONFIG_BL616CL_I2S_DMA_RING
+
+/****************************************************************************
+ * Name: bl616cl_i2s_start
+ *
+ * Description:
+ *   Start the cyclic DMA of an idle direction with its first buffer
+ *   queued. TX fills the whole ring first, so that the DMA feeds the FIFO
+ *   before the bit clocks start; the fill needs no spinlock because the
+ *   interrupt and the worker leave an idle direction alone. If the DMA
+ *   cannot start, the queued buffers finish with its error. Must be called
+ *   with the mutex held.
+ *
+ * Input Parameters:
+ *   priv - Driver state.
+ *   xpt - Transport (direction).
+ *
+ * Returned Value:
+ *   True if a buffer was moved to the done queue.
+ *
+ ****************************************************************************/
+
+static bool bl616cl_i2s_start(struct bl616cl_i2s_s *priv,
+                              struct bl616cl_i2s_transport_s *xpt)
+{
+  irqstate_t flags;
+  unsigned int i;
+  bool done = false;
+  int ret;
+
+  xpt->lapped = false;
+  if (xpt->tx)
+    {
+      xpt->written = 0;
+      xpt->played = 0;
+      for (i = 0; i < CONFIG_BL616CL_I2S_RING_PERIODS; i++)
+        {
+          done |= bl616cl_i2s_fill(xpt,
+                                   xpt->ring + i * BL616CL_I2S_PERIOD_BYTES);
+        }
+    }
+
+  flags = spin_lock_irqsave(&priv->spinlock);
+  if (xpt->tx)
+    {
+      bflb_i2s_feature_control(priv->i2s, I2S_CMD_CLEAR_TX_FIFO, 0);
+      bflb_i2s_link_txdma(priv->i2s, true);
+      ret = DMA_START_CYCLIC(xpt->chan, xpt->dma_callback, priv, xpt->fifo,
+                             (uintptr_t)xpt->ring, BL616CL_I2S_RING_BYTES,
+                             BL616CL_I2S_PERIOD_BYTES);
+    }
+  else
+    {
+      bflb_i2s_feature_control(priv->i2s, I2S_CMD_CLEAR_RX_FIFO, 0);
+      bflb_i2s_link_rxdma(priv->i2s, true);
+      ret = DMA_START_CYCLIC(xpt->chan, xpt->dma_callback, priv,
+                             (uintptr_t)xpt->ring, xpt->fifo,
+                             BL616CL_I2S_RING_BYTES,
+                             BL616CL_I2S_PERIOD_BYTES);
+    }
+
+  if (ret == OK)
+    {
+      bflb_i2s_feature_control(priv->i2s, I2S_CMD_ENABLE_CONTROL,
+                               I2S_ARG_CMD_MASTER | xpt->enable);
+      xpt->running = true;
+    }
+  else
+    {
+      if (xpt->tx)
+        {
+          bflb_i2s_link_txdma(priv->i2s, false);
+        }
+      else
+        {
+          bflb_i2s_link_rxdma(priv->i2s, false);
+        }
+
+      done |= bl616cl_i2s_fail(xpt, ret);
+    }
+
+  spin_unlock_irqrestore(&priv->spinlock, flags);
+  return done;
+}
+
+/****************************************************************************
+ * Name: bl616cl_i2s_enqueue
+ *
+ * Description:
+ *   Queue a transfer of one direction and start the stream if it is idle;
+ *   an empty buffer on an idle direction finishes right away. The data is
+ *   copied through the cache, so the buffer needs no cache maintenance.
+ *
+ * Input Parameters:
+ *   priv - Driver state.
+ *   xpt - Transport (direction).
+ *   apb - Audio buffer.
+ *   callback - Called from the worker when the buffer is done.
+ *   arg - Callback argument.
+ *   addr - First byte to transfer (word-aligned).
+ *   nbytes - Bytes to transfer (whole frames).
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+static void bl616cl_i2s_enqueue(struct bl616cl_i2s_s *priv,
+                                struct bl616cl_i2s_transport_s *xpt,
+                                struct ap_buffer_s *apb,
+                                i2s_callback_t callback, void *arg,
+                                uintptr_t addr, size_t nbytes)
+{
+  struct bl616cl_i2s_buffer_s *bfc;
+  irqstate_t flags;
+  bool start;
+  bool done = false;
+
+  apb_reference(apb);
+
+  flags = spin_lock_irqsave(&priv->spinlock);
+  bfc = (struct bl616cl_i2s_buffer_s *)sq_remfirst(&priv->freeq);
+  DEBUGASSERT(bfc != NULL);
+  bfc->apb = apb;
+  bfc->callback = callback;
+  bfc->arg = arg;
+  bfc->addr = addr;
+  bfc->remaining = nbytes;
+  bfc->nbytes = nbytes;
+  bfc->result = OK;
+  start = !xpt->running && nbytes > 0;
+  if (xpt->running || nbytes > 0)
+    {
+      sq_addlast(&bfc->entry, &xpt->pend);
+    }
+  else
+    {
+      sq_addlast(&bfc->entry, &xpt->done);
+      done = true;
+    }
+
+  spin_unlock_irqrestore(&priv->spinlock, flags);
+
+  if (start)
+    {
+      done = bl616cl_i2s_start(priv, xpt);
+    }
+
+  if (done && work_available(&priv->work))
+    {
+      work_queue(HPWORK, &priv->work, bl616cl_i2s_worker, priv, 0);
+    }
+}
+
+#else /* CONFIG_BL616CL_I2S_DMA_RING */
+
 /****************************************************************************
  * Name: bl616cl_i2s_enqueue
  *
@@ -817,6 +1281,8 @@ static void bl616cl_i2s_enqueue(struct bl616cl_i2s_s *priv,
       work_queue(HPWORK, &priv->work, bl616cl_i2s_worker, priv, 0);
     }
 }
+
+#endif /* CONFIG_BL616CL_I2S_DMA_RING */
 
 /****************************************************************************
  * Name: bl616cl_i2s_receive
@@ -1215,6 +1681,10 @@ struct i2s_dev_s *bl616cl_i2sbus_initialize(
   sq_init(&priv->tx.done);
   sq_init(&priv->rx.pend);
   sq_init(&priv->rx.done);
+#ifdef CONFIG_BL616CL_I2S_DMA_RING
+  sq_init(&priv->tx.flight);
+  sq_init(&priv->rx.flight);
+#endif
   for (i = 0; i < CONFIG_BL616CL_I2S_NBUFFERS; i++)
     {
       sq_addlast(&priv->buffers[i].entry, &priv->freeq);

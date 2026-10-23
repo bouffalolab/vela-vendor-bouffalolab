@@ -400,6 +400,47 @@ config BL616CL_I2S_NBUFFERS
 		directions. send() and receive() wait for a free slot when all are
 		in use.
 
+menuconfig BL616CL_I2S_DMA_RING
+	bool "Cyclic DMA ring"
+	default y
+	---help---
+		Move the samples of each direction through a fixed ring with one
+		cyclic DMA transfer. The period interrupt copies between the ring
+		and the audio buffers, and may come up to the length of the other
+		periods late (about 16 ms at 48 kHz with the defaults). TX sends
+		silence while no data is queued. A TX buffer finishes when the
+		next one goes into the ring, the last one when it has been
+		played; buffers shorter than the ring leave silence at the start
+		of a stream. Each direction keeps its ring in non-cacheable RAM
+		and takes one DMA0 LLI node per period while it runs.
+
+		Without it, each buffer goes out in one-shot DMA chunks of up to
+		4095 words, and the DMA interrupt has to start the next chunk
+		before the 16-word FIFO runs out, about 333 us at 48 kHz. That
+		takes no extra RAM and copies nothing.
+
+if BL616CL_I2S_DMA_RING
+
+config BL616CL_I2S_RING_PERIODS
+	int "Periods per ring"
+	default 4
+	range 2 16
+	---help---
+		Number of periods in each ring. TX and RX together take twice as
+		many DMA0 LLI nodes while both run; the build fails if
+		BL616CL_DMA0_LLI_NODES is smaller.
+
+config BL616CL_I2S_RING_PERIOD_BYTES
+	int "Period size in bytes"
+	default 1024
+	range 64 16380
+	---help---
+		Bytes per period, a multiple of 4 (one 16-bit stereo frame).
+		1024 bytes is 256 frames, 5.33 ms at 48 kHz. Each direction has a
+		static ring of this size times BL616CL_I2S_RING_PERIODS.
+
+endif # BL616CL_I2S_DMA_RING
+
 endif # BL616CL_I2S
 
 menuconfig BL616CL_SPI

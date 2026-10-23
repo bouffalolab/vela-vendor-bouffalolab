@@ -60,16 +60,16 @@ struct bl616cl_i2s_pins_s
  * Description:
  *   Initialize I2S0 as an I2S master: configure the pins, start MCLK at
  *   about 12.288 MHz and set up 48 kHz, 16-bit stereo Philips I2S.
- *   Transfers use DMA0; the channel is taken when a stream starts and
- *   given back when the driver runs out of buffers. A later call with the
- *   same pins returns the same device.
+ *   Transfers use DMA0; each direction takes its channel here and keeps
+ *   it. A later call with the same pins returns the same device.
  *
  * Input Parameters:
  *   pins - I2S0 pin assignment.
  *
  * Returned Value:
  *   An I2S device on success; NULL if a pin is invalid, the pins differ
- *   from an earlier call, DMA0 is not available, or a device lookup fails.
+ *   from an earlier call, DMA0 or a DMA0 channel is not available, or a
+ *   device lookup fails.
  *
  ****************************************************************************/
 

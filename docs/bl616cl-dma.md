@@ -24,12 +24,12 @@ pause/resume，仍走 OpenVela 标准 DMA 接口，供 SPI 大块传输、UART R
 | TC IRQ | 纳入 | raw IRQ 31 -> NuttX IRQ 47，共享 snapshot/clear |
 | error IRQ 状态机 | 已实现，硬件触发不到 | error 优先、`-EIO`、residual；地址类总线错误不会返回给 DMA（实测，见“限制”） |
 | stop/residual | 纳入 | byte residual 按硬件位置计算；传输中 stop 后 residual 与目的端实际写入一致（mem2mem 实测） |
-| callback 生命周期 | 纳入 | NULL callback 有测试；callback 内可对本通道 start 下一段（I2S 连续流依赖此行为并已实测；占满节点池的长传输在 callback 里连续重启有测试）；cyclic callback 内 stop 有测试；callback 内 put 拒绝、put 等待 callback 退出无测试 |
+| callback 生命周期 | 纳入 | NULL callback 有测试；callback 内可对本通道 start 下一段（I2S 逐段方式依赖此行为并已实测；占满节点池的长传输在 callback 里连续重启有测试）；cyclic callback 内 stop 有测试；callback 内 put 拒绝、put 等待 callback 退出无测试 |
 | cache ownership | 纳入合同 | client clean/invalidate；cached/non-cache alias 可见性；LLI 节点由 adapter 维护 |
-| cyclic | 纳入（需要 LLI 节点） | 每 period 回调一次，`len` 为环内偏移；mem2mem 实测，外设方向待 consumer 实测 |
+| cyclic | 纳入（需要 LLI 节点） | 每 period 回调一次，`len` 为环内偏移；mem2mem 与外设方向（I2S0 TX/RX）实测 |
 | pause/resume | 只支持 cyclic | 用 H 位；one-shot 返回 `-ENOTSUP`，没有运行中的传输返回 `-EINVAL` |
 | `DMA_LINK`（`start_link`） | 不支持 | 上游没有实现与使用者，语义无从确认；依赖 `!DMA_LINK`，不进入 vtable |
-| 外设 consumer | I2S0 已接入（默认 CH0/CH1，初始化时申请并一直持有），其它延后 | 必须逐 consumer 冻结 owner、request、pin 和实物信号 |
+| 外设 consumer | I2S0 已接入（默认 CH0/CH1，初始化时申请并一直持有；默认用 cyclic 环，可选逐段 one-shot），其它延后 | 必须逐 consumer 冻结 owner、request、pin 和实物信号 |
 
 ## 架构与调用链
 
@@ -299,6 +299,18 @@ DMA-011 的窗口改为“关中断 resume 紧接 pause、暂停后读位置”�
 `passed=13 failed=0 skipped=0`、全程无复位，AVE-V10 的 I2S 用例照常 PASS；0 节点临时
 配置为 `passed=8 failed=0 skipped=5`。
 
+同日 I2S0 默认改用 cyclic 环（4 个 1024 字节 period，4 字节宽，见
+[bl616cl-i2s.md](bl616cl-i2s.md)），外设方向的 cyclic 与运行中 residual 由临时插桩
+验证：48 kHz 与 11025 Hz 下，TX、RX 前两圈回调的 `len` 依次为 1024、2048、3072、0，
+循环往复；回调里读 `DMA_RESIDUAL` 换算出的 DMA 位置都在下一个 period 的开头（48 kHz
+进入 2–5 个 word，11025 Hz 0–1 个 word，环尾处 residual 为 4096，即位置 0）。48 kHz
+播放 10 s（数据 1875 个 period）共 1878 次回调，11025 Hz 播放 10 s（430.7 个 period）
+共 431 次；多出的是最后一个 buffer 播完到停流之间的 period，这段时间 I2S worker 在
+ES8388 的完成回调里等了约 20 ms。中断里每 64 次回调忙等 20 ms（超过 3 个 period 的
+余量）时，用 `DMA_RESIDUAL` 判出 DMA 已回到要补或要取的 period。I2S 环形方式需要
+LLI 节点（节点池小于两倍 period 数时编译失败），0 节点的临时配置要同时关掉
+`BL616CL_I2S_DMA_RING`。
+
 ## 限制与后续入口
 
 - USB2 是命令和日志通道，不是 DMA 数据通道；数据、IRQ 和状态由本地断言确认。
@@ -309,8 +321,8 @@ DMA-011 的窗口改为“关中断 resume 紧接 pause、暂停后读位置”�
   剩下的途径是用 TZC 把一块区域设成 DMA 不可访问，涉及系统安全配置，未做。
 - put 等待 in-flight callback 的路径在单核、不嵌套中断的 BL616CL 上走不到，没有测试；
   callback 里 put 由 `DEBUGASSERT` 拦截，也不做测试。
-- 长 one-shot、cyclic、pause/resume 和运行中 residual 只在 mem2mem 上实测；外设方向
-  （DMA 按请求节拍搬运）由各 consumer 实测，I2S 改用 cyclic 时一并验证。
+- cyclic 与运行中 residual 已在 mem2mem 和 I2S0 外设方向实测；长 one-shot、
+  pause/resume 只在 mem2mem 上实测（I2S 不用），外设方向由以后的 consumer 实测。
 - cyclic 运行中出现 error 的同时 pause/resume，读改写 CxCONFIG 可能把硬件刚关掉的
   通道短暂打开，随后 error 中断把它停掉；error 无法触发，未覆盖。
 - 节点池放在普通 RAM，未验证放 PSRAM 的情形。
