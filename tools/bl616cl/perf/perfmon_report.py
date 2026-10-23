@@ -12,9 +12,9 @@ first byte.
 
 --hot MODULE_REGEX lists the functions of the matching modules by samples,
 each bucket counting for every function it overlaps (so that small hot
-neighbours are not lost), with size and whether the ld.script hot list
-already has it.  Use it to refresh the list after wl80211 or macsw
-updates; see docs/bl616cl-hot-code-layout.md.
+neighbours are not lost), with size and whether the Wi-Fi hot list
+(bl616cl_wifi_hot.ld) already has it.  Use it to refresh the list after
+wl80211 or macsw updates; see docs/bl616cl-hot-code-layout.md.
 """
 
 import argparse
@@ -270,16 +270,9 @@ def print_profile(cases, loc, top):
             print(f"  {n * 100 / s:5.1f}%  {m:20s} {f}")
 
 
-def hot_list(ld_script):
-    names, inside = set(), False
-    for line in open(ld_script):
-        if "__bl616cl_wifi_hot_start" in line:
-            inside = True
-        elif "__bl616cl_wifi_hot_end" in line:
-            break
-        elif inside:
-            names.update(re.findall(r"\*\(\.text\.([A-Za-z0-9_]+) ", line))
-    return names
+def hot_list(path):
+    entry = re.compile(r"^\s*\*\(\.text\.([A-Za-z0-9_]+) \.text\.\1\.\*\)")
+    return {m.group(1) for m in map(entry.match, open(path)) if m}
 
 
 def print_hot(cases, loc, regex, listed, min_share):
@@ -321,10 +314,10 @@ def print_hot(cases, loc, regex, listed, min_share):
               f"never get tick samples): " + ", ".join(cold))
         new = [fn for fn, _ in shown if fn not in listed]
         if new:
-            print("\nld.script lines for the NEW functions, to place by "
-                  "call path:")
+            print("\nbl616cl_wifi_hot.ld lines for the NEW functions, to "
+                  "place by call path:")
             for fn in new:
-                print(f"    *(.text.{fn} .text.{fn}.*)")
+                print(f"*(.text.{fn} .text.{fn}.*)")
 
 
 def main():
@@ -337,7 +330,8 @@ def main():
     ap.add_argument("--top", type=int, default=15)
     ap.add_argument("--hot", metavar="MODULE_REGEX",
                     help="list hot-list candidates, e.g. 'wifi'")
-    ap.add_argument("--ld-script", help="mark functions already listed")
+    ap.add_argument("--hot-list", help="bl616cl_wifi_hot.ld, to mark "
+                    "functions already listed")
     ap.add_argument("--min-share", type=float, default=0.1,
                     help="--hot threshold in %% of busy samples")
     args = ap.parse_args()
@@ -362,7 +356,7 @@ def main():
         loc = Locator(load_map(args.map), load_funcs(args.nm, args.elf))
         print_profile(cases, loc, args.top)
         if args.hot:
-            listed = hot_list(args.ld_script) if args.ld_script else set()
+            listed = hot_list(args.hot_list) if args.hot_list else set()
             print_hot(cases, loc, args.hot, listed, args.min_share)
     elif args.hot:
         ap.error("--hot needs --map and --elf")

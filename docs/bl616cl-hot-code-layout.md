@@ -1,6 +1,6 @@
 # BL616CL Wi-Fi 热函数布局与回归
 
-`ld.script` 把 Wi-Fi 热函数按调用顺序排在 XIP `.text` 的开头，让它们集中在
+链接脚本把 Wi-Fi 热函数按调用顺序排在 XIP `.text` 的开头，让它们集中在
 少数 I-cache set 里。wl80211、macsw 和 glue 每次更新都可能改名、内联或新增
 热函数，列表就会悄悄失效。本文说明布局的构成、什么时候需要回归，以及用
 `tools/bl616cl/perf/` 的工具重新确认收益的步骤。收益数据见
@@ -15,16 +15,17 @@
 {
   _stext = ABSOLUTE(.);
   __bl616cl_wifi_hot_start = ABSOLUTE(.);
-  /* Wi-Fi task loop */            *(.text.wifi_main .text.wifi_main.*) ...
-  /* Wi-Fi TX */                   ...
-  /* Wi-Fi TX confirmation */      ...
-  /* Wi-Fi RX */                   ...
+#include "bl616cl_wifi_hot.ld"
   __bl616cl_wifi_hot_end = ABSOLUTE(.);
   *(.text .text.*)
   ...
   __bl616cl_text_end = ABSOLUTE(.);
 }
 ```
+
+热函数列表在同目录的 `bl616cl_wifi_hot.ld`，按任务循环、TX、TX 确认、RX
+分组，每行一个 `*(.text.fn .text.fn.*)`。链接脚本经 C 预处理器展开，预处理
+依赖会跟踪这个文件，改列表后直接构建即可，不用 clean。
 
 - `.text` 起点对齐到 32 KiB（I-cache 大小）。RAM 段的 flash 镜像变大或变小
   时，代码所在的 cache set 不跟着移动。
@@ -34,8 +35,8 @@
   独立函数的名字，再加上 tick 采样在同一路径上看到的任务循环、host port 和
   glue 函数；最后一组是同一路径上的 NuttX 信号量、work queue 和定时器函数。
   当前 105 行，约 36 KiB。
-- 两个标记符号供工具使用：`layout_check.py` 用它们确认列表位置，
-  `layout_ab.sh` 用它们删掉列表或在其后插入填充。
+- 两个标记符号供工具使用：`layout_check.py` 用它们在 map 里确认列表位置，
+  `layout_ab.sh` 用它们删掉列表（即两者之间的 `#include`）或在其后插入填充。
 
 ## 构建时检查
 
@@ -71,8 +72,9 @@ bl616cl layout: 105/105 Wi-Fi hot entries placed at 0x80008000, 35.8 KiB (I-cach
 vendor/bouffalolab/vela build ai-m64p-32s-kit/wifi
 ```
 
-记下 `bl616cl layout:` 行。有缺失项时，到新版源码中找它们的去向：改名的换成
-新名字；被内联的删掉该行（调用者通常已在列表中）；删除的函数直接去掉该行。
+记下 `bl616cl layout:` 行。有缺失项时，到新版源码中找它们的去向，再改
+`bl616cl_wifi_hot.ld`：改名的换成新名字；被内联的删掉该行（调用者通常已在
+列表中）；删除的函数直接去掉该行。
 
 ### 2. 采样
 
@@ -94,7 +96,7 @@ python3 vendor/bouffalolab/tools/bl616cl/perf/wifi_bench.py <out>/prof \
 ```sh
 python3 vendor/bouffalolab/tools/bl616cl/perf/perfmon_report.py \
   --map <out>/img/nuttx.map --elf <out>/img/final_nuttx --hot wifi \
-  --ld-script vendor/bouffalolab/boards/bl616cl/common/scripts/ld.script \
+  --hot-list vendor/bouffalolab/boards/bl616cl/common/scripts/bl616cl_wifi_hot.ld \
   <out>/prof/*.perfmon
 ```
 

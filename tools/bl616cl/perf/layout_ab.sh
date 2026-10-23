@@ -4,7 +4,7 @@
 #
 # Usage: [WIFI_TEST_PSK=...] layout_ab.sh [-b] [-p] <out-dir> [pad...]
 #
-# Builds configs/wifi with the ld.script hot list ("hot") and without it
+# Builds configs/wifi with the Wi-Fi hot list ("hot") and without it
 # ("base"), each with a filler of every given size (default 0 0x1e0 0x9a0)
 # after the Wi-Fi code.  The filler moves the rest of .text the way an
 # unrelated change would; UDP throughput depends on that position, so only
@@ -63,8 +63,9 @@ for kind in hot base; do
     v=$kind-$pad
     VARIANTS="$VARIANTS $v"
 
-    # base drops the list between the two markers; the pad goes after the
-    # end marker, so it moves everything behind the Wi-Fi code.
+    # base drops what lies between the two markers, the #include of
+    # bl616cl_wifi_hot.ld; the pad goes after the end marker, so it moves
+    # everything behind the Wi-Fi code.
 
     awk -v kind="$kind" -v pad="$pad" '
       /__bl616cl_wifi_hot_end/ { skip = 0; print;

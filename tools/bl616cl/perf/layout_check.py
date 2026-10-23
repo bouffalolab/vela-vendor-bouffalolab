@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Check that the Wi-Fi hot list in ld.script still matches the image.
+"""Check that the Wi-Fi hot list still matches the image.
 
-The list names input sections (.text.<function>).  When wl80211, macsw or
-the glue renames, inlines or drops a function, its line silently matches
-nothing and the layout gain shrinks.  This reads the list between
-__bl616cl_wifi_hot_start and __bl616cl_wifi_hot_end in the linker script,
-finds the placed sections in the linker map and warns about names that no
-longer exist.  The build runs it after linking a Wi-Fi image; see
-docs/bl616cl-hot-code-layout.md.
+The list (bl616cl_wifi_hot.ld, included by ld.script) names input sections
+(.text.<function>).  When wl80211, macsw or the glue renames, inlines or
+drops a function, its line silently matches nothing and the layout gain
+shrinks.  This reads the list, finds the placed sections in the linker map
+and warns about names that no longer exist or that lie outside
+__bl616cl_wifi_hot_start/__bl616cl_wifi_hot_end.  The build runs it after
+linking a Wi-Fi image; see docs/bl616cl-hot-code-layout.md.
 """
 
 import argparse
@@ -23,17 +23,7 @@ ICACHE = 32 * 1024
 
 
 def hot_list(path):
-    names, inside = [], False
-    for line in open(path):
-        if "__bl616cl_wifi_hot_start" in line:
-            inside = True
-        elif "__bl616cl_wifi_hot_end" in line:
-            break
-        elif inside:
-            m = ENTRY.match(line)
-            if m:
-                names.append(m.group(1))
-    return names
+    return [m.group(1) for m in map(ENTRY.match, open(path)) if m]
 
 
 def placed_sections(path):
@@ -65,16 +55,18 @@ def placed_sections(path):
 def main():
     ap = argparse.ArgumentParser(
         description="Check the Wi-Fi hot list against the linker map.")
-    ap.add_argument("--ld-script", required=True)
+    ap.add_argument("--hot-list", required=True,
+                    help="bl616cl_wifi_hot.ld")
     ap.add_argument("--map", required=True)
     ap.add_argument("--strict", action="store_true",
                     help="exit 1 when an entry matches nothing")
     args = ap.parse_args()
 
-    names = hot_list(args.ld_script)
+    names = hot_list(args.hot_list)
     secs, start, end = placed_sections(args.map)
     if not names or start is None or end is None:
-        print("bl616cl layout: no Wi-Fi hot list in the linker script or map")
+        print("bl616cl layout: no Wi-Fi hot list entries or no markers in "
+              "the map")
         return 1 if args.strict else 0
 
     missing, outside = [], []

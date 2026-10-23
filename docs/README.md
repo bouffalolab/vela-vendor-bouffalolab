@@ -44,8 +44,8 @@
   miot_test 对测结果。
 - [BL616CL 性能监视（perfmon）](bl616cl-perfmon.md)：E907 cache/分支计数、按 IRQ
   计时和 tick PC 采样，`perfmon` 命令与宿主汇总工具。
-- [BL616CL Wi-Fi 热函数布局与回归](bl616cl-hot-code-layout.md)：`ld.script` 热函数
-  列表的构成、构建时检查，以及组件更新后重新确认收益的步骤。
+- [BL616CL Wi-Fi 热函数布局与回归](bl616cl-hot-code-layout.md)：热函数列表
+  `bl616cl_wifi_hot.ld` 的构成、构建时检查，以及组件更新后重新确认收益的步骤。
 - [BL616CL DMA0](bl616cl-dma.md)：说明 OpenVela generic DMA adapter、八通道
   mem2mem 与外设方向单次传输、共享 IRQ、cache ownership、裁剪、实板验证和 consumer
   边界。
