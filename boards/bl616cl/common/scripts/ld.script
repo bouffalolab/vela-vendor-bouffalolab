@@ -60,6 +60,11 @@ MEMORY
 
 SECTIONS
 {
+  /* Boot header (magic "BFNP", 256 bytes) that boot2 reads, in the 4 KiB
+   * before the XIP base. Firmware post-processing fills in its CRCs and
+   * the image length.
+   */
+
   .fw_header :
   {
     KEEP(*(.fw_header))
@@ -81,41 +86,59 @@ SECTIONS
     KEEP(*(SORT_NONE(.init)))
   } > rom_header
 
+  /* Bouffalo multi-bin table: 16-byte entries of an 8-byte name and the
+   * start and end offsets in the image file, ended by 0xff. SELF is this
+   * image; LP, DWARFCFI, ROMFS, CERTS and AUTOLIST are empty slots.
+   * Nothing in this SDK reads the table, and the Bouffalo SDK has moved
+   * to 24-byte entries; it is kept as is because the post-processing
+   * tools are only available as binaries.
+   */
+
   .multi_bins ORIGIN(rom_header) + 512 (READONLY) :
   {
     __multi_bins__ = ABSOLUTE(.);
-    LONG(0x464c4553) LONG(0x00000000)
+    LONG(0x464c4553) LONG(0x00000000)     /* "SELF" */
     LONG(LENGTH(fw_header))
     LONG(__rom_end__ - __rom_header_start__ + LENGTH(fw_header))
-    LONG(0x0000504c) LONG(0x00000000)
+    LONG(0x0000504c) LONG(0x00000000)     /* "LP" */
     LONG(0x00000000) LONG(0x00000000)
-    LONG(0x52415744) LONG(0x49464346)
+    LONG(0x52415744) LONG(0x49464346)     /* "DWARFCFI" */
     LONG(0x00000000) LONG(0x00000000)
-    LONG(0x464d4f52) LONG(0x00000053)
+    LONG(0x464d4f52) LONG(0x00000053)     /* "ROMFS" */
     LONG(0x00000000) LONG(0x00000000)
-    LONG(0x54524543) LONG(0x00000053)
+    LONG(0x54524543) LONG(0x00000053)     /* "CERTS" */
     LONG(0x00000000) LONG(0x00000000)
-    LONG(0x4f545541) LONG(0x5453494c)
+    LONG(0x4f545541) LONG(0x5453494c)     /* "AUTOLIST" */
     LONG(0x00000000) LONG(0x00000000)
     LONG(0xffffffff) LONG(0xffffffff)
     LONG(0xffffffff) LONG(0xffffffff)
   } > rom_header
+
+  /* RF parameters, 2 KiB: firmware post-processing writes the RF TLVs
+   * from the board dts after the "BLRFPARA" magic, and rfparam reads them
+   * through _ld_symbol_rftlv_address.
+   */
 
   .rftlv.tool ORIGIN(rom_header) + 1K (READONLY) :
   {
     _ld_symbol_rftlv_address = ABSOLUTE(.);
-    LONG(0x46524c42)
-    LONG(0x41524150)
+    LONG(0x46524c42)                      /* "BLRF" */
+    LONG(0x41524150)                      /* "PARA" */
     . = ORIGIN(rom_header) + 3K;
   } > rom_header
 
+  /* Version block: "BLFBVERF" and the LHAL bflb_verinf_t, "BLFBVERF" and
+   * the .verinfo strings, then the .version.* string pointers of the
+   * components (wl80211, macsw, phyrf). Nothing in this SDK reads it.
+   */
+
   .ver ORIGIN(rom_header) + 3K (READONLY) :
   {
-    LONG(0x42464c42)
-    LONG(0x46524556)
+    LONG(0x42464c42)                      /* "BLFB" */
+    LONG(0x46524556)                      /* "VERF" */
     KEEP(*(.bflb_verinf))
-    LONG(0x42464c42)
-    LONG(0x46524556)
+    LONG(0x42464c42)                      /* "BLFB" */
+    LONG(0x46524556)                      /* "VERF" */
     KEEP(*(.verinfo))
     . = ALIGN(4);
     _version_info_section_start = ABSOLUTE(.);
