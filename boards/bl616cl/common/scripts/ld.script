@@ -138,8 +138,6 @@ SECTIONS
   __rom_header_used_end__ = ABSOLUTE(.);
   __rom_header_end__ = ORIGIN(rom_header) + LENGTH(rom_header);
 
-  __ram_nocache_start__ = ORIGIN(ram_nocache);
-
   .nocache_data :
   {
     . = ALIGN(4);
@@ -223,33 +221,23 @@ SECTIONS
 
   /* Wi-Fi shared data: macsw descriptors, wl80211 RX buffer memory and
    * the NuttX IOB pool (CONFIG_IOB_SECTION="SHAREDRAM"), which the MAC
-   * transmits from directly (collection modeled after the BL4 baseline
-   * .wifibss section). The start is aligned down to the section
-   * alignment, so the padding inside and the size do not depend on the
-   * address. Startup zeroes it like .bss: its objects have no
-   * initializers, and CONFIG_IOB_SECTION must start zeroed.
+   * transmits from directly. Code puts data here with the macsw
+   * __SHAREDRAM/__SHAREDRAMIPC and LHAL ATTR_WIFI_RAM_SECTION attributes.
+   * The start is aligned down to the section alignment, so the padding
+   * inside and the size do not depend on the address. Startup zeroes it
+   * like .bss: its objects have no initializers, and CONFIG_IOB_SECTION
+   * must start zeroed.
    */
 
   .wifibss ((ORIGIN(ram_wifi) + LENGTH(ram_wifi) - SIZEOF(.wifibss)) &
             ~(MAX(ALIGNOF(.wifibss), 16) - 1)) (NOLOAD) :
   {
-    PROVIDE(__wifi_bss_start = ABSOLUTE(.));
     _sshram = ABSOLUTE(.);
     *(SHAREDRAMIPC)
     *(SHAREDRAM)
     _eshram = ABSOLUTE(.);
-    *ipc_shared.o(COMMON)
-    *sdu_shared.o(COMMON)
-    *hal_desc.o(COMMON)
-    *txl_buffer_shared.o(SHAREDRAM) *txl_buffer_shared.o(COMMON)
-    *txl_frame_shared.o(COMMON)
-    *scan_shared.o(COMMON)
-    *scanu_shared.o(COMMON)
-    *mfp_bip.o(COMMON)
-    *me_mic.o(COMMON)
     *(.wifi_ram*)
     . = ALIGN(16);
-    PROVIDE(__wifi_bss_end = ABSOLUTE(.));
   } > ram_wifi
 
   /* The part of ram_wifi taken by .wifibss; the heap gets the rest. */
