@@ -25,11 +25,6 @@ set(PHYRF_INCLUDE
 add_subdirectory(macsw)
 
 foreach(target macsw_bl616cl macsw_config_bl616cl_${CONFIG_MACSW_SELECT})
-  # The Vela compiler implements the standard ISA but not the vendor tune name.
-  get_target_property(options ${target} COMPILE_OPTIONS)
-  list(REMOVE_ITEM options -mtune=e907 -march=rv32imafc_xtheade)
-  set_property(TARGET ${target} PROPERTY COMPILE_OPTIONS ${options})
-  target_compile_options(${target} PRIVATE -march=rv32imafc_zicsr_zifencei)
   # The NuttX kernel build injects -Wshadow/-Wundef which the macsw source
   # does not support under its own -Werror; silence them locally.
   target_compile_options(${target} PRIVATE -Wno-shadow -Wno-undef)
