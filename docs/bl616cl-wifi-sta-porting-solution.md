@@ -216,6 +216,8 @@ components/wireless/wifi/
 - LTO 链接用早期调试信息生成 core 的调试信息，所以预编译模式的 `final_nuttx` 与源码模式一样带 macsw/wl80211 的行号、CFI 和变量信息，GDB 和 coredump 分析可用。不能用 `objcopy --strip-debug` 剥离：它会连早期调试信息一起去掉，LTRANS 生成的调试信息随之引用不存在的符号，链接失败。macsw 用 `-g2` 编译，覆盖内核的 `-g3`；`-g3` 的宏信息会让库达到约 170 MB。
 - 两个 core 编译时带 `-ffile-prefix-map=<SDK 根目录>=.`，`__FILE__` 字符串和调试信息里不留构建机目录，固件中没有构建机路径；库的 LTO 段仍记录导出时的构建目录，不进入固件。该选项只改变 `.rodata` 中的路径字符串，`.text` 中 2934 个符号的地址和大小与加选项前一致。
 
+两个 core 的 CMake 从 `BFLB_RISCV_ARCH_FLAGS` 取 `-march`/`-mabi`，原生 SDK 在 toolchain 里探测这个变量。Vela 在 `components/wireless/wifi/CMakeLists.txt` 把它设为 BL616CL 内核的参数（`-march=rv32imafc_zicsr_zifencei -mabi=ilp32f`）：macsw 经 `add_subdirectory` 继承，wl80211 的独立子构建由命令行传入。缺了它，wl80211 子构建按 GCC 13.4 的默认 `ilp32d` 编译；LTO 链接时按内核参数重新生成代码，既不报错也能运行，只有 `readelf -h` 能看出库是 double-float ABI。
+
 更新预编译包：
 
 ```bash
@@ -224,7 +226,10 @@ vendor/bouffalolab/tools/bl616cl/export_wifi_prebuilt.sh
 ./vela build ai-m64p-32s-kit/wifi --use-lib macsw,wl80211
 ```
 
-脚本检查源码仓状态，把两个 core 构建到最新，再导出库、头文件、host port 源码和 `VERSION`。导出后用 `--use-lib` 重建，与源码模式的 `nuttx.bin` 比较：两者应只差镜像内的构建时间。
+脚本检查源码仓状态，把两个 core 构建到最新，再导出库、头文件、host port 源码和 `VERSION`。导出后核对：
+
+- 包内每个库与构建目录里的 archive 内容相同：后者用 `objcopy -D -R '.debug_*' -R '.rela.debug_*'`、前者用 `objcopy -D`（`-D` 清掉 ar 时间戳）处理后逐字节比较；`readelf -h` 显示全部成员为 single-float ABI。
+- 用 `--use-lib` 重建，与源码模式的 `final_nuttx` 比较，符号集合和大小应相同。源码模式下 core 库随内核库链接，预编译模式下作为 extra 库链接，LTO 读入的顺序不同，部分非热路径 macsw 函数的排列会变，所以 `nuttx.bin` 不是逐字节相同。
 
 ## 5. BL616CL 平台适配
 
