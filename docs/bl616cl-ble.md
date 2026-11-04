@@ -35,11 +35,11 @@ mible 命令 / 应用
 
 | 项 | 值 |
 |---|---|
-| 来源 | GitHub bouffalo_sdk v2.3.36 `components/wireless/bluetooth/btblecontroller` |
-| 文件 | `libbtblecontroller_bl616cl_m2s1.a`，sha256 `bdd4a6a5c391a308a80049dd1c29f3fbfced905ce4efe4cf4ae0536b601f90b5` |
-| 版本 | 1.6.210（`btble_controller_get_lib_ver()`；此前用的 v2.3.32 为 1.6.199） |
+| 来源 | GitHub bouffalo_sdk v2.3.38 `components/wireless/bluetooth/btblecontroller` |
+| 文件 | `libbtblecontroller_bl616cl_m2s1.a`，sha256 `de9068dbdcc74a97d69d8b1a1a6e398d7c3afc09381b6a24e7819f047609b731` |
+| 版本 | 1.6.216（`btble_controller_get_lib_ver()`；此前用过 v2.3.32 的 1.6.199、v2.3.36 的 1.6.210） |
 | 能力 | 仅 BLE，2 条连接，全部角色，EM 16 KiB（`CONFIG_BL616CL_EM_16K`） |
-| ABI | rv32imafc_xtheade / ilp32f，与 phyrf 库一致；原生 SDK 默认带 `-fshort-enums`，Vela 调用的接口不含枚举 |
+| ABI | GCC 14.3 编译，rv32imafc_zicsr_zifencei / ilp32f，不带 `xtheade`（v2.3.37 及以前为 T-Head GCC 10.2、rv32imafc_xtheade）；phyrf 库仍是 T-Head GCC 10.2，ABI 同为 ilp32f；原生 SDK 默认带 `-fshort-enums`，Vela 调用的接口不含枚举 |
 
 内部 bouffalo_sdk 源码树只有 controller 源码，没有 BL616CL 预编译库；开发期
 直接把公开库提交在 vendor 仓里。
@@ -52,7 +52,9 @@ mible 命令 / 应用
   延时、中断判断、malloc/free）。`bl616cl_ble_port.c` 全部覆盖，这个成员不会被
   链接；链接 map 中不应出现它。
 - `btblecontroller_port.c.obj`：中断注册（经 `bflb_irq_*`）、efuse MAC
-  （`mfg_media_read_macaddr_with_lock()`）、mtimer。沿用库内默认实现，只覆盖
+  （`mfg_media_read_macaddr_with_lock()`）、mtimer，以及 v2.3.38 起
+  `arch_main` 调用的 `btblecontroller_software_pds_reset()`（经 std 的
+  `GLB_AHB_MCU_Software_Reset()` 复位 PDS）。沿用库内默认实现，只覆盖
   `printf`/`puts`，改走 syslog。
 
 语义按 FreeRTOS：返回 1 表示成功，超时单位为 ms，`0xffffffff` 表示永久等待。
@@ -213,6 +215,12 @@ central-cycle 跑了两轮共 204 次连接，202 次 0x16，2 次 0x3e（连接
 均 0 断线、CRC 一致；central-cycle、peripheral-cycle 各 101 次全部 0x16。本端
 peripheral 发送比此前（1116～1204 B/s）高约三成，原因没有查。`btblecontroller`
 栈最深 756/3004 B，堆峰值 23,652 B。
+
+2026-11-04 controller 库换为 v2.3.38（1.6.216，GCC 14.3 编译）、drivers 同步到
+2.3.38 后做了短测（吞吐每个方向 30 s，周期断开各 5 次），均通过：广播 found 240、
+扫描 238；本端 central 1282/329 B/s，本端 peripheral 1344/357 B/s，均 0 断线、
+CRC 一致；central-cycle、peripheral-cycle 各 6 次连接，断开原因全部 0x16。链接
+map 中没有 FreeRTOS 成员。没有做 600 s 吞吐和 100 次重连的全量测试。
 
 ### 断开原因 0x08
 
