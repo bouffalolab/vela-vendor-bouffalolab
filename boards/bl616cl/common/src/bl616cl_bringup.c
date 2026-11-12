@@ -160,6 +160,15 @@ int bl616cl_bringup(void)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize Wi-Fi WLAN: %d\n", ret);
     }
+
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP
+  ret = bl616cl_wlan_softap_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize Wi-Fi SoftAP: %d\n",
+             ret);
+    }
+#endif
 #endif
 
 #ifdef CONFIG_BL616CL_WIRELESS_BLE

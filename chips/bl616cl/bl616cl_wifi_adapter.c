@@ -76,6 +76,8 @@
 #define BL616CL_WLAN_PS_ACTIVETIME     (50) /* Milliseconds */
 #define BL616CL_PMK_ITERATIONS         (4096) /* PBKDF2 rounds, 802.11i PSK */
 #define WIFI_TASK_STACK_SIZE           (6 * 1024)
+#define BL616CL_SOFTAP_DEF_CHANNEL     (11) /* As wifi_mgmr_ap_start() */
+#define BL616CL_SOFTAP_STOP_TIMEOUT    (3)  /* Seconds */
 
 /****************************************************************************
  * Private Data
@@ -134,6 +136,39 @@ static wifi_txdone_cb_t g_sta_txdone_cb;
 
 static sem_t g_wifi_scan_sem = SEM_INITIALIZER(1);
 static sem_t g_wifi_wait_connect_sem = SEM_INITIALIZER(0);
+
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP
+/* SoftAP settings from the wlan1 ioctls, guarded by g_wifiexcl_lock */
+
+static struct
+{
+  char ssid[SSID_MAX_LEN + 1];
+  int ssid_len;
+  char pwd[PWD_MAX_LEN + 1];
+  int pwd_len;
+  uint8_t channel;     /* Requested channel, 0 picks one at start */
+  uint8_t cur_channel; /* Channel of the running AP, 0 when stopped */
+} g_softap_cfg;
+
+/* bl616cl_wifi_softap_stop_ap() waits for WL80211_EVT_AP_STOPPED: the AP
+ * interface is removed asynchronously and a new start fails until then.
+ */
+
+static volatile bool g_softap_stop_wait;
+static sem_t g_softap_stopped_sem = SEM_INITIALIZER(0);
+
+/* Associated clients by macsw station index.  WL80211_EVT_AP_STA_DEL only
+ * carries the index here, the wl80211 NuttX port drops its MAC address.
+ */
+
+static struct
+{
+  bool used;
+  uint8_t sta_idx;
+  uint8_t mac[MAC_LEN];
+} g_softap_clients[sizeof(wl80211_glb.aid_list) /
+                   sizeof(wl80211_glb.aid_list[0])];
+#endif
 
 /****************************************************************************
  * Private Functions
@@ -980,7 +1015,7 @@ int bl616cl_wifi_sta_send_data(struct iob_s *iob,
 {
   int ret = OK;
 
-  ret = wl80211_output(iob);
+  ret = wl80211_output(WL80211_VIF_STA, iob);
 
   return ret;
 }
@@ -2144,6 +2179,651 @@ int bl616cl_wifi_sta_scan_result(struct iwreq *iwr)
   return ret;
 }
 
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_client_added
+ *
+ * Description:
+ *   Log a client that has associated with the SoftAP and remember its MAC
+ *   address for the disassociation log.  Called from the wl80211 event
+ *   work.
+ *
+ * Input Parameters:
+ *   sta_idx - macsw station index of the client
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+static void bl616cl_wifi_softap_client_added(uint32_t sta_idx)
+{
+  const uint8_t *mac = NULL;
+  int i;
+
+  for (i = 0; i < sizeof(g_softap_clients) / sizeof(g_softap_clients[0]);
+       i++)
+    {
+      if (wl80211_glb.aid_list[i].used &&
+          wl80211_glb.aid_list[i].sta_idx == sta_idx)
+        {
+          mac = wl80211_glb.aid_list[i].mac;
+        }
+    }
+
+  if (mac == NULL)
+    {
+      /* Already gone again before this event was handled */
+
+      return;
+    }
+
+  for (i = 0; i < sizeof(g_softap_clients) / sizeof(g_softap_clients[0]);
+       i++)
+    {
+      if (!g_softap_clients[i].used)
+        {
+          g_softap_clients[i].used = true;
+          g_softap_clients[i].sta_idx = sta_idx;
+          memcpy(g_softap_clients[i].mac, mac, MAC_LEN);
+          break;
+        }
+    }
+
+  syslog(LOG_INFO, "wlan1: client %02x:%02x:%02x:%02x:%02x:%02x associated\n",
+         mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_client_removed
+ *
+ * Description:
+ *   Log a client that has left the SoftAP.  Called from the wl80211 event
+ *   work.
+ *
+ * Input Parameters:
+ *   sta_idx - macsw station index of the client
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+static void bl616cl_wifi_softap_client_removed(uint32_t sta_idx)
+{
+  const uint8_t *mac;
+  int i;
+
+  for (i = 0; i < sizeof(g_softap_clients) / sizeof(g_softap_clients[0]);
+       i++)
+    {
+      if (g_softap_clients[i].used && g_softap_clients[i].sta_idx == sta_idx)
+        {
+          g_softap_clients[i].used = false;
+          mac = g_softap_clients[i].mac;
+          syslog(LOG_INFO,
+                 "wlan1: client %02x:%02x:%02x:%02x:%02x:%02x left\n",
+                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+          return;
+        }
+    }
+
+  /* A WPA2 client that failed the 4-way handshake is deleted without
+   * having been reported as added; it was never associated for the user.
+   */
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_channel_valid
+ *
+ * Description:
+ *   Check a 2.4 GHz channel against the channel plan of the current
+ *   country code.
+ *
+ * Input Parameters:
+ *   channel - Channel number
+ *
+ * Returned Value:
+ *   true if the country allows the channel.
+ *
+ ****************************************************************************/
+
+static bool bl616cl_wifi_softap_channel_valid(int channel)
+{
+  const struct ieee80211_dot_d *country = wl80211_get_country();
+  int i;
+
+  for (i = 0; country != NULL && i < country->channel24G_num; i++)
+    {
+      if (country->channel24G_chan[i] == channel)
+        {
+          return true;
+        }
+    }
+
+  return false;
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_stop_ap
+ *
+ * Description:
+ *   Stop the running AP and wait until wl80211 has removed the AP
+ *   interface.  Called with the adapter lock held.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+static void bl616cl_wifi_softap_stop_ap(void)
+{
+  int ret;
+
+  if (g_softap_cfg.cur_channel == 0)
+    {
+      return;
+    }
+
+  g_softap_stop_wait = true;
+  wifi_mgmr_ap_stop();
+
+  ret = nxsem_tickwait_uninterruptible(&g_softap_stopped_sem,
+                                       SEC2TICK(BL616CL_SOFTAP_STOP_TIMEOUT));
+  if (ret < 0)
+    {
+      g_softap_stop_wait = false;
+      wlwarn("WARN: no AP stopped event: %d\n", ret);
+    }
+
+  g_softap_cfg.cur_channel = 0;
+  memset(g_softap_clients, 0, sizeof(g_softap_clients));
+  bl616cl_wlan_softap_set_linkstatus(false);
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_start
+ *
+ * Description:
+ *   wlan1 is brought up.  The AP itself starts with SIOCSIWESSID.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   OK
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_start(void)
+{
+  return OK;
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_stop
+ *
+ * Description:
+ *   wlan1 is brought down: stop the AP and clear its settings.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   OK on success; a negated errno value if the adapter lock fails.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_stop(void)
+{
+  int ret = adapter_wifi_lock(true);
+
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  bl616cl_wifi_softap_stop_ap();
+  memset(&g_softap_cfg, 0, sizeof(g_softap_cfg));
+
+  adapter_wifi_lock(false);
+  return OK;
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_send_data
+ *
+ * Description:
+ *   Send a frame on the AP interface.
+ *
+ * Input Parameters:
+ *   iob      - The IOB containing the frame
+ *   llhdrlen - Link layer header length (unused)
+ *   offset   - Data offset in the IOB (unused)
+ *
+ * Returned Value:
+ *   As wl80211_output().
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_send_data(struct iob_s *iob,
+                                  uint16_t llhdrlen,
+                                  uint16_t offset)
+{
+  return wl80211_output(WL80211_VIF_AP, iob);
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_password
+ *
+ * Description:
+ *   Set/Get the SoftAP passphrase.  IW_ENCODE_ALG_NONE clears it, which
+ *   makes the next AP open; any other algorithm selects WPA2-PSK (CCMP).
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -EINVAL if the passphrase is not 8 to 63 characters.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_password(struct iwreq *iwr, bool set)
+{
+  struct iw_encode_ext *ext = iwr->u.encoding.pointer;
+  int ret = adapter_wifi_lock(true);
+
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!set)
+    {
+      ext->alg = g_softap_cfg.pwd_len ? IW_ENCODE_ALG_CCMP :
+                                        IW_ENCODE_ALG_NONE;
+      ext->key_len = g_softap_cfg.pwd_len;
+      memcpy(ext->key, g_softap_cfg.pwd, g_softap_cfg.pwd_len);
+    }
+  else if (ext->alg == IW_ENCODE_ALG_NONE)
+    {
+      memset(g_softap_cfg.pwd, 0, sizeof(g_softap_cfg.pwd));
+      g_softap_cfg.pwd_len = 0;
+    }
+  else if (ext->key_len < 8 || ext->key_len > 63)
+    {
+      ret = -EINVAL;
+    }
+  else
+    {
+      memset(g_softap_cfg.pwd, 0, sizeof(g_softap_cfg.pwd));
+      memcpy(g_softap_cfg.pwd, ext->key, ext->key_len);
+      g_softap_cfg.pwd_len = ext->key_len;
+    }
+
+  adapter_wifi_lock(false);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_essid
+ *
+ * Description:
+ *   Set/Get the SoftAP SSID.  Getting reports IW_ESSID_ON while the AP
+ *   runs.
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -EINVAL if the SSID is empty or longer than SSID_MAX_LEN.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_essid(struct iwreq *iwr, bool set)
+{
+  int ret = adapter_wifi_lock(true);
+
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (!set)
+    {
+      memcpy(iwr->u.essid.pointer, g_softap_cfg.ssid, g_softap_cfg.ssid_len);
+      iwr->u.essid.length = g_softap_cfg.ssid_len;
+      iwr->u.essid.flags = g_softap_cfg.cur_channel ? IW_ESSID_ON :
+                                                      IW_ESSID_OFF;
+    }
+  else if (iwr->u.essid.length == 0 ||
+           iwr->u.essid.length > SSID_MAX_LEN)
+    {
+      ret = -EINVAL;
+    }
+  else
+    {
+      memset(g_softap_cfg.ssid, 0, sizeof(g_softap_cfg.ssid));
+      memcpy(g_softap_cfg.ssid, iwr->u.essid.pointer, iwr->u.essid.length);
+      g_softap_cfg.ssid_len = iwr->u.essid.length;
+    }
+
+  adapter_wifi_lock(false);
+  return ret;
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_bssid
+ *
+ * Description:
+ *   Get the SoftAP BSSID, which is the MAC address of wlan1.  An AP cannot
+ *   join a BSSID, so setting is not supported.
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ENOTSUP when setting.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_bssid(struct iwreq *iwr, bool set)
+{
+  if (set)
+    {
+      return -ENOTSUP;
+    }
+
+  memcpy(iwr->u.ap_addr.sa_data,
+         bl616cl_wlan_softap_get_netdev()->d_mac.ether.ether_addr_octet,
+         MAC_LEN);
+  return OK;
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_connect
+ *
+ * Description:
+ *   Start the AP with the stored SSID, passphrase and channel, restarting
+ *   it if it already runs.  Without a channel the AP takes the channel of
+ *   the connected station, so that both share the radio, or else
+ *   BL616CL_SOFTAP_DEF_CHANNEL.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *   -ENETDOWN if wlan1 is down; -EINVAL without an SSID; -EIO if wl80211
+ *   fails to start the AP.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_connect(void)
+{
+  wifi_mgmr_ap_params_t params;
+  uint8_t channel;
+  int ret;
+
+  if (!IFF_IS_UP(bl616cl_wlan_softap_get_netdev()->d_flags))
+    {
+      return -ENETDOWN;
+    }
+
+  ret = adapter_wifi_lock(true);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  if (g_softap_cfg.ssid_len == 0)
+    {
+      adapter_wifi_lock(false);
+      return -EINVAL;
+    }
+
+  bl616cl_wifi_softap_stop_ap();
+
+  channel = g_softap_cfg.channel;
+  if (channel == 0 && wifi_mgmr_sta_channel_get(&channel) < 0)
+    {
+      channel = BL616CL_SOFTAP_DEF_CHANNEL;
+    }
+
+  memset(&params, 0, sizeof(params));
+  params.ssid = g_softap_cfg.ssid;
+  params.key = g_softap_cfg.pwd_len ? g_softap_cfg.pwd : NULL;
+  params.channel = channel;
+
+  wifi_mgmr_conf_max_sta(CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP_MAX_STA);
+
+  /* wl80211 counts the idle time in units of 5 seconds */
+
+  wifi_mgmr_ap_set_max_idle_time(
+    (CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP_IDLE_TIMEOUT + 4) / 5);
+
+  if (wifi_mgmr_ap_start(&params) != 0)
+    {
+      wlerr("ERROR: Failed to start AP\n");
+      adapter_wifi_lock(false);
+      return -EIO;
+    }
+
+  g_softap_cfg.cur_channel = channel;
+  bl616cl_wlan_softap_set_linkstatus(true);
+
+  syslog(LOG_INFO, "wlan1: AP \"%s\" started on channel %u, %s\n",
+         g_softap_cfg.ssid, channel,
+         g_softap_cfg.pwd_len ? "WPA2-PSK" : "open");
+
+  adapter_wifi_lock(false);
+  return OK;
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_disconnect
+ *
+ * Description:
+ *   Stop the AP; its settings are kept.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   OK on success; a negated errno value if the adapter lock fails.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_disconnect(void)
+{
+  int ret = adapter_wifi_lock(true);
+
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  bl616cl_wifi_softap_stop_ap();
+
+  adapter_wifi_lock(false);
+  return OK;
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_mode
+ *
+ * Description:
+ *   wlan1 only operates as an access point (IW_MODE_MASTER).
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -EINVAL when setting another mode.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_mode(struct iwreq *iwr, bool set)
+{
+  if (!set)
+    {
+      iwr->u.mode = IW_MODE_MASTER;
+      return OK;
+    }
+
+  return iwr->u.mode == IW_MODE_MASTER ? OK : -EINVAL;
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_auth
+ *
+ * Description:
+ *   Set/Get SoftAP authentication parameters.  The AP is open or
+ *   WPA2-PSK with CCMP, chosen by the passphrase; WPA, WPA3, TKIP and WEP
+ *   are refused.
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ENOTSUP for an unsupported setting; -ENOSYS for
+ *   an unsupported parameter when getting.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_auth(struct iwreq *iwr, bool set)
+{
+  int value = iwr->u.param.value;
+
+  switch (iwr->u.param.flags & IW_AUTH_INDEX)
+    {
+      case IW_AUTH_WPA_VERSION:
+        if (set)
+          {
+            return (value == IW_AUTH_WPA_VERSION_DISABLED ||
+                    value == IW_AUTH_WPA_VERSION_WPA2) ? OK : -ENOTSUP;
+          }
+
+        iwr->u.param.value = g_softap_cfg.pwd_len ?
+                             IW_AUTH_WPA_VERSION_WPA2 :
+                             IW_AUTH_WPA_VERSION_DISABLED;
+        return OK;
+
+      case IW_AUTH_CIPHER_PAIRWISE:
+      case IW_AUTH_CIPHER_GROUP:
+        if (set)
+          {
+            return (value == IW_AUTH_CIPHER_NONE ||
+                    value == IW_AUTH_CIPHER_CCMP) ? OK : -ENOTSUP;
+          }
+
+        iwr->u.param.value = g_softap_cfg.pwd_len ? IW_AUTH_CIPHER_CCMP :
+                                                    IW_AUTH_CIPHER_NONE;
+        return OK;
+
+      default:
+        return set ? OK : -ENOSYS;
+    }
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_freq
+ *
+ * Description:
+ *   Set/Get the SoftAP channel.  A new channel applies at the next start.
+ *   Getting reports the channel of the running AP, or the requested one.
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -EINVAL if the channel is not in the channel
+ *   plan of the current country code.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_freq(struct iwreq *iwr, bool set)
+{
+  int channel;
+
+  if (set)
+    {
+      if (iwr->u.freq.flags != IW_FREQ_FIXED || iwr->u.freq.e != 0)
+        {
+          return -EINVAL;
+        }
+
+      channel = bl616cl_freq_to_channel(iwr->u.freq.m);
+      if (!bl616cl_wifi_softap_channel_valid(channel))
+        {
+          return -EINVAL;
+        }
+
+      g_softap_cfg.channel = channel;
+      return OK;
+    }
+
+  channel = g_softap_cfg.cur_channel ? g_softap_cfg.cur_channel :
+                                       g_softap_cfg.channel;
+  iwr->u.freq.flags = channel ? IW_FREQ_FIXED : IW_FREQ_AUTO;
+  iwr->u.freq.e = 0;
+  iwr->u.freq.m = channel ? bl616cl_channel_to_freq(channel) : 0;
+  return OK;
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_notsup
+ *
+ * Description:
+ *   Handler of the wlan1 ioctls the SoftAP does not support: per-client
+ *   values (bitrate, RSSI), station-only features (power save, PMKSA,
+ *   PTA) and AP settings wl80211 does not take (TX power, DTIM).
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd (unused)
+ *   set - true: set data; false: get data (unused)
+ *
+ * Returned Value:
+ *   -ENOTSUP
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_notsup(struct iwreq *iwr, bool set)
+{
+  return -ENOTSUP;
+}
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_scan
+ *
+ * Description:
+ *   wlan1 does not scan; scan from wlan0.
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd (unused)
+ *
+ * Returned Value:
+ *   -ENOTSUP
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_scan(struct iwreq *iwr)
+{
+  return -ENOTSUP;
+}
+#endif /* CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP */
+
 /****************************************************************************
  * Name: bl616_wifi_event_handler
  *
@@ -2256,13 +2936,31 @@ void bl616_wifi_event_handler(void *arg1, uint32_t arg2)
           break;
         }
 
-      case WL80211_EVT_AP_STARTED:
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP
       case WL80211_EVT_AP_STOPPED:
+        {
+          bl616cl_wlan_softap_set_linkstatus(false);
+
+          if (g_softap_stop_wait)
+            {
+              g_softap_stop_wait = false;
+              sem_post(&g_softap_stopped_sem);
+            }
+
+          syslog(LOG_INFO, "wlan1: AP stopped\n");
+          break;
+        }
+
       case WL80211_EVT_AP_STA_ADDED:
+        bl616cl_wifi_softap_client_added(arg2);
+        break;
+
       case WL80211_EVT_AP_STA_DEL:
+        bl616cl_wifi_softap_client_removed(arg2);
+        break;
+#endif
 
-        /* Not supported now */
-
+      default:
         break;
     }
 }

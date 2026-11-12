@@ -228,6 +228,38 @@ static const struct wlan_ops_s g_sta_ops =
   .pmksa       = bl616cl_wifi_sta_pmksa,
 };
 
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP
+/* Country and the channel range are radio wide and shared with the
+ * station.  Wi-Fi/BLE coexistence (PTA) only covers the station.
+ */
+
+static const struct wlan_ops_s g_softap_ops =
+{
+  .start       = bl616cl_wifi_softap_start,
+  .send        = bl616cl_wifi_softap_send_data,
+  .essid       = bl616cl_wifi_softap_essid,
+  .bssid       = bl616cl_wifi_softap_bssid,
+  .passwd      = bl616cl_wifi_softap_password,
+  .mode        = bl616cl_wifi_softap_mode,
+  .auth        = bl616cl_wifi_softap_auth,
+  .freq        = bl616cl_wifi_softap_freq,
+  .bitrate     = bl616cl_wifi_softap_notsup,
+  .txpower     = bl616cl_wifi_softap_notsup,
+  .channel     = bl616cl_wifi_sta_channel,
+  .country     = bl616cl_wifi_sta_country,
+  .rssi        = bl616cl_wifi_softap_notsup,
+  .connect     = bl616cl_wifi_softap_connect,
+  .scan        = bl616cl_wifi_softap_scan,
+  .scan_result = bl616cl_wifi_softap_scan,
+  .disconnect  = bl616cl_wifi_softap_disconnect,
+  .pta         = bl616cl_wifi_softap_notsup,
+  .stop        = bl616cl_wifi_softap_stop,
+  .dtim        = bl616cl_wifi_softap_notsup,
+  .powersave   = bl616cl_wifi_softap_notsup,
+  .pmksa       = bl616cl_wifi_softap_notsup,
+};
+#endif
+
 #ifdef CONFIG_PM
 struct bl616cl_wlan_pm_config_s
 {
@@ -365,6 +397,45 @@ static struct iob_s *wlan_recvframe(struct wlan_priv_s *priv)
   return iob;
 }
 
+#if defined(CONFIG_BL616CL_WLAN_RX_ZEROCOPY) || \
+    defined(CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP)
+/****************************************************************************
+ * Name: wlan_copy_frame
+ *
+ * Description:
+ *   Copy a frame into pool IOBs that have the CONFIG_NET_LL_GUARDSIZE
+ *   headroom wl80211_output() needs.  The original is left untouched.
+ *
+ * Input Parameters:
+ *   iob      - Frame to copy
+ *   llhdrlen - Link layer header length in front of IOB_DATA()
+ *
+ * Returned Value:
+ *   The copy, or NULL if the pool had no IOB.
+ *
+ ****************************************************************************/
+
+static struct iob_s *wlan_copy_frame(struct iob_s *iob, uint16_t llhdrlen)
+{
+  struct iob_s *copy = iob_tryalloc(false);
+
+  if (copy != NULL)
+    {
+      iob_reserve(copy, CONFIG_NET_LL_GUARDSIZE);
+      if (iob_clone_partial(iob, iob->io_pktlen, 0, copy, 0,
+                            false, false) < 0)
+        {
+          iob_free_chain(copy);
+          return NULL;
+        }
+
+      memcpy(IOB_DATA(copy) - llhdrlen, IOB_DATA(iob) - llhdrlen, llhdrlen);
+    }
+
+  return copy;
+}
+#endif
+
 #ifdef CONFIG_BL616CL_WLAN_RX_ZEROCOPY
 /****************************************************************************
  * Name: wlan_rx_slot_free
@@ -457,23 +528,7 @@ static struct iob_s *wlan_rx_wrap(struct net_driver_s *dev, void *rxhdr,
 
 static struct iob_s *wlan_tx_headroom(struct iob_s *iob, uint16_t llhdrlen)
 {
-  struct iob_s *copy = iob_tryalloc(false);
-
-  if (copy != NULL)
-    {
-      iob_reserve(copy, CONFIG_NET_LL_GUARDSIZE);
-      if (iob_clone_partial(iob, iob->io_pktlen, 0, copy, 0,
-                            false, false) < 0)
-        {
-          iob_free_chain(copy);
-          copy = NULL;
-        }
-      else
-        {
-          memcpy(IOB_DATA(copy) - llhdrlen, IOB_DATA(iob) - llhdrlen,
-                 llhdrlen);
-        }
-    }
+  struct iob_s *copy = wlan_copy_frame(iob, llhdrlen);
 
   if (copy == NULL)
     {
@@ -733,6 +788,56 @@ out:
   return ret;
 }
 
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP
+/****************************************************************************
+ * Name: wlan_softap_forward
+ *
+ * Description:
+ *   AP internal forwarding, as wl80211_tcpip_input() of the Bouffalo SDK
+ *   lwIP port does: a frame from a client to a group address goes out to
+ *   the clients again and up the stack, a frame to another client only
+ *   goes out.  Forwarded frames join the TX queue of the AP interface.
+ *
+ * Input Parameters:
+ *   priv - The AP interface
+ *   iob  - Received frame
+ *
+ * Returned Value:
+ *   true if the frame was consumed, false if the stack takes it.
+ *
+ ****************************************************************************/
+
+static bool wlan_softap_forward(struct wlan_priv_s *priv, struct iob_s *iob)
+{
+  uint16_t llhdrlen = NET_LL_HDRLEN(&priv->dev);
+  struct eth_hdr_s *eth = (struct eth_hdr_s *)(IOB_DATA(iob) - llhdrlen);
+  struct iob_s *fwd = iob;
+  bool consumed = true;
+
+  if (eth->dest[0] & 0x01)
+    {
+      fwd = wlan_copy_frame(iob, llhdrlen);
+      consumed = false;
+    }
+  else if (memcmp(eth->dest, priv->dev.d_mac.ether.ether_addr_octet,
+                  ETHER_ADDR_LEN) == 0)
+    {
+      return false;
+    }
+
+  if (fwd == NULL || iob_tryadd_queue(fwd, &priv->txb) < 0)
+    {
+      NETDEV_TXERRORS(&priv->dev);
+      if (fwd != NULL)
+        {
+          iob_free_chain(fwd);
+        }
+    }
+
+  return consumed;
+}
+#endif
+
 /****************************************************************************
  * Name: wlan_rxpoll
  *
@@ -767,6 +872,14 @@ static void wlan_rxpoll(void *arg)
 
   while ((iob = wlan_recvframe(priv)) != NULL)
     {
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP
+      if (priv == &g_wlan_priv[BL616CL_WLAN_SOFTAP_DEVNO] &&
+          wlan_softap_forward(priv, iob))
+        {
+          continue;
+        }
+#endif
+
       dev->d_iob = iob;
       dev->d_len = iob->io_pktlen + NET_LL_HDRLEN(dev);
       NETDEV_RXPACKETS(dev);
@@ -1586,16 +1699,18 @@ static int bl616cl_wlan_pm_init(void)
 #endif  /* CONFIG_PM */
 
 /****************************************************************************
- * Name: wlan_sta_rx_done
+ * Name: wlan_rx_input
  *
  * Description:
- *   Wi-Fi station receive callback (wl80211_input_cb_t). Pass IPv4, IPv6
- *   and ARP frames to the network stack, as the wl80211 NuttX input path
- *   did, and give any other frame back to the MAC.
+ *   Wi-Fi receive callback (wl80211_input_cb_t).  Station frames: pass
+ *   IPv4, IPv6 and ARP frames to the network stack, as the wl80211 NuttX
+ *   input path did, and give any other frame back to the MAC.  AP frames
+ *   are all queued, since frames between clients are forwarded whatever
+ *   their type.
  *
  * Input Parameters:
  *   prv      - Registration argument (unused)
- *   vif_type - wl80211 interface type (unused, STA only)
+ *   vif_type - wl80211 interface type the frame arrived on
  *   rxhdr    - wl80211 RX descriptor, passed to wl80211_mac_rx_free()
  *   buf      - Ethernet frame in the wl80211 RX buffer
  *   frm_len  - Frame length
@@ -1607,17 +1722,26 @@ static int bl616cl_wlan_pm_init(void)
  *
  ****************************************************************************/
 
-static int wlan_sta_rx_done(void *prv, uint8_t vif_type, void *rxhdr,
-                            void *buf, uint32_t frm_len, uint32_t status)
+static int wlan_rx_input(void *prv, uint8_t vif_type, void *rxhdr,
+                         void *buf, uint32_t frm_len, uint32_t status)
 {
   struct wlan_priv_s *priv = &g_wlan_priv[BL616CL_WLAN_STA_DEVNO];
   struct eth_hdr_s *eth = buf;
 
   UNUSED(prv);
-  UNUSED(vif_type);
   UNUSED(status);
 
   DEBUGASSERT(buf != NULL && frm_len > 0);
+
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP
+  if (vif_type == WL80211_VIF_AP)
+    {
+      return wlan_rx_done(&g_wlan_priv[BL616CL_WLAN_SOFTAP_DEVNO], buf,
+                          frm_len, rxhdr, wl80211_mac_rx_free);
+    }
+#else
+  UNUSED(vif_type);
+#endif
 
   switch (eth->type)
     {
@@ -1637,8 +1761,9 @@ static int wlan_sta_rx_done(void *prv, uint8_t vif_type, void *rxhdr,
  * Name: wlan_sta_tx_done
  *
  * Description:
- *   Wi-Fi station TX done callback function. If this is called, it means
- *   station sending next packet.
+ *   Wi-Fi TX done callback function.  The in-flight limit of
+ *   wl80211_output() is shared, so every interface that is up may send
+ *   its next packet.
  *
  * Input Parameters:
  *   arg - Callback argument (unused)
@@ -1650,9 +1775,15 @@ static int wlan_sta_rx_done(void *prv, uint8_t vif_type, void *rxhdr,
 
 static void wlan_sta_tx_done(void *arg)
 {
-  struct wlan_priv_s *priv = &g_wlan_priv[BL616CL_WLAN_STA_DEVNO];
+  int i;
 
-  wlan_tx_done(priv);
+  for (i = 0; i < BL616CL_WLAN_DEVS; i++)
+    {
+      if (g_wlan_priv[i].ifup)
+        {
+          wlan_tx_done(&g_wlan_priv[i]);
+        }
+    }
 }
 
 /****************************************************************************
@@ -1776,7 +1907,7 @@ int bl616cl_wlan_sta_initialize(void)
       return ret;
     }
 
-  bl616cl_wifi_sta_register_recv_cb(wlan_sta_rx_done);
+  bl616cl_wifi_sta_register_recv_cb(wlan_rx_input);
   bl616cl_wifi_sta_register_txdone_cb(wlan_sta_tx_done);
 
   ninfo("INFO: Initialize Wi-Fi station success net\n");
@@ -1784,3 +1915,81 @@ int bl616cl_wlan_sta_initialize(void)
   return OK;
 }
 
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP
+/****************************************************************************
+ * Name: bl616cl_wlan_softap_get_netdev
+ *
+ * Description:
+ *   Get the Wi-Fi SoftAP netcard driver
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Pointer to the Wi-Fi SoftAP netcard driver
+ *
+ ****************************************************************************/
+
+struct net_driver_s *bl616cl_wlan_softap_get_netdev(void)
+{
+  return &g_wlan_priv[BL616CL_WLAN_SOFTAP_DEVNO].dev;
+}
+
+/****************************************************************************
+ * Name: bl616cl_wlan_softap_set_linkstatus
+ *
+ * Description:
+ *   Report the carrier of the SoftAP: on while the AP runs.
+ *
+ * Input Parameters:
+ *   linkstatus - true while the AP runs
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void bl616cl_wlan_softap_set_linkstatus(bool linkstatus)
+{
+  struct net_driver_s *dev = &g_wlan_priv[BL616CL_WLAN_SOFTAP_DEVNO].dev;
+
+  if (linkstatus)
+    {
+      netdev_carrier_on(dev);
+    }
+  else
+    {
+      netdev_carrier_off(dev);
+    }
+}
+
+/****************************************************************************
+ * Name: bl616cl_wlan_softap_initialize
+ *
+ * Description:
+ *   Register the Wi-Fi SoftAP netcard driver (wlan1).  It shares the MAC
+ *   address of the station, as the Bouffalo SDK does by default.  Call it
+ *   after bl616cl_wlan_sta_initialize().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   OK on success; Negated errno on failure.
+ *
+ ****************************************************************************/
+
+int bl616cl_wlan_softap_initialize(void)
+{
+  uint8_t mac[MAC_LEN];
+
+  if (bl616cl_wifi_sta_read_mac(mac) != 0)
+    {
+      wlerr("ERROR: Failed to read MAC address\n");
+      return -EIO;
+    }
+
+  return bl616cl_net_initialize(BL616CL_WLAN_SOFTAP_DEVNO, mac,
+                                &g_softap_ops);
+}
+#endif /* CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP */

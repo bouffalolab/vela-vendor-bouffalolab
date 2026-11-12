@@ -46,7 +46,13 @@ extern "C"
  ****************************************************************************/
 
 #define BL616CL_WLAN_STA_DEVNO    0
-#define BL616CL_WLAN_DEVS         1
+
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP
+#  define BL616CL_WLAN_SOFTAP_DEVNO 1
+#  define BL616CL_WLAN_DEVS         2
+#else
+#  define BL616CL_WLAN_DEVS         1
+#endif
 
 #define MAC_LEN      (6)
 #define SSID_MAX_LEN (32)
@@ -557,6 +563,230 @@ int bl616cl_wifi_sta_powersave(struct iwreq *iwr, bool set);
  ****************************************************************************/
 
 int bl616cl_wifi_sta_pmksa(struct iwreq *iwr, bool set);
+
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_start
+ *
+ * Description:
+ *   wlan1 is brought up.  The AP itself starts with SIOCSIWESSID.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   OK
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_start(void);
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_stop
+ *
+ * Description:
+ *   wlan1 is brought down: stop the AP and clear its settings.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   OK on success; a negated errno value if the adapter lock fails.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_stop(void);
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_send_data
+ *
+ * Description:
+ *   Send a frame on the AP interface.
+ *
+ * Input Parameters:
+ *   iob      - The IOB containing the frame
+ *   llhdrlen - Link layer header length (unused)
+ *   offset   - Data offset in the IOB (unused)
+ *
+ * Returned Value:
+ *   As wl80211_output().
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_send_data(struct iob_s *iob,
+                                  uint16_t llhdrlen,
+                                  uint16_t offset);
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_password
+ *
+ * Description:
+ *   Set/Get the SoftAP passphrase.  IW_ENCODE_ALG_NONE clears it, which
+ *   makes the next AP open; any other algorithm selects WPA2-PSK (CCMP).
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_password(struct iwreq *iwr, bool set);
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_essid
+ *
+ * Description:
+ *   Set/Get the SoftAP SSID.
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_essid(struct iwreq *iwr, bool set);
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_bssid
+ *
+ * Description:
+ *   Get the SoftAP BSSID; setting is not supported.
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ENOTSUP when setting.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_bssid(struct iwreq *iwr, bool set);
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_connect
+ *
+ * Description:
+ *   Start (or restart) the AP with the stored settings.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on failure.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_connect(void);
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_disconnect
+ *
+ * Description:
+ *   Stop the AP; its settings are kept.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   OK on success; a negated errno value if the adapter lock fails.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_disconnect(void);
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_mode
+ *
+ * Description:
+ *   Set/Get the wlan1 mode, which is always IW_MODE_MASTER.
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -EINVAL when setting another mode.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_mode(struct iwreq *iwr, bool set);
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_auth
+ *
+ * Description:
+ *   Set/Get SoftAP authentication parameters (open or WPA2-PSK CCMP).
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ENOTSUP or -ENOSYS if not supported.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_auth(struct iwreq *iwr, bool set);
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_freq
+ *
+ * Description:
+ *   Set/Get the SoftAP channel.
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd
+ *   set - true: set data; false: get data
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -EINVAL for a channel outside the country plan.
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_freq(struct iwreq *iwr, bool set);
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_notsup
+ *
+ * Description:
+ *   Handler of the wlan1 ioctls the SoftAP does not support: per-client
+ *   values (bitrate, RSSI), station-only features (power save, PMKSA,
+ *   PTA) and AP settings wl80211 does not take (TX power, DTIM).
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd (unused)
+ *   set - true: set data; false: get data (unused)
+ *
+ * Returned Value:
+ *   -ENOTSUP
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_notsup(struct iwreq *iwr, bool set);
+
+/****************************************************************************
+ * Name: bl616cl_wifi_softap_scan
+ *
+ * Description:
+ *   wlan1 does not scan.
+ *
+ * Input Parameters:
+ *   iwr - The argument of the ioctl cmd (unused)
+ *
+ * Returned Value:
+ *   -ENOTSUP
+ *
+ ****************************************************************************/
+
+int bl616cl_wifi_softap_scan(struct iwreq *iwr);
+#endif /* CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP */
 
 #ifdef __cplusplus
 }
