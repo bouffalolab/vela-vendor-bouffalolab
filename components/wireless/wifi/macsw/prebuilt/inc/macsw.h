@@ -3935,7 +3935,7 @@ static inline __attribute__((always_inline))
 enum macsw_tx_classify_result macsw_tx_classify_contiguous(
     const void *frame, uint16_t frame_len, struct macsw_tx_meta *meta)
 {
-    const uint8_t *data = frame;
+    const uint8_t *data = (const uint8_t *) frame;
     const uint8_t *ipv4;
     const uint8_t *udp;
     uint16_t ethertype;

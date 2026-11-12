@@ -403,6 +403,10 @@ static void wifi_mgmr_event_handler(async_input_event_t ev, void *priv)
         case CODE_WIFI_ON_MGMR_DONE: {
             wl80211_printf("[APP] [EVT] %s, CODE_WIFI_ON_MGMR_DONE\r\n", __func__);
         } break;
+        case CODE_WIFI_ON_INIT_DONE_SYS:
+        case CODE_WIFI_ON_MGMR_DONE_SYS: {
+            /* SDK-internal readiness events; handled by the SYSINIT records. */
+        } break;
         case CODE_WIFI_ON_SCAN_DONE: {
             wl80211_printf("[APP] [EVT] %s, CODE_WIFI_ON_SCAN_DONE\r\n", __func__);
 #if defined(CONFIG_WL80211_P2P)
@@ -463,15 +467,18 @@ static void wifi_mgmr_event_handler(async_input_event_t ev, void *priv)
 }
 #endif
 
+#if IS_ENABLED(CONFIG_COMPAT_V2)
 void wifi_mgmr_init(void)
+{
+    printf("[W] deprecated: %s() is handled by SYSINIT, will be removed in Bouffalo SDK v3\r\n", __func__);
+}
+#endif /* IS_ENABLED(CONFIG_COMPAT_V2) */
+
+void _wl80211_mgmr_init(void)
 {
 #if !defined(__NuttX__)
     async_register_event_filter(EV_WL80211, wl80211_event_handler, NULL);
     async_register_event_filter(EV_WIFI, wifi_mgmr_event_handler, NULL);
-
-    /* compat legacy wifi mgmr */
-    async_post_event(EV_WIFI, CODE_WIFI_ON_INIT_DONE, 0);
-    async_post_event(EV_WIFI, CODE_WIFI_ON_MGMR_DONE, 0);
 #endif
 }
 
