@@ -882,7 +882,7 @@ int bl616cl_wifi_adapter_init(void)
   uint8_t eth_mac[6];
   platform_get_mac(WL80211_VIF_STA, eth_mac);
 
-  wl80211_init();
+  _wl80211_init();
 
   /* The scan path requires a country channel plan; nothing in the NuttX
    * boot flow sets one, so default to CN (channels 1-13).  Users can

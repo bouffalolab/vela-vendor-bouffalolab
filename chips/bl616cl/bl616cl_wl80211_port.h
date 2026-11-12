@@ -32,8 +32,10 @@
  * nuttx.c) defines the TX interface below without declaring it in any
  * wl80211 header, and no declared wl80211 API is equivalent: they are the
  * zero-copy IOB output, its in-flight limit and the TX done notification.
- * Keep these prototypes identical to the definitions in nuttx.c; the
- * compiler cannot check them across the two repositories.
+ * The wl80211 core defines _wl80211_init() the same way; the Bouffalo SDK
+ * calls it from SYSINIT, which NuttX does not have, and wl80211_init() is
+ * only a deprecated stub there.  Keep these prototypes identical to the
+ * definitions; the compiler cannot check them across the repositories.
  */
 
 /****************************************************************************
@@ -58,6 +60,23 @@ struct iob_s;
  ****************************************************************************/
 
 void internal_register_txdone_cb(void (*cb)(void));
+
+/****************************************************************************
+ * Name: _wl80211_init
+ *
+ * Description:
+ *   Initialize the wl80211 host state.  Call once, after the Wi-Fi firmware
+ *   task is up and before any other wl80211 call.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void _wl80211_init(void);
 
 /****************************************************************************
  * Name: wl80211_output
