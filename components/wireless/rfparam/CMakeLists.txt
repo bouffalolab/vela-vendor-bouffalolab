@@ -15,7 +15,8 @@ set(RFPARAM_SRCS
     ${RFPARAM_DIR}/Src/rfparam_rftlv.c)
 
 nuttx_add_kernel_library(bl_rfparam)
-target_sources(bl_rfparam PRIVATE ${RFPARAM_SRCS})
+target_sources(bl_rfparam PRIVATE ${RFPARAM_SRCS}
+                                    ${CMAKE_CURRENT_LIST_DIR}/bl616cl_rfparam_log.c)
 
 # The SoC headers define a BL_Err_Type enumerator named ERROR, which
 # collides with the enum in sys/types.h; the forced pre-include renames it

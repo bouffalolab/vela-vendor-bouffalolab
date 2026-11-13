@@ -28,12 +28,21 @@
 
 #include <nuttx/wireless/wireless.h>
 #include <debug.h>
+#include <stdio.h>
 
 #ifndef LOG_LEVEL
 #define LOG_LEVEL 3
 #endif
 
-#define LOG_I(...) wlinfo(__VA_ARGS__)
+/* rfparam prints a table row as LOG_I() plus printf() pieces; syslog ends
+ * every message with a newline, so both go to a line-buffered logger that
+ * emits the row as one wlinfo() line (bl616cl_rfparam_log.c).
+ */
+
+int bl616cl_rfparam_log(FAR const char *fmt, ...) printf_like(1, 2);
+
+#define LOG_I(...) bl616cl_rfparam_log(__VA_ARGS__)
+#define printf(...) bl616cl_rfparam_log(__VA_ARGS__)
 #define LOG_W(...) wlwarn(__VA_ARGS__)
 #define LOG_E(...) wlerr(__VA_ARGS__)
 
