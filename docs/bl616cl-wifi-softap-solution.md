@@ -9,7 +9,7 @@
 - 只用标准 wapi/WEXT ioctl 控制：`wapi essid wlan1 <SSID> 1` 启动，`wapi essid wlan1 <SSID> 0` 或 `ifdown wlan1` 停止。没有新增私有 ioctl。
 - 客户端之间的帧由驱动转发（AP 内部转发），与 Bouffalo SDK lwIP 移植的做法相同。
 - 驱动不配 IP 地址。地址和 DHCP 由 `netutils/dhcpd` 提供，`wifi` 配置里 `dhcpd_start wlan1` 即可（网关 192.168.169.1/24）。
-- 客户端关联、离开只用 `wlinfo` 记录（需开 `CONFIG_DEBUG_WIRELESS_INFO`），不提供客户端列表接口。
+- 客户端关联、离开只用 `wlinfo` 记录（需开 `CONFIG_DEBUG_WIRELESS_INFO`，`wifi` 配置已开），不提供客户端列表接口。
 - 与 STA 同时工作时只支持同信道：不指定信道时 AP 跟随 STA 当前信道。
 
 ## 2. 结构
