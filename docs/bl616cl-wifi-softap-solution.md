@@ -9,7 +9,7 @@
 - 只用标准 wapi/WEXT ioctl 控制：`wapi essid wlan1 <SSID> 1` 启动，`wapi essid wlan1 <SSID> 0` 或 `ifdown wlan1` 停止。没有新增私有 ioctl。
 - 客户端之间的帧由驱动转发（AP 内部转发），与 Bouffalo SDK lwIP 移植的做法相同。
 - 驱动不配 IP 地址。地址和 DHCP 由 `netutils/dhcpd` 提供，`wifi` 配置里 `dhcpd_start wlan1` 即可（网关 192.168.169.1/24）。
-- 客户端关联、离开只写 syslog，不提供客户端列表接口。
+- 客户端关联、离开只用 `wlinfo` 记录（需开 `CONFIG_DEBUG_WIRELESS_INFO`），不提供客户端列表接口。
 - 与 STA 同时工作时只支持同信道：不指定信道时 AP 跟随 STA 当前信道。
 
 ## 2. 结构
@@ -23,7 +23,7 @@ wapi / ifup / ifdown (wlan1)
 
 wl80211 事件 AP_STOPPED / AP_STA_ADDED / AP_STA_DEL
   -> bl616cl_wifi_event_handler()（LPWORK）
-  -> carrier、syslog
+  -> carrier、wlinfo
 ```
 
 - macsw `vela_bl616cl` profile 本来就有 2 个 VIF、4 个 STA 表项和 beacon，SoftAP 不改 macsw、wl80211 private 和 supplicant；wl80211 的 AP 代码没有编译开关，STA 镜像里已经编入。
@@ -50,7 +50,7 @@ wl80211 事件 AP_STOPPED / AP_STA_ADDED / AP_STA_DEL
 - 空闲客户端：每次启动前把 `CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP_IDLE_TIMEOUT`（秒，向上取整到 5 的倍数）交给 `wifi_mgmr_ap_set_max_idle_time()`。wl80211 每 5 s 检查一次，超过这个时间没有收到某个客户端的任何帧，就向它发 deauth（reason 4），驱动随后打印离开。用于清掉不发 deauth 就离开的客户端；0 关闭。
 - 停止：wl80211 的停止是异步的，驱动发出停止请求后等待 `AP_STOPPED` 事件（最多 3 s）再返回，因此停止后立即启动是安全的。停止时 wl80211 向所有客户端发广播 deauth（reason 3）。
 - carrier：AP 运行时 on，停止后 off。dhcpd 等 UDP 发送依赖 `IFF_RUNNING`。
-- 事件：`AP_STA_ADDED` 打印 `wlan1: client <MAC> associated`，`AP_STA_DEL` 打印 `wlan1: client <MAC> left`。WPA2 客户端在四次握手完成后才上报 `AP_STA_ADDED`；握手失败（例如口令错误）时只有 `AP_STA_DEL`，驱动不为这类从未关联成功的客户端打印日志。AP 停止时不逐个打印离开。
+- 事件（日志均走 `wlinfo`）：`AP_STA_ADDED` 打印 `wlan1: client <MAC> associated`，`AP_STA_DEL` 打印 `wlan1: client <MAC> left`。WPA2 客户端在四次握手完成后才上报 `AP_STA_ADDED`；握手失败（例如口令错误）时只有 `AP_STA_DEL`，驱动不为这类从未关联成功的客户端打印日志。AP 停止时不逐个打印离开。
 
 ## 4. 数据面
 
@@ -96,7 +96,7 @@ BL616CL_WIRELESS_WIFI
 nsh> dhcpd_start wlan1
 nsh> wapi psk wlan1 <8–63 字符口令> 3      # 不执行这一步则为 open
 nsh> wapi freq wlan1 6 1                   # 可选
-nsh> wapi essid wlan1 MY_SOFTAP 1
+nsh> wapi essid wlan1 MY_SOFTAP 1           # 以下两行需开 CONFIG_DEBUG_WIRELESS_INFO
 wlan1: AP "MY_SOFTAP" started on channel 6, WPA2-PSK      # 隐藏时末尾多 ", hidden"
 wlan1: client xx:xx:xx:xx:xx:xx associated
 nsh> wapi essid wlan1 MY_SOFTAP 0          # 停止，保留设置

@@ -2230,7 +2230,7 @@ static void bl616cl_wifi_softap_client_added(uint32_t sta_idx)
         }
     }
 
-  syslog(LOG_INFO, "wlan1: client %02x:%02x:%02x:%02x:%02x:%02x associated\n",
+  wlinfo("wlan1: client %02x:%02x:%02x:%02x:%02x:%02x associated\n",
          mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
@@ -2261,8 +2261,7 @@ static void bl616cl_wifi_softap_client_removed(uint32_t sta_idx)
         {
           g_softap_clients[i].used = false;
           mac = g_softap_clients[i].mac;
-          syslog(LOG_INFO,
-                 "wlan1: client %02x:%02x:%02x:%02x:%02x:%02x left\n",
+          wlinfo("wlan1: client %02x:%02x:%02x:%02x:%02x:%02x left\n",
                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
           return;
         }
@@ -2623,7 +2622,7 @@ int bl616cl_wifi_softap_connect(void)
   g_softap_cfg.cur_channel = channel;
   bl616cl_wlan_softap_set_linkstatus(true);
 
-  syslog(LOG_INFO, "wlan1: AP \"%s\" started on channel %u, %s%s\n",
+  wlinfo("wlan1: AP \"%s\" started on channel %u, %s%s\n",
          g_softap_cfg.ssid, channel,
          g_softap_cfg.pwd_len ? "WPA2-PSK" : "open",
          params.hidden_ssid ? ", hidden" : "");
@@ -2951,7 +2950,7 @@ void bl616_wifi_event_handler(void *arg1, uint32_t arg2)
               sem_post(&g_softap_stopped_sem);
             }
 
-          syslog(LOG_INFO, "wlan1: AP stopped\n");
+          wlinfo("wlan1: AP stopped\n");
           break;
         }
 
