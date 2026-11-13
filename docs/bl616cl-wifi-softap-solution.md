@@ -5,7 +5,7 @@
 ## 1. 方案结论
 
 - SoftAP 是第二个 netdev `wlan1`，对应 wl80211 的 AP VIF；`wlan0` 仍是 STA。两者用同一个 MAC 地址（与 Bouffalo SDK 默认相同）。
-- 能力：open 与 WPA2-PSK（CCMP）；2.4 GHz、20 MHz，信道取当前国家码的信道表（CN 为 1–13）；连接数上限 1–4，由 Kconfig 选定。
+- 能力：open 与 WPA2-PSK（CCMP）；2.4 GHz、20 MHz，信道取当前国家码的信道表（CN 为 1–13）；连接数上限 1–4，由 Kconfig 选定；可在编译期选择隐藏 SSID。
 - 只用标准 wapi/WEXT ioctl 控制：`wapi essid wlan1 <SSID> 1` 启动，`wapi essid wlan1 <SSID> 0` 或 `ifdown wlan1` 停止。没有新增私有 ioctl。
 - 客户端之间的帧由驱动转发（AP 内部转发），与 Bouffalo SDK lwIP 移植的做法相同。
 - 驱动不配 IP 地址。地址和 DHCP 由 `netutils/dhcpd` 提供，`wifi` 配置里 `dhcpd_start wlan1` 即可（网关 192.168.169.1/24）。
@@ -28,6 +28,7 @@ wl80211 事件 AP_STOPPED / AP_STA_ADDED / AP_STA_DEL
 
 - macsw `vela_bl616cl` profile 本来就有 2 个 VIF、4 个 STA 表项和 beacon，SoftAP 不改 macsw、wl80211 private 和 supplicant；wl80211 的 AP 代码没有编译开关，STA 镜像里已经编入。
 - wl80211 public 只改了 NuttX host port：`wl80211_output()` 多一个 VIF 参数（原来固定发往 STA VIF）。预编译包随之重新导出，见 STA 方案文档 4.5。
+- 隐藏 SSID 由共用的 wl80211 实现（与 Bouffalo SDK 相同）：AP 启动参数 `wl80211_ap_settings.flags` 带 `WL80211_AP_FLAGS_HIDDEN_SSID` 时，beacon 里的 SSID 元素长度为 0，不回应通配 probe request，回应带本 AP SSID 的定向 probe request（应答里是真实 SSID），并且 beacon、probe response、association response 都不带 WPS 元素（WSC 2.0 要求隐藏的 AP 不启用 WPS）。适配层只是按 Kconfig 设置 `wifi_mgmr_ap_params_t.hidden_ssid`。
 - 板级 bringup 在 `bl616cl_wlan_sta_initialize()` 之后调用 `bl616cl_wlan_softap_initialize()` 注册 `wlan1`；注册后接口是 DOWN，射频不动作。
 
 ## 3. 控制面
@@ -75,7 +76,8 @@ wl80211 事件 AP_STOPPED / AP_STA_ADDED / AP_STA_DEL
 BL616CL_WIRELESS_WIFI
 └── BL616CL_WIRELESS_WIFI_SOFTAP            注册 wlan1
     ├── BL616CL_WIRELESS_WIFI_SOFTAP_MAX_STA       1–4，默认 4
-    └── BL616CL_WIRELESS_WIFI_SOFTAP_IDLE_TIMEOUT  0–2145 s，默认 300，0 关闭
+    ├── BL616CL_WIRELESS_WIFI_SOFTAP_IDLE_TIMEOUT  0–2145 s，默认 300，0 关闭
+    └── BL616CL_WIRELESS_WIFI_SOFTAP_HIDDEN        隐藏 SSID，默认关
 ```
 
 `ai-m64p-32s-kit/wifi` 配置打开 SoftAP、`NETUTILS_DHCPD` 与 `EXAMPLES_DHCPD`（提供 `dhcpd_start`/`dhcpd_stop` 命令），并打开 NSH 的 `ifup`/`ifdown`。dhcpd 地址：
@@ -95,7 +97,7 @@ nsh> dhcpd_start wlan1
 nsh> wapi psk wlan1 <8–63 字符口令> 3      # 不执行这一步则为 open
 nsh> wapi freq wlan1 6 1                   # 可选
 nsh> wapi essid wlan1 MY_SOFTAP 1
-wlan1: AP "MY_SOFTAP" started on channel 6, WPA2-PSK
+wlan1: AP "MY_SOFTAP" started on channel 6, WPA2-PSK      # 隐藏时末尾多 ", hidden"
 wlan1: client xx:xx:xx:xx:xx:xx associated
 nsh> wapi essid wlan1 MY_SOFTAP 0          # 停止，保留设置
 nsh> ifdown wlan1                          # 停止并清除设置
@@ -111,7 +113,8 @@ nsh> ifdown wlan1                          # 停止并清除设置
 
 ## 8. 已知限制
 
-- 不支持隐藏 SSID、WPA3/PMF、5 GHz、40 MHz；这些需要先在共用的 wl80211 中实现。
+- 不支持 WPA3/PMF、5 GHz、40 MHz；这些需要先在共用的 wl80211 中实现。
+- 隐藏 SSID 只能在编译期选择，运行中不能切换；NuttX 没有对应的标准 ioctl。客户端要事先知道 SSID 并按隐藏网络配置（例如 NetworkManager 的 `802-11-wireless.hidden yes`、wpa_supplicant 的 `scan_ssid=1`）；Vela 设备作客户端时 `wapi essid` 直接可连。隐藏不是安全手段：SSID 仍出现在 probe response、客户端的定向 probe 和关联请求里。只验证过 Linux（NetworkManager）与 Vela 客户端，手机和 Windows 未测。
 - 没有运行时设置连接数上限、查询客户端列表或踢客户端的接口；NuttX 也没有这类标准 ioctl。
 - wl80211 的 AP 接受没有先发认证帧的关联请求。这样的客户端由空闲清理在超时后移除，超时前占用一个名额，所以伪造关联请求仍能在这段时间内占满名额。
 - 空闲清理到期直接 deauth，不先向客户端发探测帧确认它是否还在，空闲时一帧都不发的客户端到期会被断开、需要重连。实测 Linux 客户端（树莓派）空闲时持续发 QoS Null；macsw 的 STA 在 55 s 没有发送时发保活帧。超时上限 2145 s 来自 wl80211 比较时间用的 32 位微秒计时器。
@@ -138,6 +141,20 @@ nsh> ifdown wlan1                          # 停止并清除设置
 | 空闲 | 无客户端约 1 h | beacon 持续，之后可扫描并关联 |
 | 空闲清理 | 超时 300 s：注入一个未认证就关联、之后不再发帧的客户端；Linux 客户端连上后 10 min 不发业务流量 | 注入的客户端在 300 s 时被 deauth（reason 4）并移除；Linux 客户端一直在线 |
 | STA 回归 | 关、开 SoftAP 两种镜像跑 STA 连接与 iperf 回归 | 与改动前镜像一致 |
+
+隐藏 SSID（2026-11-13，同一台架，AP 在信道 1，空口用另一块网卡在 monitor 模式抓包）：
+
+| 项 | 内容 | 结果 |
+|---|---|---|
+| beacon | 隐藏的 open 与 WPA2 AP | SSID 元素长度 0，其余元素与不隐藏时相同；WPA2 时带 RSN、不带 WPS |
+| probe | 客户端通配、定向、错误 SSID 的定向 probe 各 3 轮 | 通配与错误 SSID 无应答；定向有应答，应答带真实 SSID、不带 WPS |
+| 扫描 | Linux 被动扫描；Vela `wapi scan` | 都只看到 BSSID，SSID 为空 |
+| 连接 | Linux（隐藏网络配置）与 Vela 客户端，open 与 WPA2 | 都能连上，DHCP、双向 ping 与客户端互 ping 各 20 次 0 丢包；错误口令握手失败，另一客户端同时 ping 150/150 |
+| 重连 | Linux 客户端断开重连 10 次；AP 停启 5 次后重连 | 15/15 |
+| 省电客户端 | Linux 客户端省电开启，1 s 间隔 ping 60 次 | 60/60 |
+| 不隐藏回归 | 默认 `wifi` 配置 | beacon 元素与改动前相同（WPA2 时仍带 WPS），回应通配 probe，两种客户端 open/WPA2 可连 |
+
+NetworkManager 1.52 对所有连接配置都用定向 probe 扫描，所以在 Linux 上“不按隐藏网络配置就连不上”不成立；隐藏是否生效以空口抓包为准。
 
 吞吐（iperf2，30 s，Mbit/s；TX 为 AP 发送，UDP RX 对端发送 30 Mbit/s；同一时段）：
 

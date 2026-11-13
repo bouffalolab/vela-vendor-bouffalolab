@@ -2602,6 +2602,9 @@ int bl616cl_wifi_softap_connect(void)
   params.ssid = g_softap_cfg.ssid;
   params.key = g_softap_cfg.pwd_len ? g_softap_cfg.pwd : NULL;
   params.channel = channel;
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP_HIDDEN
+  params.hidden_ssid = true;
+#endif
 
   wifi_mgmr_conf_max_sta(CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP_MAX_STA);
 
@@ -2620,9 +2623,10 @@ int bl616cl_wifi_softap_connect(void)
   g_softap_cfg.cur_channel = channel;
   bl616cl_wlan_softap_set_linkstatus(true);
 
-  syslog(LOG_INFO, "wlan1: AP \"%s\" started on channel %u, %s\n",
+  syslog(LOG_INFO, "wlan1: AP \"%s\" started on channel %u, %s%s\n",
          g_softap_cfg.ssid, channel,
-         g_softap_cfg.pwd_len ? "WPA2-PSK" : "open");
+         g_softap_cfg.pwd_len ? "WPA2-PSK" : "open",
+         params.hidden_ssid ? ", hidden" : "");
 
   adapter_wifi_lock(false);
   return OK;

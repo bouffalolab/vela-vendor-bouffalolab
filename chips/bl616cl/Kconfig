@@ -687,6 +687,16 @@ config BL616CL_WIRELESS_WIFI_SOFTAP_IDLE_TIMEOUT
 		value is rounded up to a multiple of 5.  0 disables it.  The
 		limit comes from the 32-bit microsecond timer wl80211 uses.
 
+config BL616CL_WIRELESS_WIFI_SOFTAP_HIDDEN
+	bool "Hide the SSID"
+	default n
+	---help---
+		Beacons carry an empty SSID and wildcard probe requests are
+		not answered, so clients have to be given the SSID.  WPS is not
+		advertised, as WSC 2.0 requires for a hidden AP.  The SSID is
+		still sent in probe responses and by the clients; this does not
+		protect the network.
+
 endif # BL616CL_WIRELESS_WIFI_SOFTAP
 
 endif # BL616CL_WIRELESS_WIFI

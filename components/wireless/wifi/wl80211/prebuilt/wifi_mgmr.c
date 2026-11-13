@@ -1376,6 +1376,9 @@ int wifi_mgmr_ap_start(const wifi_mgmr_ap_params_t *config)
     ap_setting.channel_width = WL80211_CHAN_WIDTH_20;
     ap_setting.beacon_interval = 100;
     ap_setting.max_power = 0x14;
+    if (config->hidden_ssid) {
+        ap_setting.flags |= WL80211_AP_FLAGS_HIDDEN_SSID;
+    }
 
 #if !defined(__NuttX__)
     wifi_mgmr_ap_netif_cfg_save(config);

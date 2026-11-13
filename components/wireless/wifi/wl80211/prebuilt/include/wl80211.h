@@ -238,6 +238,7 @@ struct wl80211_ap_settings {
 #endif
     const uint8_t *probe_resp_ie;
     uint16_t probe_resp_ie_len;
+#define WL80211_AP_FLAGS_HIDDEN_SSID 0x1
     uint32_t flags;
 };
 
