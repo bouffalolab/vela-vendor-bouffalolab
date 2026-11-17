@@ -47,12 +47,12 @@ bl_include_directories(
   ${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/include/arch
   ${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/include/arch/risc-v/t-head
   ${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/include/arch/risc-v/t-head/Core/Include
-  ${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/config/bl616cl
+  ${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/config/${CHIP}
   ${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/src/flash
-  ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/include
-  ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/include/hardware
+  ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/${CHIP}/std/include
+  ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/${CHIP}/std/include/hardware
   ${CMAKE_CURRENT_LIST_DIR}/drivers/sys
-  ${CMAKE_CURRENT_LIST_DIR}/drivers/sys/bl616cl)
+  ${CMAKE_CURRENT_LIST_DIR}/drivers/sys/${CHIP})
 
 if(COMMAND nuttx_add_kernel_library AND "${CHIP}" STREQUAL "bl616cl")
   include(${CMAKE_CURRENT_LIST_DIR}/cmake/bl616cl_lhal.cmake)

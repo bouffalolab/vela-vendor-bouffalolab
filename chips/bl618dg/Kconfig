@@ -1,0 +1,33 @@
+#
+# For a description of the syntax of this configuration file,
+# see the file kconfig-language.txt in the NuttX tools repository.
+#
+
+if ARCH_CHIP_CUSTOM
+
+config ARCH_CHIP_BL618DG
+	def_bool y
+	select ARCH_RV32
+	select ARCH_HAVE_FPU
+	select ARCH_HAVE_DPFPU
+	select ARCH_RV_ISA_M
+	select ARCH_RV_ISA_A
+	select ARCH_RV_ISA_C
+	select ARCH_RV_ISA_ZICSR_ZIFENCEI
+	select ONESHOT
+	select ONESHOT_COUNT
+	select ONESHOT_FAST_DIVISION
+	select ALARM_ARCH
+	---help---
+		BouffaloLab BL618DG Nuclei platform.
+		Only flat builds are supported.
+
+config BL618DG_MTIMER_FREQ
+	int "System timer input frequency (Hz)"
+	default 1000000
+	range 1 2147483647
+	---help---
+		System timer counter frequency in Hz.
+		This value must match the actual timer clock after division.
+
+endif
