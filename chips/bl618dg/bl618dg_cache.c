@@ -40,32 +40,157 @@
  ****************************************************************************/
 
 #ifdef CONFIG_BL618DG_CACHE
+extern uint8_t __bl618dg_cache_xip_start;
+extern uint8_t __bl618dg_cache_xip_end;
 extern uint8_t __bl618dg_cache_ram_start;
 extern uint8_t __bl618dg_cache_ram_end;
-
+#endif
 
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
 
+#ifdef CONFIG_BL618DG_CACHE
+/****************************************************************************
+ * Name: bl618dg_cache_align_down
+ *
+ * Description:
+ *   Round a value down to a multiple of CACHE_LINE_SIZE.
+ *
+ * Input Parameters:
+ *   value - Address to align.
+ *
+ * Returned Value:
+ *   The value aligned down to a cache line boundary.
+ *
+ ****************************************************************************/
 
-/* Accept only complete cache lines in the AP OCRAM or, for instruction
- * maintenance, the SDK XIP window. Reject empty and overflowing ranges.
- */
-
-static bool bl618dg_cache_range(uintptr_t start, uintptr_t end, bool icache,
-                               uintptr_t *first, uintptr_t *last)
+static inline uintptr_t bl618dg_cache_align_down(uintptr_t value)
 {
-  if (end <= start || end > UINTPTR_MAX - (CACHE_LINE_SIZE - 1))
+  return value & ~(CACHE_LINE_SIZE - 1u);
+}
+
+/****************************************************************************
+ * Name: bl618dg_cache_domain_contains
+ *
+ * Description:
+ *   Check that the non-empty range [start, end) lies entirely inside the
+ *   range [domain_start, domain_end).
+ *
+ * Input Parameters:
+ *   start - Start of the range to check.
+ *   end - End of the range to check (exclusive).
+ *   domain_start - Start of the domain.
+ *   domain_end - End of the domain (exclusive).
+ *
+ * Returned Value:
+ *   true if the range is non-empty and inside the domain; false otherwise.
+ *
+ ****************************************************************************/
+
+static bool bl618dg_cache_domain_contains(uintptr_t start, uintptr_t end,
+                                          uintptr_t domain_start,
+                                          uintptr_t domain_end)
+{
+  return start >= domain_start && start < domain_end && end > start &&
+         end <= domain_end;
+}
+
+/****************************************************************************
+ * Name: bl618dg_cache_ram_contains
+ *
+ * Description:
+ *   Check that [start, end) lies inside the linker-defined AP OCRAM
+ *   region (__bl618dg_cache_ram_*).
+ *
+ * Input Parameters:
+ *   start - Start of the range to check.
+ *   end - End of the range to check (exclusive).
+ *
+ * Returned Value:
+ *   true if the range is inside one RAM domain; false otherwise.
+ *
+ ****************************************************************************/
+
+static bool bl618dg_cache_ram_contains(uintptr_t start, uintptr_t end)
+{
+  return bl618dg_cache_domain_contains(
+    start, end, (uintptr_t)&__bl618dg_cache_ram_start,
+    (uintptr_t)&__bl618dg_cache_ram_end);
+}
+
+/****************************************************************************
+ * Name: bl618dg_cache_icache_contains
+ *
+ * Description:
+ *   Check that [start, end) lies inside the RAM domain or the linker-
+ *   defined XIP window (__bl618dg_cache_xip_*).
+ *
+ * Input Parameters:
+ *   start - Start of the range to check.
+ *   end - End of the range to check (exclusive).
+ *
+ * Returned Value:
+ *   true if the range is inside a RAM or XIP domain; false otherwise.
+ *
+ ****************************************************************************/
+
+static bool bl618dg_cache_icache_contains(uintptr_t start, uintptr_t end)
+{
+  return bl618dg_cache_ram_contains(start, end) ||
+         bl618dg_cache_domain_contains(
+           start, end, (uintptr_t)&__bl618dg_cache_xip_start,
+           (uintptr_t)&__bl618dg_cache_xip_end);
+}
+
+/****************************************************************************
+ * Name: bl618dg_cache_prepare_range
+ *
+ * Description:
+ *   Align [start, end) outward to cache line boundaries and validate it. The
+ *   range is rejected if it is empty, if aligning the end would overflow, or
+ *   if it is outside the I-cache domain (icache) or RAM domain (D-cache).
+ *
+ * Input Parameters:
+ *   start - Start address of the range.
+ *   end - End address of the range (exclusive).
+ *   icache - true to validate against the I-cache domain, false for D-cache.
+ *   aligned_start - Location to return the line-aligned start.
+ *   aligned_end - Location to return the line-aligned end.
+ *
+ * Returned Value:
+ *   true if the range is valid and the outputs are set; false if the
+ *   operation must be skipped.
+ *
+ ****************************************************************************/
+
+static bool bl618dg_cache_prepare_range(
+  uintptr_t start, uintptr_t end, bool icache, uintptr_t *aligned_start,
+  uintptr_t *aligned_end)
+{
+  if (end <= start)
     {
       return false;
     }
 
-  *first = start & ~(CACHE_LINE_SIZE - 1);
-  *last = (end + CACHE_LINE_SIZE - 1) & ~(CACHE_LINE_SIZE - 1);
-  return (*first >= (uintptr_t)&__bl618dg_cache_ram_start &&
-          *last <= (uintptr_t)&__bl618dg_cache_ram_end) ||
-         (icache && *first >= 0xb0000000 && *last <= 0xb4000000);
+  if (end > UINTPTR_MAX - (CACHE_LINE_SIZE - 1u))
+    {
+      return false;
+    }
+
+  *aligned_start = bl618dg_cache_align_down(start);
+  *aligned_end = bl618dg_cache_align_down(
+    end + CACHE_LINE_SIZE - 1u);
+
+  if ((icache && !bl618dg_cache_icache_contains(*aligned_start,
+                                                *aligned_end)) ||
+      (!icache && !bl618dg_cache_ram_contains(*aligned_start,
+                                              *aligned_end)))
+    {
+      return false;
+    }
+
+  return true;
 }
 #endif
 
@@ -152,7 +277,7 @@ void up_invalidate_icache(uintptr_t start, uintptr_t end)
   uintptr_t first;
   uintptr_t last;
 
-  if (bl618dg_cache_range(start, end, true, &first, &last))
+  if (bl618dg_cache_prepare_range(start, end, true, &first, &last))
     {
       MInvalICacheRange(first, last - first);
       __FENCE_I();
@@ -224,7 +349,7 @@ void up_clean_dcache(uintptr_t start, uintptr_t end)
   uintptr_t first;
   uintptr_t last;
 
-  if (bl618dg_cache_range(start, end, false, &first, &last))
+  if (bl618dg_cache_prepare_range(start, end, false, &first, &last))
     {
       MFlushDCacheRange(first, last - first);
     }
@@ -249,7 +374,7 @@ void up_invalidate_dcache(uintptr_t start, uintptr_t end)
   uintptr_t first;
   uintptr_t last;
 
-  if (!bl618dg_cache_range(start, end, false, &first, &last))
+  if (!bl618dg_cache_prepare_range(start, end, false, &first, &last))
     {
       return;
     }
@@ -290,7 +415,7 @@ void up_flush_dcache(uintptr_t start, uintptr_t end)
   uintptr_t first;
   uintptr_t last;
 
-  if (bl618dg_cache_range(start, end, false, &first, &last))
+  if (bl618dg_cache_prepare_range(start, end, false, &first, &last))
     {
       MFlushInvalDCacheRange(first, last - first);
     }
