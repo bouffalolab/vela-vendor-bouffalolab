@@ -654,6 +654,51 @@ config BL616CL_FW_TASK_PRIORITY
 		rate and UDP TX lost 1-2 Mbit/s; below it (90) UDP TX lost 6-12
 		Mbit/s.
 
+menuconfig BL616CL_WIRELESS_WIFI_SOFTAP
+	bool "Wi-Fi SoftAP"
+	default n
+	---help---
+		SoftAP on the wl80211 AP interface, registered as a second
+		network device, wlan1, next to the station wlan0.  It is driven
+		with the standard wireless ioctls (wapi): SIOCSIWESSID with
+		IW_ESSID_ON starts the AP, IW_ESSID_OFF or bringing wlan1 down
+		stops it.  The AP is open, or WPA2-PSK (CCMP) once a passphrase
+		is set, on 2.4 GHz with 20 MHz.  wlan1 gets no address from the
+		driver; set one and run a DHCP server, e.g. dhcpd_start wlan1.
+
+if BL616CL_WIRELESS_WIFI_SOFTAP
+
+config BL616CL_WIRELESS_WIFI_SOFTAP_MAX_STA
+	int "Maximum number of clients"
+	range 1 4
+	default 4
+	---help---
+		Clients the SoftAP accepts at a time; further association
+		requests are refused.  wl80211 has room for four.
+
+config BL616CL_WIRELESS_WIFI_SOFTAP_IDLE_TIMEOUT
+	int "Idle client timeout (seconds)"
+	range 0 2145
+	default 300
+	---help---
+		A client the AP has received nothing from for this long is
+		deauthenticated, so that clients which left without a deauth
+		do not keep a place.  wl80211 checks every 5 seconds and the
+		value is rounded up to a multiple of 5.  0 disables it.  The
+		limit comes from the 32-bit microsecond timer wl80211 uses.
+
+config BL616CL_WIRELESS_WIFI_SOFTAP_HIDDEN
+	bool "Hide the SSID"
+	default n
+	---help---
+		Beacons carry an empty SSID and wildcard probe requests are
+		not answered, so clients have to be given the SSID.  WPS is not
+		advertised, as WSC 2.0 requires for a hidden AP.  The SSID is
+		still sent in probe responses and by the clients; this does not
+		protect the network.
+
+endif # BL616CL_WIRELESS_WIFI_SOFTAP
+
 endif # BL616CL_WIRELESS_WIFI
 
 menuconfig BL616CL_WIRELESS_BLE

@@ -98,6 +98,57 @@ int bl616cl_wlan_sta_initialize(void);
 
 struct net_driver_s *bl616cl_wlan_sta_get_netdev(void);
 
+#ifdef CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP
+/****************************************************************************
+ * Name: bl616cl_wlan_softap_initialize
+ *
+ * Description:
+ *   Register the Wi-Fi SoftAP netcard driver (wlan1).  Call it after
+ *   bl616cl_wlan_sta_initialize().
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   OK on success; Negated errno on failure.
+ *
+ ****************************************************************************/
+
+int bl616cl_wlan_softap_initialize(void);
+
+/****************************************************************************
+ * Name: bl616cl_wlan_softap_get_netdev
+ *
+ * Description:
+ *   Get the Wi-Fi SoftAP netcard driver
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Pointer to the Wi-Fi SoftAP netcard driver
+ *
+ ****************************************************************************/
+
+struct net_driver_s *bl616cl_wlan_softap_get_netdev(void);
+
+/****************************************************************************
+ * Name: bl616cl_wlan_softap_set_linkstatus
+ *
+ * Description:
+ *   Report the carrier of the SoftAP: on while the AP runs.
+ *
+ * Input Parameters:
+ *   linkstatus - true while the AP runs
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void bl616cl_wlan_softap_set_linkstatus(bool linkstatus);
+#endif /* CONFIG_BL616CL_WIRELESS_WIFI_SOFTAP */
+
 #endif /* CONFIG_BL616CL_WIRELESS_WIFI */
 #ifdef __cplusplus
 }

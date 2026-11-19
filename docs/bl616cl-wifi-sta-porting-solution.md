@@ -34,7 +34,7 @@ BL616CL netdev / adapter（chips/bl616cl）
 - Wi-Fi 配置独立于最简 `nsh` 配置；
 - 不把 wl80211 私有 core 的 Bouffalo SDK/FreeRTOS 构建逻辑带入 NuttX 固件。
 
-WPA3-SAE 已完成 100 轮连接循环和四方向 100 秒压力，尚未做 500 轮/500 秒级压力。首版不包含 SoftAP、P2P 或 FHOST 双栈集成。
+WPA3-SAE 已完成 100 轮连接循环和四方向 100 秒压力，尚未做 500 轮/500 秒级压力。首版不包含 SoftAP、P2P 或 FHOST 双栈集成；SoftAP 后续已实现，见 [BL616CL Wi-Fi SoftAP 方案](bl616cl-wifi-softap-solution.md)。
 
 ## 2. 仓库与版本边界
 
@@ -159,7 +159,7 @@ chips/bl616cl/
 └── bl616cl_macsw_plat.[ch]      # macsw 平台 hook：wifi 任务挂起/唤醒、时间源、低功耗桩
 ```
 
-public 与 chip 之间的接口：chip 实现 `bl616_wifi_event_handler()`、`bl616_efuse_read_mac_address()`。RX 用 `wl80211.h` 声明的 `wl80211_register_input_cb()` 注册回调，由驱动按 IPv4/IPv6/ARP 过滤，其余帧用 `wl80211_mac_rx_free()` 还给 MAC；TX 的 `wl80211_output()`、`wl80211_output_ready()` 和完成回调注册 `internal_register_txdone_cb()` 只在 host port `nuttx.c` 中定义、没有等价的已声明接口，原型集中在 `chips/bl616cl/bl616cl_wl80211_port.h`，须与 `nuttx.c` 保持一致。
+public 与 chip 之间的接口：chip 实现 `bl616_wifi_event_handler()`、`bl616_efuse_read_mac_address()`。RX 用 `wl80211.h` 声明的 `wl80211_register_input_cb()` 注册回调，由驱动按 IPv4/IPv6/ARP 过滤，其余帧用 `wl80211_mac_rx_free()` 还给 MAC（AP VIF 的帧不过滤，见 SoftAP 方案）；TX 的 `wl80211_output()`（参数带 VIF 类型，STA 与 AP 共用在途上限）、`wl80211_output_ready()` 和完成回调注册 `internal_register_txdone_cb()` 只在 host port `nuttx.c` 中定义、没有等价的已声明接口，原型集中在 `chips/bl616cl/bl616cl_wl80211_port.h`，须与 `nuttx.c` 保持一致。
 
 这种划分对应 BL4 的实际结构：private core 作为库，平台适配在芯片层编译。它避免将 NuttX 特定实现反向塞入 wl80211 private core。
 

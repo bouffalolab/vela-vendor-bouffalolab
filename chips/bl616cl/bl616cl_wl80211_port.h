@@ -26,13 +26,16 @@
  ****************************************************************************/
 
 #include <stdbool.h>
+#include <stdint.h>
 
 /* The wl80211 NuttX host port (components/wireless/wifi/wl80211/wl80211/
- * nuttx.c) defines the STA TX interface below without declaring it in any
+ * nuttx.c) defines the TX interface below without declaring it in any
  * wl80211 header, and no declared wl80211 API is equivalent: they are the
  * zero-copy IOB output, its in-flight limit and the TX done notification.
- * Keep these prototypes identical to the definitions in nuttx.c; the
- * compiler cannot check them across the two repositories.
+ * The wl80211 core defines _wl80211_init() the same way; the Bouffalo SDK
+ * calls it from SYSINIT, which NuttX does not have, and wl80211_init() is
+ * only a deprecated stub there.  Keep these prototypes identical to the
+ * definitions; the compiler cannot check them across the repositories.
  */
 
 /****************************************************************************
@@ -45,8 +48,8 @@ struct iob_s;
  * Name: internal_register_txdone_cb
  *
  * Description:
- *   Register the function wl80211 calls each time the MAC releases a STA
- *   frame sent by wl80211_output().
+ *   Register the function wl80211 calls each time the MAC releases a frame
+ *   sent by wl80211_output().
  *
  * Input Parameters:
  *   cb - TX done notification.
@@ -59,15 +62,33 @@ struct iob_s;
 void internal_register_txdone_cb(void (*cb)(void));
 
 /****************************************************************************
+ * Name: _wl80211_init
+ *
+ * Description:
+ *   Initialize the wl80211 host state.  Call once, after the Wi-Fi firmware
+ *   task is up and before any other wl80211 call.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void _wl80211_init(void);
+
+/****************************************************************************
  * Name: wl80211_output
  *
  * Description:
- *   Queue an IOB chain for transmission on the STA interface without
+ *   Queue an IOB chain for transmission on a wl80211 interface without
  *   copying it. The TX descriptor is written into the guard area in front
  *   of the first IOB.
  *
  * Input Parameters:
- *   buf - IOB chain holding the Ethernet frame.
+ *   vif_type - WL80211_VIF_STA or WL80211_VIF_AP.
+ *   buf      - IOB chain holding the Ethernet frame.
  *
  * Returned Value:
  *   Zero on success; wl80211 frees the IOB chain once the MAC releases it
@@ -77,14 +98,15 @@ void internal_register_txdone_cb(void (*cb)(void));
  *
  ****************************************************************************/
 
-int wl80211_output(struct iob_s *buf);
+int wl80211_output(uint8_t vif_type, struct iob_s *buf);
 
 /****************************************************************************
  * Name: wl80211_output_ready
  *
  * Description:
  *   Report whether wl80211_output() can accept another frame, that is,
- *   whether the number of STA frames in flight is below the limit.
+ *   whether the number of frames in flight, STA and AP together, is below
+ *   the limit.
  *
  * Input Parameters:
  *   None

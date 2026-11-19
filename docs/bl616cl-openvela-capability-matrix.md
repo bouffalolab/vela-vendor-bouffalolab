@@ -35,6 +35,7 @@ Kconfig 控制，关闭时不进入目标 archive 或运行路径。
 | 启动 | chip early init（含 XIP flash 80 MHz 采样校准）、board late init、ROMFS/NSH | `chips/bl616cl/bl616cl_start.c`、`bl616cl_flash.c`；`boards/bl616cl/common/` |
 | 外设 | UART0/UART1、GPIO、timer0/TIMER1、oneshot、watchdog、TRNG、RTC、DMA0、I2S0（AVE-V10 ES8388）；I2C/SPI/PWM 软件路径按实物边界声明 | `chips/bl616cl/`；`boards/bl616cl/`；`cmake/bl616cl_lhal.cmake` |
 | 诊断 | assertions、stack/backtrace、CPU/IRQ/critical monitor、MM record、stack canary、coredump、Note RAM trace、generic KASAN、UBSAN runtime | `configs/nsh/defconfig`；`vendor/bouffalolab/docs/` |
+| Wi-Fi | STA `wlan0`（open、WPA2-PSK、WPA3-SAE）；SoftAP `wlan1`（open、WPA2-PSK，1–4 个客户端，AP 内部转发，与 STA 同信道并存） | [bl616cl-wifi-sta-porting-solution.md](bl616cl-wifi-sta-porting-solution.md)；[bl616cl-wifi-softap-solution.md](bl616cl-wifi-softap-solution.md) |
 
 当前 `nsh` 已选择 `CONFIG_SCHED_CPULOAD_SYSCLK=y`，并用独立的
 `CONFIG_SYSTEM_CPULOAD=y` 编入验证负载命令。后者只用于测试，不是 CPU load
