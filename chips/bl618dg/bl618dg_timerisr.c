@@ -31,6 +31,7 @@
 
 #include "riscv_mtimer.h"
 
+#include "bl618dg_clockconfig.h"
 #include "hardware/bl618dg_core.h"
 
 /****************************************************************************
@@ -43,7 +44,7 @@
  * Description:
  *   Register the system timer with the RISC-V mtimer oneshot lower half
  *   and install it as the NuttX system alarm. The timer clock must be
- *   configured to CONFIG_BL618DG_MTIMER_FREQ before initialization.
+ *   configured to BL618DG_MTIMER_FREQ before initialization.
  *
  * Input Parameters:
  *   None
@@ -60,7 +61,7 @@ void up_timer_initialize(void)
   lower = riscv_mtimer_initialize(BL618DG_SYSTIMER_MTIME,
                                   BL618DG_SYSTIMER_MTIMECMP,
                                   RISCV_IRQ_MTIMER,
-                                  CONFIG_BL618DG_MTIMER_FREQ);
+                                  BL618DG_MTIMER_FREQ);
 
   DEBUGASSERT(lower != NULL);
   up_alarm_set_lowerhalf(lower);

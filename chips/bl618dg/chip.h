@@ -28,4 +28,9 @@
 #include <nuttx/config.h>
 #include <arch/chip/chip.h>
 
+/* Common entry point for architecture code, including assembly. Drivers
+ * include their private module and hardware headers explicitly; SDK C
+ * types and register definitions must not leak through this header.
+ */
+
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL618DG_CHIP_H */

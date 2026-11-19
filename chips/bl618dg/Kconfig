@@ -5,11 +5,18 @@
 
 if ARCH_CHIP_CUSTOM
 
+comment "BouffaloLab BL618DG Configuration Options"
+
+choice
+	prompt "BouffaloLab Chip Selection"
+	default ARCH_CHIP_BL618DG
+
 config ARCH_CHIP_BL618DG
-	def_bool y
+	bool "BL618DG"
 	select ARCH_RV32
 	select ARCH_HAVE_FPU
 	select ARCH_HAVE_DPFPU
+	select ARCH_HAVE_RESET
 	select ARCH_RV_ISA_M
 	select ARCH_RV_ISA_A
 	select ARCH_RV_ISA_C
@@ -19,15 +26,59 @@ config ARCH_CHIP_BL618DG
 	select ONESHOT_FAST_DIVISION
 	select ALARM_ARCH
 	---help---
-		BouffaloLab BL618DG Nuclei platform.
-		Only flat builds are supported.
+		BouffaloLab BL618DG Nuclei AP platform.
 
-config BL618DG_MTIMER_FREQ
-	int "System timer input frequency (Hz)"
-	default 1000000
-	range 1 2147483647
+endchoice
+
+menu "BL618DG Peripheral Support"
+
+config BL618DG_CACHE
+	bool "OpenVela cache maintenance API"
+	default y
+	select ARCH_ICACHE
+	select ARCH_DCACHE
 	---help---
-		System timer counter frequency in Hz.
-		This value must match the actual timer clock after division.
+		Expose the BL618DG instruction and data cache through the complete
+		OpenVela cache API. I-cache and D-cache are selected together because
+		the coherent-cache ABI requires both implementations. The boot path
+		continues to enable hardware caches when this option is disabled.
 
-endif
+menuconfig BL618DG_UART
+	bool "UART"
+	default y
+	select ARCH_HAVE_SERIAL_TERMIOS
+	---help---
+		Enable the BL618DG UART serial drivers.
+
+if BL618DG_UART
+
+menuconfig BL618DG_UART0
+	bool "UART0"
+	default y
+	select UART0_SERIALDRIVER
+	---help---
+		Enable UART0, used as the serial console on the supported boards.
+
+if BL618DG_UART0
+
+config BL618DG_UART0_RXPIN
+	int "UART0 RX pin"
+	range 0 52
+	default 12
+	---help---
+		GPIO number routed to the UART0 RX signal.
+
+config BL618DG_UART0_TXPIN
+	int "UART0 TX pin"
+	range 0 52
+	default 11
+	---help---
+		GPIO number routed to the UART0 TX signal.
+
+endif # BL618DG_UART0
+
+endif # BL618DG_UART
+
+endmenu
+
+endif # ARCH_CHIP_CUSTOM

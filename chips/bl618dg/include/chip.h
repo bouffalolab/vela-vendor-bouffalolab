@@ -29,4 +29,9 @@
 
 #define BL618DG_ECLIC_IRQ_COUNT 117
 
+/* Public serial capabilities consumed by architecture common code. */
+
+#define HAVE_UART_DEVICE 1
+#define HAVE_SERIAL_CONSOLE 1
+
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL618DG_INCLUDE_CHIP_H */

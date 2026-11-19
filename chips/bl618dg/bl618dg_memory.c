@@ -45,11 +45,19 @@ struct bl618dg_mem_section_s
   uint32_t *end;
 };
 
+struct bl618dg_mem_load_section_s
+{
+  uint32_t *start;
+  uint32_t *end;
+  uint32_t *load;
+};
+
 /****************************************************************************
  * Private Data
  ****************************************************************************/
 
 extern struct bl618dg_mem_section_s __mem_setz_sections[];
+extern struct bl618dg_mem_load_section_s __mem_copy_sections[];
 
 /****************************************************************************
  * Public Functions
@@ -59,9 +67,9 @@ extern struct bl618dg_mem_section_s __mem_setz_sections[];
  * Name: bl618dg_section_load
  *
  * Description:
- *   Initialize RAM sections at startup: zero every entry of the
- *   __mem_setz_sections table. The table ends with a sentinel and entries
- *   with NULL pointers are skipped.
+ *   Copy initialized RAM sections from their load images, then clear the
+ *   zero-table entries. Both tables end with a sentinel. The linker keeps
+ *   no-init data and the active idle stack outside these ranges.
  *
  * Input Parameters:
  *   None
@@ -73,9 +81,27 @@ extern struct bl618dg_mem_section_s __mem_setz_sections[];
 
 void bl618dg_section_load(void)
 {
+  struct bl618dg_mem_load_section_s *copy = __mem_copy_sections;
   struct bl618dg_mem_section_s *setz = __mem_setz_sections;
+  uint32_t *src;
   uint32_t *dest;
   int i;
+
+  for (i = 0; (uintptr_t)copy[i].start != BL618DG_SECTION_SENTINEL; i++)
+    {
+      if (copy[i].start == NULL || copy[i].end == NULL ||
+          copy[i].load == NULL)
+        {
+          continue;
+        }
+
+      src = copy[i].load;
+      dest = copy[i].start;
+      while (dest < copy[i].end)
+        {
+          *dest++ = *src++;
+        }
+    }
 
   for (i = 0; (uintptr_t)setz[i].start != BL618DG_SECTION_SENTINEL; i++)
     {

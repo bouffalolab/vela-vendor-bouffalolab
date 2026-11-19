@@ -35,9 +35,9 @@
  * Name: bl618dg_section_load
  *
  * Description:
- *   Initialize RAM sections at startup: zero every entry of the
- *   __mem_setz_sections table. The table ends with a sentinel and entries
- *   with NULL pointers are skipped.
+ *   Copy initialized RAM sections from their load images, then clear the
+ *   zero-table entries. Both tables end with a sentinel. The linker keeps
+ *   no-init data and the active idle stack outside these ranges.
  *
  * Input Parameters:
  *   None

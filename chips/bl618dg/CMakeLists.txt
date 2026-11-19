@@ -22,17 +22,34 @@ if(NOT CONFIG_BUILD_FLAT OR NOT CONFIG_ARCH_DPFPU)
   message(FATAL_ERROR "BL618DG requires a flat, ilp32d build")
 endif()
 
-target_sources(arch PRIVATE bl618dg_head.S bl618dg_start.c bl618dg_irq.c
-                            bl618dg_timerisr.c bl618dg_memory.c)
+set(SRCS
+    bl618dg_head.S
+    bl618dg_start.c
+    bl618dg_cpu.c
+    bl618dg_memory.c
+    bl618dg_cache.c
+    bl618dg_clock.c
+    bl618dg_irq.c
+    bl618dg_irq_adapter.c
+    bl618dg_lowputc.c
+    bl618dg_serial.c
+    bl618dg_systemreset.c
+    bl618dg_timerisr.c
+    bl618dg_allocateheap.c)
+
+target_sources(arch PRIVATE ${SRCS})
 
 # Nuclei core register definitions.
 target_include_directories(
   arch SYSTEM PRIVATE
   ${CMAKE_CURRENT_LIST_DIR}/../../drivers/lhal/include/arch/risc-v/n900/Core/Include)
-target_compile_definitions(arch PRIVATE BL618DG CPU_AP)
+target_compile_definitions(arch PRIVATE BL618DG CPU_AP ARCH_RISCV=1
+                                       CONFIG_IRQ_NUM=117)
 
 set_property(
   SOURCE ${CMAKE_CURRENT_LIST_DIR}/bl618dg_start.c
          ${CMAKE_CURRENT_LIST_DIR}/bl618dg_memory.c
+         ${CMAKE_CURRENT_LIST_DIR}/bl618dg_cpu.c
+         ${CMAKE_CURRENT_LIST_DIR}/bl618dg_cache.c
   TARGET_DIRECTORY arch APPEND PROPERTY COMPILE_OPTIONS
   -fno-sanitize=all -fno-stack-protector -fno-builtin)

@@ -40,9 +40,8 @@
  *
  * Description:
  *   Initialize the AP registers, idle stack, trap entry, NMI routing,
- *   counters and FPU before entering __bl618dg_start(). The image must
- *   be loaded at its linked addresses, with memory access permissions,
- *   cache coherency and clocks configured before entry.
+ *   counters and FPU before entering __bl618dg_start(). BootROM and Boot2
+ *   establish the Flash XIP mapping from the board image header.
  *
  ****************************************************************************/
 
@@ -66,6 +65,11 @@ __start:
   li t0, MMISC_CTL_NMI_CAUSE_FFF
   csrs CSR_MMISC_CTL, t0
   csrci CSR_MCOUNTINHIBIT, 0x5
+
+  /* Enable branch prediction as in the SDK Nuclei startup. */
+
+  li t0, MMISC_CTL_BPU
+  csrs CSR_MMISC_CTL, t0
 
 #ifdef CONFIG_ARCH_FPU
   /* Reset FS before the NuttX helper sets its initial state and fcsr. */

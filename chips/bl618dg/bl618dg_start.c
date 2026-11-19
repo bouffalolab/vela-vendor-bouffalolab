@@ -24,8 +24,16 @@
 
 #include <nuttx/config.h>
 
+#include <nuttx/arch.h>
 #include <nuttx/init.h>
+#include <arch/board/board.h>
 
+#include "riscv_internal.h"
+
+#include "bl618dg_cpu.h"
+#include "bl618dg_cache.h"
+#include "bl618dg_clockconfig.h"
+#include "bl618dg_lowputc.h"
 #include "bl618dg_memory.h"
 
 /****************************************************************************
@@ -36,10 +44,9 @@
  * Name: __bl618dg_start
  *
  * Description:
- *   C entry point of the BL618DG chip. Initialize RAM sections and call
- *   nx_start().
- *   Code and initialized data must be loaded at their linked RAM addresses
- *   before entry.
+ *   C entry point of the BL618DG AP. Configure access permissions and
+ *   caches, copy initialized RAM sections from Flash and clear BSS, then
+ *   synchronize caches and initialize clocks before calling nx_start().
  *
  * Input Parameters:
  *   None
@@ -51,7 +58,28 @@
 
 void __bl618dg_start(void)
 {
+  if (bl618dg_cpu_init() < 0)
+    {
+      for (; ; )
+        {
+        }
+    }
+
+  bl618dg_cache_early_init();
   bl618dg_section_load();
+  bl618dg_cache_after_load();
+  if (bl618dg_clock_early_init() < 0)
+    {
+      /* Do not start the scheduler with an unverified timer clock. */
+
+      for (; ; )
+        {
+        }
+    }
+
+  bl618dg_pinmux_early_uart();
+  riscv_earlyserialinit();
+
   nx_start();
   for (; ; )
     {
