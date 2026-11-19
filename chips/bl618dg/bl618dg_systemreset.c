@@ -30,7 +30,9 @@
 #include "bl618dg_sdk.h"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wstrict-prototypes"
+#include "bl618dg_aon.h"
 #include "bl618dg_glb.h"
+#include "bl618dg_hbn.h"
 #pragma GCC diagnostic pop
 
 /****************************************************************************
@@ -41,8 +43,9 @@
  * Name: up_systemreset
  *
  * Description:
- *   Disable interrupts and request the DG software power-on reset.
- *   The SDK reset routine executes from RAM while changing reset controls.
+ *   Switch the 32K clock to RC, wait 1 ms and power off the 32K crystal.
+ *   Disable interrupts, software-reset the wireless blocks, wait 10 ms
+ *   and trigger a software power-on reset.
  *
  * Returned Value:
  *   Does not return.
@@ -51,7 +54,19 @@
 
 void up_systemreset(void)
 {
+  HBN_32K_Sel(HBN_32K_RC);
+  up_mdelay(1);
+  AON_Power_Off_Xtal_32K();
+
   up_irq_save();
+
+  GLB_AHB_MCU_Software_Reset(GLB_AHB_MCU_SW_WIFI);
+  GLB_AHB_MCU_Software_Reset(GLB_AHB_MCU_SW_BTDM);
+  GLB_AHB_MCU_Software_Reset(GLB_AHB_MCU_SW_ZIGBEE);
+  GLB_AHB_MCU_Software_Reset(GLB_AHB_MCU_SW_BLE2);
+  GLB_AHB_MCU_Software_Reset(GLB_AHB_MCU_SW_ZIGBEE2);
+
+  up_mdelay(10);
   GLB_SW_POR_Reset();
 
   for (; ; )
