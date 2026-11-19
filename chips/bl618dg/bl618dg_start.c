@@ -70,8 +70,6 @@ void __bl618dg_start(void)
   bl618dg_cache_after_load();
   if (bl618dg_clock_early_init() < 0)
     {
-      /* Do not start the scheduler with an unverified timer clock. */
-
       for (; ; )
         {
         }

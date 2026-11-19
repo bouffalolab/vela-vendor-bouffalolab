@@ -42,9 +42,8 @@
  * Name: up_timer_initialize
  *
  * Description:
- *   Register the system timer with the RISC-V mtimer oneshot lower half
- *   and install it as the NuttX system alarm. The timer clock must be
- *   configured to BL618DG_MTIMER_FREQ before initialization.
+ *   Configure the MTIMER clock, register the RISC-V mtimer oneshot lower
+ *   half and install it as the NuttX system alarm.
  *
  * Input Parameters:
  *   None
@@ -57,6 +56,13 @@
 void up_timer_initialize(void)
 {
   struct oneshot_lowerhalf_s *lower;
+
+  if (bl618dg_timer_clock_init() < 0)
+    {
+      for (; ; )
+        {
+        }
+    }
 
   lower = riscv_mtimer_initialize(BL618DG_SYSTIMER_MTIME,
                                   BL618DG_SYSTIMER_MTIMECMP,

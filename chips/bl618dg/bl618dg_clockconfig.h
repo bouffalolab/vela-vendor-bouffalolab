@@ -31,8 +31,12 @@
  * Public Function Prototypes
  ****************************************************************************/
 
-/* Configure the DG AP clocks and verify the MTIMER rate. */
+/* Configure the DG AP system clock and MCU XCLK. */
 
 int bl618dg_clock_early_init(void);
+
+/* Configure and verify the MTIMER clock. */
+
+int bl618dg_timer_clock_init(void);
 
 #endif /* __VENDOR_BOUFFALOLAB_CHIPS_BL618DG_BL618DG_CLOCKCONFIG_H */

@@ -47,21 +47,19 @@
  *
  * Description:
  *   Establish the SDK AP clock tree: 40 MHz crystal, CPU PLL and MCU XCLK
- *   from the crystal. The Nuclei AP MTIMER always uses MCU XCLK; the SDK
- *   setter programs its 16-bit divider. Reject a rate that is not exactly
- *   representable and verify the configured rate before starting NuttX.
+ *   from the crystal.
+ *
+ * Input Parameters:
+ *   None
  *
  * Returned Value:
- *   Zero on success, -1 if clock setup or timer readback fails.
+ *   Zero on success, -1 if clock setup fails.
  *
  ****************************************************************************/
 
 int __attribute__((section(".sclock_rlt_code.bl618dg_clock_early_init")))
 bl618dg_clock_early_init(void)
 {
-  uint32_t source;
-  uint32_t divider;
-
   if (GLB_Power_On_XTAL_And_PLL_CLK(GLB_XTAL_40M,
         GLB_PLL_WIFIPLL | GLB_PLL_CPUPLL) != SUCCESS ||
       GLB_Set_MCU_System_CLK(GLB_MCU_SYS_CLK_CPUPLL_DIV1) != SUCCESS ||
@@ -71,6 +69,28 @@ bl618dg_clock_early_init(void)
     }
 
   AON_Set_RC32M_Speed_As_8M(0);
+  return 0;
+}
+
+/****************************************************************************
+ * Name: bl618dg_timer_clock_init
+ *
+ * Description:
+ *   Divide MCU XCLK down to BL618DG_MTIMER_FREQ and verify the programmed
+ *   rate before registering the system timer.
+ *
+ * Input Parameters:
+ *   None
+ *
+ * Returned Value:
+ *   Zero on success, -1 if the divider is invalid or verification fails.
+ *
+ ****************************************************************************/
+
+int bl618dg_timer_clock_init(void)
+{
+  uint32_t source;
+  uint32_t divider;
 
   source = CPU_Get_MTimer_Source_Clock();
   if (source == 0 || source % BL618DG_MTIMER_FREQ != 0)
