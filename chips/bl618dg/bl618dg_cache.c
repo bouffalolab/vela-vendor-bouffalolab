@@ -33,7 +33,15 @@
 #include <nuttx/irq.h>
 
 #include "hardware/bl618dg_core.h"
+#include "bflb_l1c.h"
 #include "bl618dg_cache.h"
+
+/****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+
+#define BL618DG_CACHE_CHUNK_MAX \
+  ((uintptr_t)INT32_MAX & ~(CACHE_LINE_SIZE - 1u))
 
 /****************************************************************************
  * Private Data
@@ -51,6 +59,8 @@ extern uint8_t __bl618dg_cache_ram_end;
  ****************************************************************************/
 
 #ifdef CONFIG_BL618DG_CACHE
+typedef void (*bl618dg_cache_range_op_t)(void *addr, uint32_t size);
+
 /****************************************************************************
  * Name: bl618dg_cache_align_down
  *
@@ -192,6 +202,42 @@ static bool bl618dg_cache_prepare_range(
 
   return true;
 }
+
+/****************************************************************************
+ * Name: bl618dg_cache_range_operation
+ *
+ * Description:
+ *   Apply an LHAL cache operation to [start, end) in chunks no larger than
+ *   BL618DG_CACHE_CHUNK_MAX.
+ *
+ * Input Parameters:
+ *   start - Line-aligned start address.
+ *   end - Line-aligned end address (exclusive).
+ *   operation - LHAL range operation to apply to each chunk.
+ *
+ * Returned Value:
+ *   None.
+ *
+ ****************************************************************************/
+
+static void bl618dg_cache_range_operation(
+  uintptr_t start, uintptr_t end, bl618dg_cache_range_op_t operation)
+{
+  uintptr_t chunk;
+
+  while (start < end)
+    {
+      chunk = end - start;
+      if (chunk > BL618DG_CACHE_CHUNK_MAX)
+        {
+          chunk = BL618DG_CACHE_CHUNK_MAX;
+        }
+
+      operation((void *)start, (uint32_t)chunk);
+
+      start += chunk;
+    }
+}
 #endif
 
 /****************************************************************************
@@ -274,12 +320,14 @@ void up_disable_icache(void)
 
 void up_invalidate_icache(uintptr_t start, uintptr_t end)
 {
-  uintptr_t first;
-  uintptr_t last;
+  uintptr_t aligned_start;
+  uintptr_t aligned_end;
 
-  if (bl618dg_cache_prepare_range(start, end, true, &first, &last))
+  if (bl618dg_cache_prepare_range(start, end, true, &aligned_start,
+                                  &aligned_end))
     {
-      MInvalICacheRange(first, last - first);
+      bl618dg_cache_range_operation(aligned_start, aligned_end,
+                                    bflb_l1c_icache_invalid_range);
       __FENCE_I();
     }
 }
@@ -346,12 +394,14 @@ void up_disable_dcache(void)
 
 void up_clean_dcache(uintptr_t start, uintptr_t end)
 {
-  uintptr_t first;
-  uintptr_t last;
+  uintptr_t aligned_start;
+  uintptr_t aligned_end;
 
-  if (bl618dg_cache_prepare_range(start, end, false, &first, &last))
+  if (bl618dg_cache_prepare_range(start, end, false, &aligned_start,
+                                  &aligned_end))
     {
-      MFlushDCacheRange(first, last - first);
+      bl618dg_cache_range_operation(aligned_start, aligned_end,
+                                    bflb_l1c_dcache_clean_range);
     }
 }
 
@@ -430,18 +480,47 @@ void up_flush_dcache_all(void)
  * Name: up_coherent_dcache
  *
  * Description:
- *   Make newly written RAM instructions visible to instruction fetch.
+ *   Clean the D-cache and then invalidate the I-cache for the range so
+ *   that newly written RAM instructions become visible to instruction
+ *   fetch. A zero length, an overflowing range or a range outside the
+ *   RAM domain is ignored.
+ *
+ * Input Parameters:
+ *   addr - Start address of the range.
+ *   len - Length of the range in bytes.
+ *
+ * Returned Value:
+ *   None.
  *
  ****************************************************************************/
 
 void up_coherent_dcache(uintptr_t addr, size_t len)
 {
-  if (len == 0 || len > UINTPTR_MAX - addr)
+  uintptr_t aligned_start;
+  uintptr_t aligned_end;
+  uintptr_t end;
+
+  if (len == 0)
     {
       return;
     }
 
-  up_clean_dcache(addr, addr + len);
-  up_invalidate_icache(addr, addr + len);
+  if (len > UINTPTR_MAX - addr)
+    {
+      return;
+    }
+
+  end = addr + len;
+  if (!bl618dg_cache_prepare_range(addr, end, false, &aligned_start,
+                                   &aligned_end))
+    {
+      return;
+    }
+
+  bl618dg_cache_range_operation(aligned_start, aligned_end,
+                                bflb_l1c_dcache_clean_range);
+  bl618dg_cache_range_operation(aligned_start, aligned_end,
+                                bflb_l1c_icache_invalid_range);
+  __FENCE_I();
 }
 #endif
