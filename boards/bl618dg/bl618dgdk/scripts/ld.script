@@ -198,7 +198,6 @@ SECTIONS
     . = ALIGN(4);
     _edata = ABSOLUTE(.);
   } > ram AT > flash
-  _eronly = LOADADDR(.data);
 
   .noinit (NOLOAD) : AT(ADDR(.noinit))
   {
