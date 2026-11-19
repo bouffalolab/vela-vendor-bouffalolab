@@ -57,6 +57,13 @@
 
 #define I2S_TEST_RESTART_FRAMES  14400
 
+/* The rates case plays each rate for 1000 ms, and at least for as many
+ * frames as 11025 Hz gets in that time: 8 kHz then still spans six
+ * buffers, four of them timed.
+ */
+
+#define I2S_TEST_RATES_FRAMES    11025
+
 /* The board microphone is on LIN2, which the codec records as the left
  * channel; the right channel (RIN2) is the microphone ground reference.
  */
@@ -935,7 +942,7 @@ int main(int argc, char *argv[])
 {
   static const uint32_t rates[] =
   {
-    11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000
+    8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000
   };
 
   const char *progname = argv[0];
@@ -1030,7 +1037,10 @@ int main(int argc, char *argv[])
       for (i = 0; i < sizeof(rates) / sizeof(rates[0]); i++)
         {
           failures += i2s_tone("I2S-002", rates[i], freq,
-                               I2S_TEST_RATES_MS, volume, only) < 0;
+                               MAX(I2S_TEST_RATES_MS,
+                                   I2S_TEST_RATES_FRAMES * 1000 /
+                                   rates[i]),
+                               volume, only) < 0;
         }
     }
 

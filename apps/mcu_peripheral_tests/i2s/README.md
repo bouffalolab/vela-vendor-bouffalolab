@@ -55,7 +55,7 @@ mcu_i2s_test [tone|rates|restart|record|final|width|all] [-r rate] [-f freq] [-t
 | case | 内容 |
 |---|---|
 | `tone`（I2S-001） | 播放一个正弦，默认 48000 Hz、1000 Hz、3000 ms，幅度 -6 dBFS |
-| `rates`（I2S-002） | ES8388 支持的 8 个采样率（11025、12000、16000、22050、24000、32000、44100、48000）各播 1000 ms |
+| `rates`（I2S-002） | ES8388 支持的 9 个采样率（8000、11025、12000、16000、22050、24000、32000、44100、48000）各播 1000 ms；8000 Hz 播 1378 ms，与 11025 Hz 播 1000 ms 的帧数相同（6 个 buffer），避免只靠 1 个 buffer 计时 |
 | `restart`（I2S-003） | 连续 5 次播放，每次重新打开设备，检查启停后能再次出流。每次固定 14400 帧（48 kHz 下 300 ms，11.025 kHz 下 1306 ms），各采样率都是 8 个 buffer |
 | `record`（I2S-004） | 从 `pcm_in0` 录音，先丢弃 codec 启动后的 36000 帧（48 kHz 0.75 s，11.025 kHz 3.3 s），丢完打印 `speak now`，再录 `-t` 指定时长（默认 3000 ms）；打印两个声道的峰值、RMS、直流、尖峰数和左声道每 250 ms 的 RMS，再打印一行 `record data spikes=<n>` 判定；`-p` 把录音放大到峰值 -6 dBFS（最多 100 倍）后从 `pcm0` 回放 |
 | `final`（I2S-005） | 空流的 0 字节 FINAL，以及两个数据 buffer 后接 0/3/5 字节 FINAL；检查逐一按序归还全部 buffer，随后收到 COMPLETE，不依靠 STOP 结束；尾部不足一帧的字节丢弃 |
@@ -141,11 +141,20 @@ FAIL。改为固定 14400 帧后，8 个采样率各 5 次全部 PASS，每次 8
 把 `AUDIOIOC_REGISTERMQ` 的参数改成无效描述符来注入失败：检查返回值后 `tone`、`record`
 立即报 `ret=-9`（`EBADF`）；不检查时要等 2 s 超时，报的是 `ret=-110`。
 
+2026-11-19，ES8388 录音关 DAC、补 8 kHz 之后（结果与改前对照见 `docs/bl616cl-i2s.md`
+“实板验证”）：`all` 全部 PASS，`rates` 中 8000 Hz 为 `ms=1378 buffers=6 measured=8012`；
+8 kHz 的 `tone`、`record`、`restart`、`final` PASS。安静时录音的麦克风 RMS 在 8–24 kHz
+为 17–27、44.1/48 kHz 为 18–19；32 kHz 约 490，右声道约 660。8 个采样率各录音启动 16 次、
+8 kHz 32 次，全部 spikes=0。帧率容差 2% 不能发现 MCLK 沿用上一个流的问题（改前 44.1 kHz
+之后 8 kHz 为 8115 帧/秒，仍判 PASS），这类问题要看实测值。人工试听：16 kHz、8 kHz 放音
+杂音明显，改前相同。
+
 ## 限制
 
-- 8000 Hz 不在 ES8388 驱动的 MCLK 表里，测试不覆盖。
 - 只测 16 bit；32 bit 暂不支持，原因见 `docs/bl616cl-i2s.md` 的“限制”。
 - 两个节点不能同时打开流：任一实例启动都会复位整颗 codec。
+- 不发 `AUDIOIOC_STOP` 就关闭设备的路径不在用例里：关闭后该节点一直被预留，再打开返回
+  `-EBUSY`，要重启才能恢复，会影响后续用例。
 - 欠载、溢出没有检测手段，测试不覆盖；`timeout` 参数驱动未实现。
 - `AUDIOIOC_REGISTERMQ` 失败时该 case 以它的 errno 判 FAIL；这条路径用公共接口触发不到，测试不覆盖。
 - 播放数据是否被 codec 正确接收没有自动判定，只能人工听。
