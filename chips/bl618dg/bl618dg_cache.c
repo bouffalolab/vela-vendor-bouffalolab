@@ -296,18 +296,18 @@ size_t up_get_icache_size(void)
  * Name: up_enable_icache / up_disable_icache
  *
  * Description:
- *   Change instruction-cache enable state through the Nuclei SDK API.
+ *   Change instruction-cache enable state through the LHAL API.
  *
  ****************************************************************************/
 
 void up_enable_icache(void)
 {
-  EnableICache();
+  bflb_l1c_icache_enable();
 }
 
 void up_disable_icache(void)
 {
-  DisableICache();
+  bflb_l1c_icache_disable();
 }
 
 /****************************************************************************
@@ -334,7 +334,7 @@ void up_invalidate_icache(uintptr_t start, uintptr_t end)
 
 void up_invalidate_icache_all(void)
 {
-  MInvalICache();
+  bflb_l1c_icache_invalid_all();
   __FENCE_I();
 }
 
@@ -373,14 +373,14 @@ size_t up_get_dcache_size(void)
 
 void up_enable_dcache(void)
 {
-  EnableDCache();
+  bflb_l1c_dcache_enable();
 }
 
 void up_disable_dcache(void)
 {
   irqstate_t flags = up_irq_save();
 
-  MFlushInvalDCacheAndDisable();
+  bflb_l1c_dcache_disable();
   up_irq_restore(flags);
 }
 
@@ -407,7 +407,7 @@ void up_clean_dcache(uintptr_t start, uintptr_t end)
 
 void up_clean_dcache_all(void)
 {
-  MFlushDCache();
+  bflb_l1c_dcache_clean_all();
 }
 
 /****************************************************************************
@@ -421,35 +421,59 @@ void up_clean_dcache_all(void)
 
 void up_invalidate_dcache(uintptr_t start, uintptr_t end)
 {
-  uintptr_t first;
-  uintptr_t last;
+  uintptr_t aligned_start;
+  uintptr_t aligned_end;
+  uintptr_t first_full;
+  uintptr_t last_full_end;
 
-  if (!bl618dg_cache_prepare_range(start, end, false, &first, &last))
+  if (!bl618dg_cache_prepare_range(start, end, false, &aligned_start,
+                                   &aligned_end))
     {
       return;
     }
 
-  if (start != first)
+  if (aligned_end - aligned_start == CACHE_LINE_SIZE)
     {
-      MFlushInvalDCacheRange(first, CACHE_LINE_SIZE);
-      first += CACHE_LINE_SIZE;
+      bl618dg_cache_range_op_t operation;
+
+      operation = start == aligned_start && end == aligned_end ?
+                    bflb_l1c_dcache_invalidate_range :
+                    bflb_l1c_dcache_clean_invalidate_range;
+      bl618dg_cache_range_operation(aligned_start, aligned_end, operation);
+      return;
     }
 
-  if (first < last && end != last)
+  first_full = aligned_start;
+  if (start != aligned_start)
     {
-      last -= CACHE_LINE_SIZE;
-      MFlushInvalDCacheRange(last, CACHE_LINE_SIZE);
+      bl618dg_cache_range_operation(
+        aligned_start, aligned_start + CACHE_LINE_SIZE,
+        bflb_l1c_dcache_clean_invalidate_range);
+      first_full += CACHE_LINE_SIZE;
     }
 
-  if (first < last)
+  last_full_end = aligned_end;
+  if (end != aligned_end)
     {
-      MInvalDCacheRange(first, last - first);
+      last_full_end -= CACHE_LINE_SIZE;
+    }
+
+  if (first_full < last_full_end)
+    {
+      bl618dg_cache_range_operation(first_full, last_full_end,
+                                    bflb_l1c_dcache_invalidate_range);
+    }
+
+  if (end != aligned_end)
+    {
+      bl618dg_cache_range_operation(
+        last_full_end, aligned_end, bflb_l1c_dcache_clean_invalidate_range);
     }
 }
 
 void up_invalidate_dcache_all(void)
 {
-  MInvalDCache();
+  bflb_l1c_dcache_invalidate_all();
 }
 
 /****************************************************************************
@@ -462,18 +486,21 @@ void up_invalidate_dcache_all(void)
 
 void up_flush_dcache(uintptr_t start, uintptr_t end)
 {
-  uintptr_t first;
-  uintptr_t last;
+  uintptr_t aligned_start;
+  uintptr_t aligned_end;
 
-  if (bl618dg_cache_prepare_range(start, end, false, &first, &last))
+  if (bl618dg_cache_prepare_range(start, end, false, &aligned_start,
+                                  &aligned_end))
     {
-      MFlushInvalDCacheRange(first, last - first);
+      bl618dg_cache_range_operation(
+        aligned_start, aligned_end,
+        bflb_l1c_dcache_clean_invalidate_range);
     }
 }
 
 void up_flush_dcache_all(void)
 {
-  MFlushInvalDCache();
+  bflb_l1c_dcache_clean_invalidate_all();
 }
 
 /****************************************************************************
