@@ -1,6 +1,6 @@
 component: macsw
 chip: bl616cl
 profile: vela_bl616cl
-macsw: a860d1ef46745319722d6c15352ac5dcf6feda7d
+macsw: 04abe84cda5eb987484296f0606712b7c2bf89ac
 toolchain: riscv-none-elf-gcc (GCC) 13.4.0
 objects: fat LTO, -fshort-enums, early LTO debug info only

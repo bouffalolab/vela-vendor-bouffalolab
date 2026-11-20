@@ -538,7 +538,7 @@ int wifi_sta_connect(const char *ssid, const char *key, const char *bssid, const
         if (ssid_len <= 0 || ssid_len > MGMR_SSID_LEN) {
             return -1;
         }
-        strlcpy((char *)conn_params.ssid, ssid, 32);
+        strlcpy((char *)conn_params.ssid, ssid, sizeof(conn_params.ssid));
     } else {
         return -1;
     }
@@ -548,7 +548,7 @@ int wifi_sta_connect(const char *ssid, const char *key, const char *bssid, const
         if ((key_len < 8 && key_len != 5 && key_len != 0) || (key_len > MGMR_KEY_LEN)) {
             return -1;
         }
-        strlcpy((char *)conn_params.password, key, 64);
+        strlcpy((char *)conn_params.password, key, sizeof(conn_params.password));
     }
 
     if (bssid) {
@@ -571,6 +571,9 @@ int wifi_sta_connect(const char *ssid, const char *key, const char *bssid, const
     } else {
         uint16_t freq = freq1 ? freq1 : freq2;
         conn_params.channel = wl80211_freq_to_channel(freq);
+        if (conn_params.channel == (uint8_t)-1) {
+            conn_params.channel = 0;
+        }
     }
 
     rtos_lock();

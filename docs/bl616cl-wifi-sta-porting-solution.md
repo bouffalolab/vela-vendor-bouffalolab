@@ -104,7 +104,7 @@ components/wireless/
 `components/wireless/wifi/macsw/CMakeLists.txt` 的职责是：
 
 1. 只接受 `CONFIG_ARCH_CHIP_BL616CL` 和 `CONFIG_MACSW_SELECT="vela_bl616cl"`（Kconfig 默认值）；
-2. 进入 macsw 独立 CMake 工程，使用与 Vela 相同的交叉工具链；
+2. 进入 macsw 独立 CMake 工程，使用与 Vela 相同的交叉工具链；profile 由调用方用 `MACSW_PROFILE` 给出（取 `CONFIG_MACSW_SELECT`），与原生 SDK 的 `components/wireless/CMakeLists.txt` 做法相同；
 3. 输出 `libmacsw_bl616cl.a` 和 `libmacsw_config_bl616cl_vela_bl616cl.a`；
 4. 删除 Vela GCC 不支持的 `-mtune=e907`、`-march=rv32imafc_xtheade`；
 5. 使用标准 ISA `-march=rv32imafc_zicsr_zifencei`，并关闭不适用于该源码的局部告警；
@@ -129,7 +129,7 @@ wl80211/wl80211/src
 子构建显式接收：
 
 - `CHIP=bl616cl`；
-- `CONFIG_MACSW_SELECT`（与 macsw wrapper 相同，为 `vela_bl616cl`）；
+- `MACSW_PROFILE`（取 `CONFIG_MACSW_SELECT`，与 macsw wrapper 相同，为 `vela_bl616cl`）；
 - PHYRF include；
 - macsw include；
 - supplicant include；

@@ -21,7 +21,9 @@ string(REGEX REPLACE "gcc$" "" CROSS_COMPILE "${CMAKE_C_COMPILER}")
 set(PHYRF_INCLUDE
     ${BL_BOUFFALO_DRIVERS_DIR}/soc/bl616cl/phyrf/include)
 
-# MACSW owns its source list. Its standalone project does not use sdk_* APIs.
+# MACSW owns its source list. Its standalone project does not use sdk_* APIs
+# and takes the configuration profile from the caller.
+set(MACSW_PROFILE ${CONFIG_MACSW_SELECT})
 add_subdirectory(macsw)
 
 foreach(target macsw_bl616cl macsw_config_bl616cl_${CONFIG_MACSW_SELECT})
