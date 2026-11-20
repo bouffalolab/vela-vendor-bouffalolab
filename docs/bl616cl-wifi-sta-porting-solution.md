@@ -464,7 +464,7 @@ vendor wl80211 wrapper 将 BL616CL PHYRF include 和预编译库加入 core/fina
 - `rfparam_bl616cl_flash_otp.c`；
 - `rfparam_rftlv.c`。
 
-同时对 rfparam 源强制包含 `include/bl616cl_rfparam_preinc.h`，解决 BL SoC 头文件中的 `ERROR` 枚举与 NuttX `sys/types.h` 冲突；`include/log.h` 把 rfparam 的 `LOG_*` 映射到 NuttX 无线日志，并加入 LHAL flash include 路径。参数表的一行由 `LOG_I` 打头、再逐项 `printf`，而 syslog 每条消息都会补换行，所以 `LOG_I` 和 `printf` 都改走 `bl616cl_rfparam_log()`：它按行缓冲，遇到 `\n` 才用一次 `wlinfo` 输出（需 `CONFIG_DEBUG_WIRELESS_INFO`）。drivers 是上游子仓，这两个 shim 不放进 drivers。按 AGENTS §8.3，drivers 源码原则上由 `cmake/*.cmake` 选择；rfparam 是 Wi-Fi（以及后续 BLE）共用的 RF 参数层，因此作为例外放在 `components/wireless/rfparam`，随无线组件一起自动发现。最初由 vendor `a23ce25` 加在 wl80211 glue 中。
+同时对 rfparam 源强制包含 `include/bl616cl_rfparam_preinc.h`，解决 BL SoC 头文件中的 `ERROR` 枚举与 NuttX `sys/types.h` 冲突；`include/log.h` 把 rfparam 的 `LOG_*` 映射到 NuttX 无线日志，并加入 LHAL flash include 路径。drivers 2.3.39 起 rfparam 的初始化改为 `_rfparam_init()`，由 `SYSINIT()` 注册冷启动，`rfparam_init()` 只剩 deprecated 的兼容入口；NuttX 没有 SYSINIT 表，`include/sysinit.h` 把注册展开为空并补上 `IS_ENABLED()`，Wi-Fi adapter 和 BLE 驱动启动时自己调 `_rfparam_init()`（原型在 drivers 的 `rfparam_adapter_internal.h`）。参数表的一行由 `LOG_I` 打头、再逐项 `printf`，而 syslog 每条消息都会补换行，所以 `LOG_I` 和 `printf` 都改走 `bl616cl_rfparam_log()`：它按行缓冲，遇到 `\n` 才用一次 `wlinfo` 输出（需 `CONFIG_DEBUG_WIRELESS_INFO`）。drivers 是上游子仓，这些 shim 不放进 drivers。按 AGENTS §8.3，drivers 源码原则上由 `cmake/*.cmake` 选择；rfparam 是 Wi-Fi（以及后续 BLE）共用的 RF 参数层，因此作为例外放在 `components/wireless/rfparam`，随无线组件一起自动发现。最初由 vendor `a23ce25` 加在 wl80211 glue 中。
 
 `rfparam_bl616cl_flash_otp.c` 负责 BL616CL Flash OTP 记录、CRC、trim/power offset 和 MAC slot 的读取定义，使运行时能够使用 BL616CL 对应的 RF 校准参数来源。
 

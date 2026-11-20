@@ -49,12 +49,7 @@
 #include "bl616cl_ble.h"
 
 #ifndef CONFIG_BL616CL_WIRELESS_WIFI
-/* rfparam_adapter.h has legacy non-prototype declarations. */
-
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wstrict-prototypes"
-#  include "rfparam_adapter.h"
-#  pragma GCC diagnostic pop
+#  include "rfparam_adapter_internal.h"
 #endif
 
 /****************************************************************************
@@ -390,10 +385,10 @@ int bl616cl_ble_initialize(void)
 
   /* With Wi-Fi enabled the Wi-Fi adapter loads the RF parameters */
 
-  ret = rfparam_init(0, NULL, 0);
+  ret = _rfparam_init(0, NULL, 0);
   if (ret != 0)
     {
-      wlerr("ERROR: rfparam_init failed: %d\n", ret);
+      wlerr("ERROR: _rfparam_init failed: %d\n", ret);
       return -EIO;
     }
 #endif

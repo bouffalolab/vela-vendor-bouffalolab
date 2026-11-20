@@ -52,12 +52,7 @@
 #include "wl80211.h"
 #include "macsw.h"
 
-/* rfparam_adapter.h has legacy non-prototype declarations. */
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstrict-prototypes"
-#include "rfparam_adapter.h"
-#pragma GCC diagnostic pop
+#include "rfparam_adapter_internal.h"
 
 #include "supplicant.h"
 #include "bl_wpa.h"
@@ -852,7 +847,7 @@ int bl616cl_wifi_adapter_init(void)
    * these parameters during mm_init policy-table setup.
    */
 
-  rfparam_init(0, NULL, 1);
+  _rfparam_init(0, NULL, 1);
 
   GLB_AHB_MCU_Software_Reset(GLB_AHB_MCU_SW_WIFI);
 
