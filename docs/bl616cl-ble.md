@@ -35,9 +35,9 @@ mible 命令 / 应用
 
 | 项 | 值 |
 |---|---|
-| 来源 | GitHub bouffalo_sdk v2.3.38 `components/wireless/bluetooth/btblecontroller` |
-| 文件 | `libbtblecontroller_bl616cl_m2s1.a`，sha256 `de9068dbdcc74a97d69d8b1a1a6e398d7c3afc09381b6a24e7819f047609b731` |
-| 版本 | 1.6.216（`btble_controller_get_lib_ver()`；此前用过 v2.3.32 的 1.6.199、v2.3.36 的 1.6.210） |
+| 来源 | GitHub bouffalo_sdk v2.3.39 `components/wireless/bluetooth/btblecontroller` |
+| 文件 | `libbtblecontroller_bl616cl_m2s1.a`，sha256 `4c05584fd3c74924f75d4f413c615f6572dd4b7fb6cc650270eeadf2836844c3` |
+| 版本 | 1.6.220（`btble_controller_get_lib_ver()`；此前用过 v2.3.32 的 1.6.199、v2.3.36 的 1.6.210、v2.3.38 的 1.6.216） |
 | 能力 | 仅 BLE，2 条连接，全部角色，EM 16 KiB（`CONFIG_BL616CL_EM_16K`） |
 | ABI | GCC 14.3 编译，rv32imafc_zicsr_zifencei / ilp32f，不带 `xtheade`（v2.3.37 及以前为 T-Head GCC 10.2、rv32imafc_xtheade）；phyrf 库仍是 T-Head GCC 10.2，ABI 同为 ilp32f；原生 SDK 默认带 `-fshort-enums`，Vela 调用的接口不含枚举 |
 
@@ -221,6 +221,15 @@ peripheral 发送比此前（1116～1204 B/s）高约三成，原因没有查。
 扫描 238；本端 central 1282/329 B/s，本端 peripheral 1344/357 B/s，均 0 断线、
 CRC 一致；central-cycle、peripheral-cycle 各 6 次连接，断开原因全部 0x16。链接
 map 中没有 FreeRTOS 成员。没有做 600 s 吞吐和 100 次重连的全量测试。
+
+2026-11-20 controller 库换为 v2.3.39（1.6.220）。与 v2.3.38 的库相比，只有
+`arch_main`、`lld_con`、`llm_hci` 三个成员不同：版本字符串和版本字节，以及
+`lld_con` 中断言的行号整体后移 3 行；指令、符号和弱符号列表都没有变化。同日
+drivers 同步到 2.3.39 后做了短测，条件与 11-04 相同，本端改用 BL616CL-AVE-V10
+（`ble` 配置换板级目录后的临时配置），均通过：广播 found 239、扫描 241；本端
+central 1347/347 B/s，本端 peripheral 1640/375 B/s，均 0 断线、CRC 一致；
+central-cycle 6 次断开中 5 次 0x16、1 次 0x3e（连接没建立起来，随后重连成功），
+peripheral-cycle 6 次全部 0x16。链接 map 中没有 FreeRTOS 成员。
 
 ### 断开原因 0x08
 
