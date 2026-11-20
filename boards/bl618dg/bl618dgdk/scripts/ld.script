@@ -1,0 +1,379 @@
+/****************************************************************************
+ * vendor/bouffalolab/boards/bl618dg/bl618dgdk/scripts/ld.script
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.  The
+ * ASF licenses this file to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the
+ * License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ ****************************************************************************/
+
+#include <nuttx/config.h>
+
+OUTPUT_ARCH(riscv)
+ENTRY(__start)
+
+/* BL618DG AP Flash image, as in the SDK bl618dg_common.ld.in:
+ * a 4 KiB firmware header precedes the XIP base; the first 6 KiB of XIP
+ * holds the entry and image metadata. RAM code, constants and data have
+ * Flash load images and are copied before nx_start(). OCRAM is reserved
+ * for the AP; WRAM and PSRAM are not part of the heap.
+ *
+ * The board supplies __bl618dg_app_size from its partition table.
+ * NOLOAD sections use an explicit RAM LMA to avoid inheriting the Flash
+ * offset of the preceding initialized section.
+ */
+
+/* The cacheable and non-cacheable views alias the same AP OCRAM. */
+
+__bl618dg_ram_size = 448K;
+
+MEMORY
+{
+  fw_header   (rx)  : ORIGIN = 0xaffff000, LENGTH = 4K
+  rom_header  (rx)  : ORIGIN = 0xb0000000, LENGTH = 6K
+  flash       (rx)  : ORIGIN = 0xb0001800,
+                      LENGTH = __bl618dg_app_size - 4K - 6K
+  ram_nocache (!rx) : ORIGIN = 0x21000000, LENGTH = __bl618dg_ram_size
+  ram         (!rx) : ORIGIN = 0xa1000000, LENGTH = __bl618dg_ram_size
+}
+
+/* Let ld derive program headers from section attributes. Script-generated
+ * constants need READONLY because they have no read-only input sections.
+ */
+
+SECTIONS
+{
+  .fw_header :
+  {
+    KEEP(*(.fw_header))
+  } > fw_header
+
+  /* Cache maintenance ranges (bl618dg_cache.c). The XIP range covers
+   * the full 64 MiB Flash remap window in the DG SDK memory map. The
+   * RAM range ends at the heap limit, set further down.
+   */
+
+  __bl618dg_cache_xip_start = ABSOLUTE(ORIGIN(rom_header));
+  __bl618dg_cache_xip_end = ABSOLUTE(ORIGIN(rom_header) + 64M);
+  __bl618dg_cache_ram_start = ABSOLUTE(ORIGIN(ram));
+
+  __rom_header_start__ = ORIGIN(rom_header);
+
+  .init ORIGIN(rom_header) :
+  {
+    KEEP(*(.text.entry))
+    KEEP(*(SORT_NONE(.init)))
+  } > rom_header
+
+  /* SDK multi-bin descriptors are 24 bytes: name, image offsets and VMA.
+   * Only SELF is populated; the secondary cores remain in reset.
+   */
+
+  .multi_bins ORIGIN(rom_header) + 512 (READONLY) :
+  {
+    __multi_bins__ = ABSOLUTE(.);
+    LONG(0x464c4553) LONG(0x00000000)     /* "SELF" */
+    LONG(LENGTH(fw_header))
+    LONG(__rom_end__ - __rom_header_start__ + LENGTH(fw_header))
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x0000504e) LONG(0x00000000)     /* "NP" */
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x0000504c) LONG(0x00000000)     /* "LP" */
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x52415744) LONG(0x49464346)     /* "DWARFCFI" */
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x464d4f52) LONG(0x00000053)     /* "ROMFS" */
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x54524543) LONG(0x00000053)     /* "CERTS" */
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x4f545541) LONG(0x5453494c)     /* "AUTOLIST" */
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0x00000000) LONG(0x00000000)
+    LONG(0xffffffff) LONG(0xffffffff)
+    LONG(0xffffffff) LONG(0xffffffff)
+    LONG(0xffffffff) LONG(0xffffffff)
+  } > rom_header
+
+  .rftlv.tool ORIGIN(rom_header) + 1K (READONLY) :
+  {
+    _ld_symbol_rftlv_address = ABSOLUTE(.);
+    LONG(0x46524c42)                      /* "BLRF" */
+    LONG(0x41524150)                      /* "PARA" */
+    . = ORIGIN(rom_header) + 3K;
+  } > rom_header
+
+  .ver ORIGIN(rom_header) + 3K (READONLY) :
+  {
+    LONG(0x42464c42) LONG(0x46524556)     /* "BLFBVERF" */
+    KEEP(*(.bflb_verinf))
+    LONG(0x42464c42) LONG(0x46524556)
+    KEEP(*(.verinfo))
+    . = ALIGN(4);
+    _version_info_section_start = ABSOLUTE(.);
+    KEEP(*(.version.*))
+    _version_info_section_end = ABSOLUTE(.);
+  } > rom_header
+
+  .init_code :
+  {
+    KEEP(*riscv_fpu.S.o(.text))
+    KEEP(*bl618dg_start.c.o(.text.__bl618dg_start))
+    KEEP(*bl618dg_cpu.c.o(.text.* .rodata.* .srodata.*))
+    KEEP(*bl618dg_memory.c.o(.text.* .rodata.* .srodata.*))
+    KEEP(*bl618dg_cache.c.o(.text.bl618dg_cache_*))
+  } > rom_header
+
+  __rom_header_used_end__ = ABSOLUTE(.);
+
+  .nocache_data :
+  {
+    . = ALIGN(4);
+    *(.nocache_ram)
+    . = ALIGN(4);
+  } > ram_nocache AT > flash
+
+  .nocache_noinit (NOLOAD) : AT(ADDR(.nocache_noinit))
+  {
+    . = ALIGN(4);
+    *(.nocache_noinit_ram)
+    *(.noncacheable)
+    . = ALIGN(4);
+  } > ram_nocache
+
+  __ram_nocache_end__ = ABSOLUTE(.);
+
+  .ram_skip_nocache_region (NOLOAD) :
+  {
+    . += (ABSOLUTE(__ram_nocache_end__) -
+          ABSOLUTE(ORIGIN(ram_nocache)));
+    . = ALIGN(64);
+  } > ram
+
+  .ram_code :
+  {
+    . = ALIGN(4);
+    *(.tcm_code*)
+    *(.sclock_rlt_code*)
+    . = ALIGN(4);
+  } > ram AT > flash
+
+  .ram_rodata :
+  {
+    . = ALIGN(4);
+    *(.tcm_const*)
+    *(.sclock_rlt_const*)
+    *bl618dg_clock.c.o(.rodata .rodata.* .srodata .srodata.*)
+    *bl618dg_glb.c.o(.rodata .rodata.* .srodata .srodata.*)
+    *bl618dg_common.c.o(.rodata .rodata.* .srodata .srodata.*)
+    *bl618dg_hbn.c.o(.rodata .rodata.* .srodata .srodata.*)
+    *bl618dg_pds.c.o(.rodata .rodata.* .srodata .srodata.*)
+    . = ALIGN(4);
+  } > ram AT > flash
+
+  .data :
+  {
+    _sdata = ABSOLUTE(.);
+    __global_pointer$ = . + 0x800;
+    *(.data .data.*)
+    *(.sdata .sdata.*)
+    *(.sdata2 .sdata2.*)
+    *(.tcm_data*)
+    *(.gnu.linkonce.d.*)
+    . = ALIGN(4);
+    _edata = ABSOLUTE(.);
+  } > ram AT > flash
+
+  .noinit (NOLOAD) : AT(ADDR(.noinit))
+  {
+    *(.noinit .noinit.*)
+    /* Preserve the SDK no-init convention for reused objects. */
+
+    *(.noinit_data*)
+    . = ALIGN(16);
+  } > ram
+
+  .bss (NOLOAD) : AT(ADDR(.bss))
+  {
+    _sbss = ABSOLUTE(.);
+    *(.bss .bss.*)
+    *(.sbss .sbss.*)
+    *(COMMON)
+    . = ALIGN(16);
+    _ebss = ABSOLUTE(.);
+  } > ram
+
+  /* NuttX places the idle stack at _ebss and the heap above it. */
+
+  .idle_stack (NOLOAD) : AT(ADDR(.idle_stack))
+  {
+    . = ALIGN(16);
+    __StackBase = ABSOLUTE(.);
+    . += CONFIG_IDLETHREAD_STACKSIZE;
+    __StackTop = ABSOLUTE(.);
+  } > ram
+
+  __HeapBase = ALIGN(__StackTop, 16);
+  __HeapLimit = ORIGIN(ram) + LENGTH(ram);
+  __bl618dg_cache_ram_end = ABSOLUTE(__HeapLimit);
+
+  .text ALIGN(LOADADDR(.data) + SIZEOF(.data), 64) :
+  {
+    _stext = ABSOLUTE(.);
+    *(.text .text.*)
+    *(.gnu.linkonce.t.*)
+    . = ALIGN(4);
+  } > flash
+
+  .rodata :
+  {
+    *(.rodata .rodata.*)
+    *(.srodata .srodata.*)
+    *(.gnu.linkonce.r.*)
+    . = ALIGN(4);
+    /* NuttX defines _etext as the end of text plus rodata. */
+
+    _etext = ABSOLUTE(.);
+  } > flash
+
+  .init_section (READONLY) :
+  {
+    _sinit = ABSOLUTE(.);
+    KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
+    KEEP(*(.init_array))
+    _einit = ABSOLUTE(.);
+  } > flash
+
+  .copy.table (READONLY) :
+  {
+    __mem_copy_sections = ABSOLUTE(.);
+    LONG(ADDR(.nocache_data));
+    LONG(ADDR(.nocache_data) + SIZEOF(.nocache_data));
+    LONG(LOADADDR(.nocache_data));
+    LONG(ADDR(.ram_code));
+    LONG(ADDR(.ram_code) + SIZEOF(.ram_code));
+    LONG(LOADADDR(.ram_code));
+    LONG(ADDR(.ram_rodata));
+    LONG(ADDR(.ram_rodata) + SIZEOF(.ram_rodata));
+    LONG(LOADADDR(.ram_rodata));
+    LONG(ADDR(.data));
+    LONG(ADDR(.data) + SIZEOF(.data));
+    LONG(LOADADDR(.data));
+    LONG(0xffffffff);
+    LONG(0xffffffff);
+    LONG(0xffffffff);
+  } > flash
+
+  .zero.table (READONLY) :
+  {
+    __mem_setz_sections = ABSOLUTE(.);
+    LONG(ADDR(.bss));
+    LONG(ADDR(.bss) + SIZEOF(.bss));
+    LONG(0xffffffff);
+    LONG(0xffffffff);
+  } > flash
+
+  .image_end (READONLY) :
+  {
+    . = ALIGN(4);
+    __rom_end__ = ABSOLUTE(.);
+  } > flash
+
+  /* ld assigns input relocation sections here; the static image must not
+   * need any of them at run time.
+   */
+
+  .rela.dyn : { *(.rela.*) }
+
+  /* Startup copies and clears complete 32-bit words. */
+
+  ASSERT(((ADDR(.nocache_data) | LOADADDR(.nocache_data) |
+           SIZEOF(.nocache_data)) & 3) == 0,
+         "BL618DG .nocache_data copy must be word aligned")
+  ASSERT(((ADDR(.ram_code) | LOADADDR(.ram_code) |
+           SIZEOF(.ram_code)) & 3) == 0,
+         "BL618DG .ram_code copy must be word aligned")
+  ASSERT(((ADDR(.ram_rodata) | LOADADDR(.ram_rodata) |
+           SIZEOF(.ram_rodata)) & 3) == 0,
+         "BL618DG .ram_rodata copy must be word aligned")
+  ASSERT(((ADDR(.data) | LOADADDR(.data) | SIZEOF(.data)) & 3) == 0,
+         "BL618DG .data copy must be word aligned")
+
+  ASSERT(((ADDR(.bss) | SIZEOF(.bss)) & 3) == 0,
+         "BL618DG .bss clear must be word aligned")
+  ASSERT(((ADDR(.copy.table) | ADDR(.zero.table)) & 3) == 0,
+         "BL618DG startup tables must be word aligned")
+
+  /* Flash image and AP RAM layout. */
+
+  ASSERT(SIZEOF(.fw_header) == 256,
+         "BL618DG firmware header must be 256 bytes")
+  ASSERT(SIZEOF(.init) <= 512, "BL618DG reset entry exceeds ROM header")
+  ASSERT(__rom_header_used_end__ <= ORIGIN(rom_header) + LENGTH(rom_header),
+         "BL618DG early code exceeds ROM header")
+  ASSERT(__bl618dg_app_size > 4K + 6K,
+         "BL618DG application partition is too small")
+  ASSERT(__rom_end__ <= ORIGIN(flash) + LENGTH(flash),
+         "BL618DG flash image overflow")
+  ASSERT(__ram_nocache_end__ <= ORIGIN(ram_nocache) + LENGTH(ram_nocache),
+         "BL618DG nocache RAM overflow")
+  ASSERT(ADDR(.ram_code) >= ORIGIN(ram) +
+         (__ram_nocache_end__ - ORIGIN(ram_nocache)),
+         "BL618DG cached and uncached RAM allocations overlap")
+  ASSERT(__StackBase == _ebss,
+         "BL618DG idle stack must immediately follow BSS")
+  ASSERT((__StackTop & 15) == 0,
+         "BL618DG idle stack must be 16-byte aligned")
+  ASSERT(__HeapBase == __StackTop,
+         "BL618DG heap must immediately follow the idle stack")
+  ASSERT(__HeapBase < __HeapLimit, "BL618DG AP RAM overflow")
+
+  /* Linking */
+
+  ASSERT(SIZEOF(.rela.dyn) == 0, "BL618DG image needs dynamic relocations")
+
+  /DISCARD/ :
+  {
+    *(.note.GNU-stack)
+    *(.riscv.attributes)
+  }
+
+  .comment 0 : { *(.comment) }
+
+  /* DWARF 2-5 sections, as in the ld default script */
+
+  .debug_aranges 0 : { *(.debug_aranges) }
+  .debug_pubnames 0 : { *(.debug_pubnames) }
+  .debug_info 0 : { *(.debug_info .gnu.linkonce.wi.*) }
+  .debug_abbrev 0 : { *(.debug_abbrev) }
+  .debug_line 0 : { *(.debug_line .debug_line.* .debug_line_end) }
+  .debug_frame 0 : { *(.debug_frame) }
+  .debug_str 0 : { *(.debug_str) }
+  .debug_loc 0 : { *(.debug_loc) }
+  .debug_macinfo 0 : { *(.debug_macinfo) }
+  .debug_pubtypes 0 : { *(.debug_pubtypes) }
+  .debug_ranges 0 : { *(.debug_ranges) }
+  .debug_addr 0 : { *(.debug_addr) }
+  .debug_line_str 0 : { *(.debug_line_str) }
+  .debug_loclists 0 : { *(.debug_loclists) }
+  .debug_macro 0 : { *(.debug_macro) }
+  .debug_names 0 : { *(.debug_names) }
+  .debug_rnglists 0 : { *(.debug_rnglists) }
+  .debug_str_offsets 0 : { *(.debug_str_offsets) }
+  .debug_sup 0 : { *(.debug_sup) }
+}

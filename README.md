@@ -5,6 +5,7 @@ Bouffalo Lab 维护的 openvela 适配层，是 BL Vela SDK 中的 `vendor/bouff
 需要用 repo manifest 拉取整个 SDK（openvela 基座 + 本仓 + 驱动等仓）。
 
 当前支持芯片 BL616CL（RISC-V E907），开发板为安信可 Ai-M64P-32S-Kit。
+BL618DG（RISC-V Nuclei AP）的 bl618dgdk 提供启动基座，使用范围见下文。
 
 ## 获取代码
 
@@ -77,6 +78,21 @@ BL616CL-AVE-V10（音视频评估板）有 `nsh` 和 `nsh-peripherals`，引脚�
 串口会让模组重启一次；picocom 要加 `--lower-rts`，否则模组保持在复位状态。
 
 shell 补全：`./vela completion install`，或 `./vela completion <bash|zsh|fish>` 打印脚本。
+
+### BL618DG
+
+bl618dgdk 使用 Nuclei AP、40 MHz 晶振和 448 KiB AP OCRAM。构建与烧录：
+
+```bash
+./vela build bl618dg/bl618dgdk/configs/nsh -j14
+./vela flash bl618dg/bl618dgdk/configs/nsh --chip bl618dg --port /dev/ttyUSB0
+```
+
+`nsh` 沿用 CL 的正式控制台与 ROMFS 启动方式。UART0 为 2000000 bps、8N1，
+本板配置使用 TX GPIO11、RX GPIO42。使用 RX GPIO12 接线的板卡需将
+`BL618DG_UART0_RXPIN` 改为 12。代码使用 DG 的 IRQ、时钟和内存参数，ISA/ABI 为
+`rv32imafdc_zicsr_zifencei / ilp32d`。完整镜像沿用 4 MiB 逻辑分区、2 MiB FW
+分区；PSRAM 不进入堆，未接入 DG 无线和低功耗。
 
 ## 目录布局
 

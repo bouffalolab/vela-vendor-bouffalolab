@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
-# Build BL616CL boot2 application and whole-flash images.
+# Build Bouffalo boot2 application and whole-flash images.
 
 set -euo pipefail
 
@@ -10,6 +10,7 @@ POST_TOOL_DIR="$TOOLS_DIR/bflb_flash_tools/bflb_fw_post_proc"
 FLASH_TOOL_DIR="$TOOLS_DIR/bflb_flash_tools/bouffalo_flash_cube"
 FLASH_CONFIG="$SCRIPT_DIR/flash_factory_cfg.ini"
 FLASH_SIZE=$((0x400000))
+CHIP=bl616cl
 IMAGE=
 RAW_IMAGE=
 BOARD_CONFIG=
@@ -93,6 +94,11 @@ select_tools()
 while [ "$#" -gt 0 ]
 do
   case "$1" in
+    --chip)
+      [ "$#" -ge 2 ] || fail "--chip requires a chip name"
+      CHIP=$2
+      shift 2
+      ;;
     --image)
       [ "$#" -ge 2 ] || fail "--image requires a path"
       IMAGE=$2
@@ -113,6 +119,18 @@ do
       ;;
   esac
 done
+
+case "$CHIP" in
+  bl616cl)
+    BOOT2_NAME=boot2_bl616cl_isp_release_v8.2.1.bin
+    ;;
+  bl618dg)
+    BOOT2_NAME=boot2_bl618dg_isp_release_v8.2.5.bin
+    ;;
+  *)
+    fail "unsupported chip: $CHIP"
+    ;;
+esac
 
 [ -n "$IMAGE" ] || fail "--image is required"
 [ -n "$RAW_IMAGE" ] || fail "--raw-image is required"
@@ -135,14 +153,14 @@ FLASH_TOOL="$FLASH_TOOL_DIR/$FLASH_TOOL_NAME"
 
 for file in \
   "$BOARD_CONFIG/bl_factory_params_IoTKitA_auto.dts" \
-  "$BOARD_CONFIG/boot2_bl616cl_isp_release_v8.2.1.bin" \
+  "$BOARD_CONFIG/$BOOT2_NAME" \
   "$BOARD_CONFIG/partition_cfg_4M.toml" \
   "$POST_TOOL" \
   "$FLASH_TOOL" \
   "$FLASH_CONFIG" \
-  "$FLASH_TOOL_DIR/chips/bl616cl/eflash_loader/eflash_loader_cfg.conf" \
-  "$FLASH_TOOL_DIR/chips/bl616cl/efuse_bootheader/efuse_bootheader_cfg.conf" \
-  "$FLASH_TOOL_DIR/chips/bl616cl/efuse_bootheader/flash_para.bin"
+  "$FLASH_TOOL_DIR/chips/$CHIP/eflash_loader/eflash_loader_cfg.conf" \
+  "$FLASH_TOOL_DIR/chips/$CHIP/efuse_bootheader/efuse_bootheader_cfg.conf" \
+  "$FLASH_TOOL_DIR/chips/$CHIP/efuse_bootheader/flash_para.bin"
 do
   require_file "$file"
 done
@@ -155,14 +173,14 @@ mkdir -p "$BUILD_STAGE" "$FLASH_STAGE"
 cp "$RAW_IMAGE" "$BUILD_STAGE/nuttx.bin"
 
 "$POST_TOOL" \
-  --chipname=bl616cl \
+  --chipname="$CHIP" \
   --imgfile="$BUILD_STAGE/nuttx.bin" \
   --appkeys=shared \
   --brdcfgdir="$BOARD_CONFIG"
 
 for file in \
   "$BUILD_STAGE/nuttx.bin" \
-  "$BUILD_STAGE/boot2_bl616cl_isp_release_v8.2.1.bin" \
+  "$BUILD_STAGE/$BOOT2_NAME" \
   "$BUILD_STAGE/partition.bin"
 do
   require_file "$file"
@@ -174,25 +192,26 @@ fi
 
 cp "$FLASH_TOOL" "$FLASH_STAGE/$FLASH_TOOL_NAME"
 cp -R "$FLASH_TOOL_DIR/chips" "$FLASH_STAGE/"
-cp "$FLASH_CONFIG" "$BUILD_STAGE/flash_factory_cfg.ini"
+sed "s/boot2_bl616cl_isp_release_v8.2.1.bin/$BOOT2_NAME/g" \
+  "$FLASH_CONFIG" > "$BUILD_STAGE/flash_factory_cfg.ini"
 chmod +x "$FLASH_STAGE/$FLASH_TOOL_NAME"
 
 (
   cd "$BUILD_STAGE"
   "$FLASH_STAGE/$FLASH_TOOL_NAME" \
-    --chipname=bl616cl \
+    --chipname="$CHIP" \
     --config="$BUILD_STAGE/flash_factory_cfg.ini" \
     --build
 )
 
-PACKED_IMAGE="$FLASH_STAGE/chips/bl616cl/img_create/whole_flash_data.bin"
+PACKED_IMAGE="$FLASH_STAGE/chips/$CHIP/img_create/whole_flash_data.bin"
 require_file "$PACKED_IMAGE"
 if [ "$(file_size "$PACKED_IMAGE")" -gt "$FLASH_SIZE" ]; then
   fail "FlashCube output exceeds the 4 MiB flash size"
 fi
 
 compare_segment "$PACKED_IMAGE" $((0x000000)) \
-  "$BUILD_STAGE/boot2_bl616cl_isp_release_v8.2.1.bin"
+  "$BUILD_STAGE/$BOOT2_NAME"
 compare_segment "$PACKED_IMAGE" $((0x00e000)) "$BUILD_STAGE/partition.bin"
 compare_segment "$PACKED_IMAGE" $((0x00f000)) "$BUILD_STAGE/partition.bin"
 compare_segment "$PACKED_IMAGE" $((0x010000)) "$BUILD_STAGE/nuttx.bin"
@@ -201,6 +220,7 @@ compare_segment "$PACKED_IMAGE" $((0x010000)) "$BUILD_STAGE/nuttx.bin"
 # firmware, so `vela flash --config` can run without re-running
 # bflb_fw_post_proc (which must run only during the build).
 cp "$BUILD_STAGE/partition.bin" "$IMAGE_DIR/partition.bin"
+cp "$BUILD_STAGE/$BOOT2_NAME" "$IMAGE_DIR/$BOOT2_NAME"
 cat > "$IMAGE_DIR/flash_prog_cfg.ini" <<EOF
 [cfg]
 erase = 1
@@ -208,7 +228,7 @@ skip_mode = 0x0, 0x0
 boot2_isp_mode = 0
 
 [boot2]
-filedir = $BOARD_CONFIG/boot2_bl616cl_isp_release_v8.2.1.bin
+filedir = $IMAGE_DIR/$BOOT2_NAME
 address = 0x000000
 
 [partition]
@@ -228,7 +248,7 @@ PADDED_IMAGE="$WORK_DIR/nuttx.whole.bin"
 dd if=/dev/zero bs=1048576 count=4 2>/dev/null | \
   LC_ALL=C tr '\000' '\377' > "$PADDED_IMAGE"
 write_segment "$PADDED_IMAGE" $((0x000000)) \
-  "$BUILD_STAGE/boot2_bl616cl_isp_release_v8.2.1.bin"
+  "$BUILD_STAGE/$BOOT2_NAME"
 write_segment "$PADDED_IMAGE" $((0x00e000)) "$BUILD_STAGE/partition.bin"
 write_segment "$PADDED_IMAGE" $((0x00f000)) "$BUILD_STAGE/partition.bin"
 write_segment "$PADDED_IMAGE" $((0x010000)) "$BUILD_STAGE/nuttx.bin"
