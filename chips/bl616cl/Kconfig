@@ -491,6 +491,59 @@ config BL616CL_PWM
 		channel. Pulse count, fixed-point frequency and dead-time ABIs are
 		not supported.
 
+menuconfig BL616CL_ADC
+	bool "General-purpose ADC (GPADC)"
+	default n
+	select ANALOG
+	select ADC
+	---help---
+		Enable the BL616CL GPADC lower-half for the ADC upper-half driver.
+		Board code selects the external channels, which are scanned in a
+		fixed order as single-ended 16-bit conversions against the
+		internal reference. read() returns the channel number and the
+		calibrated input in millivolts (0 to 3200). ANIOC_TRIGGER starts
+		the conversions as set by the transfer mode below.
+
+if BL616CL_ADC
+
+choice
+	prompt "Transfer mode"
+	default BL616CL_ADC_POLL
+
+config BL616CL_ADC_POLL
+	bool "Polled single scan"
+	---help---
+		Each ANIOC_TRIGGER converts every channel once, waits for the
+		results in the calling task and queues them before it returns.
+		Takes no interrupt or worker.
+
+config BL616CL_ADC_IRQ
+	bool "Interrupt-driven continuous scan"
+	select SCHED_HPWORK
+	---help---
+		ANIOC_TRIGGER starts a continuous scan that runs until the last
+		close. The FIFO interrupt hands the samples to the high priority
+		work queue, which queues them for read(). If samples are lost,
+		because the work queue or the reader falls behind, the scan
+		stops: read() returns the samples taken before the loss, then
+		fails once with EIO, and ANIOC_TRIGGER starts a new scan.
+
+endchoice # Transfer mode
+
+config BL616CL_ADC_CLK_DIV
+	int "ADC clock divider"
+	default 20 if BL616CL_ADC_POLL
+	default 64
+	range 20 64
+	---help---
+		The ADC clock is the 40 MHz XCLK divided by this value. One
+		16-bit sample takes about 129 us at 20 (2 MHz, the native SDK
+		setting; faster clocks are not validated) and about 376 us at
+		64. The slower clock gives the work queue more time to drain the
+		16-sample FIFO in the interrupt-driven mode.
+
+endif # BL616CL_ADC
+
 menuconfig BL616CL_RTC
 	bool "Real-time clock (RTC)"
 	default n

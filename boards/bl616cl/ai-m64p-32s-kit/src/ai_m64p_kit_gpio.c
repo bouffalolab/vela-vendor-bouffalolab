@@ -106,7 +106,8 @@ struct ai_m64p_kit_gpio_pin_s
 
 #define AI_M64P_KIT_BUS_OWNS(pin) \
   (AI_M64P_KIT_UART1_OWNS(pin) || AI_M64P_KIT_I2C_OWNS(pin) || \
-   AI_M64P_KIT_SPI0_OWNS(pin) || AI_M64P_KIT_PWM_OWNS(pin))
+   AI_M64P_KIT_SPI0_OWNS(pin) || AI_M64P_KIT_PWM_OWNS(pin) || \
+   AI_M64P_KIT_ADC_OWNS(pin))
 
 static const struct ai_m64p_kit_gpio_pin_s g_ai_m64p_kit_gpio_pins[] =
 {

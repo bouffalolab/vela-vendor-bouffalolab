@@ -121,9 +121,9 @@ shell 补全：`./vela completion install`，或 `./vela completion <bash|zsh|fi
 ## 现状
 
 已在 Ai-M64P-32S-Kit 实板验证：启动与 boot2 镜像、UART、GPIO、Timer/oneshot、WDT、
-RTC、TRNG、DMA0、cache、Wi-Fi STA、BLE，以及 coredump、KASAN、UBSAN、stack canary、
+RTC、TRNG、DMA0、cache、ADC（免接线用例已验证、精度待测）、Wi-Fi STA、BLE，以及 coredump、KASAN、UBSAN、stack canary、
 Note RAM trace、perfmon 等调试能力。I2C、SPI、PWM 已通过软件验证，实物验证待补；
-PSRAM 第二 heap、PM/低功耗、SPI flash MTD、ADC、加解密引擎尚未适配。
+PSRAM 第二 heap、PM/低功耗、SPI flash MTD、加解密引擎尚未适配。
 
 完整列表见 [BL616CL OpenVela 能力矩阵](docs/bl616cl-openvela-capability-matrix.md)，
 全部文档见 [`docs/README.md`](docs/README.md)。

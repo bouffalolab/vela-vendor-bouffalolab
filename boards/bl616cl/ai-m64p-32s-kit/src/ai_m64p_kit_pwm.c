@@ -92,6 +92,16 @@
 #if !defined(CONFIG_PWM_MULTICHAN) && AI_M64P_KIT_PWM_NCHANNELS != 1
 #  error "Select exactly one PWM channel unless CONFIG_PWM_MULTICHAN is set"
 #endif
+#if AI_M64P_KIT_ADC_OWNS(AI_M64P_KIT_PWM_CH0_POS) || \
+  AI_M64P_KIT_ADC_OWNS(AI_M64P_KIT_PWM_CH0_NEG) ||     \
+  AI_M64P_KIT_ADC_OWNS(AI_M64P_KIT_PWM_CH1_POS) ||     \
+  AI_M64P_KIT_ADC_OWNS(AI_M64P_KIT_PWM_CH1_NEG) ||     \
+  AI_M64P_KIT_ADC_OWNS(AI_M64P_KIT_PWM_CH2_POS) ||     \
+  AI_M64P_KIT_ADC_OWNS(AI_M64P_KIT_PWM_CH2_NEG) ||     \
+  AI_M64P_KIT_ADC_OWNS(AI_M64P_KIT_PWM_CH3_POS) ||     \
+  AI_M64P_KIT_ADC_OWNS(AI_M64P_KIT_PWM_CH3_NEG)
+#  error "PWM0 output conflicts with an ADC input"
+#endif
 
 /****************************************************************************
  * Private Data

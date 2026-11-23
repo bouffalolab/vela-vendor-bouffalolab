@@ -68,6 +68,76 @@
    (pin) == AI_M64P_KIT_PWM_CH2_POS || (pin) == AI_M64P_KIT_PWM_CH2_NEG || \
    (pin) == AI_M64P_KIT_PWM_CH3_POS || (pin) == AI_M64P_KIT_PWM_CH3_NEG)
 
+/* ADC input pins, -1 when the channel is not selected */
+
+#ifdef CONFIG_AI_M64P_KIT_ADC_CH0
+#  define AI_M64P_KIT_ADC_CH0_PIN 0
+#else
+#  define AI_M64P_KIT_ADC_CH0_PIN -1
+#endif
+
+#ifdef CONFIG_AI_M64P_KIT_ADC_CH1
+#  define AI_M64P_KIT_ADC_CH1_PIN 1
+#else
+#  define AI_M64P_KIT_ADC_CH1_PIN -1
+#endif
+
+#ifdef CONFIG_AI_M64P_KIT_ADC_CH2
+#  define AI_M64P_KIT_ADC_CH2_PIN 2
+#else
+#  define AI_M64P_KIT_ADC_CH2_PIN -1
+#endif
+
+#ifdef CONFIG_AI_M64P_KIT_ADC_CH3
+#  define AI_M64P_KIT_ADC_CH3_PIN 3
+#else
+#  define AI_M64P_KIT_ADC_CH3_PIN -1
+#endif
+
+#ifdef CONFIG_AI_M64P_KIT_ADC_CH4
+#  define AI_M64P_KIT_ADC_CH4_PIN 4
+#else
+#  define AI_M64P_KIT_ADC_CH4_PIN -1
+#endif
+
+#ifdef CONFIG_AI_M64P_KIT_ADC_CH5
+#  define AI_M64P_KIT_ADC_CH5_PIN 5
+#else
+#  define AI_M64P_KIT_ADC_CH5_PIN -1
+#endif
+
+#ifdef CONFIG_AI_M64P_KIT_ADC_CH6
+#  define AI_M64P_KIT_ADC_CH6_PIN 6
+#else
+#  define AI_M64P_KIT_ADC_CH6_PIN -1
+#endif
+
+#ifdef CONFIG_AI_M64P_KIT_ADC_CH7
+#  define AI_M64P_KIT_ADC_CH7_PIN 7
+#else
+#  define AI_M64P_KIT_ADC_CH7_PIN -1
+#endif
+
+#ifdef CONFIG_AI_M64P_KIT_ADC_CH8
+#  define AI_M64P_KIT_ADC_CH8_PIN 12
+#else
+#  define AI_M64P_KIT_ADC_CH8_PIN -1
+#endif
+
+#ifdef CONFIG_AI_M64P_KIT_ADC_CH9
+#  define AI_M64P_KIT_ADC_CH9_PIN 13
+#else
+#  define AI_M64P_KIT_ADC_CH9_PIN -1
+#endif
+
+#define AI_M64P_KIT_ADC_OWNS(pin) \
+  ((pin) >= 0 && \
+   ((pin) == AI_M64P_KIT_ADC_CH0_PIN || (pin) == AI_M64P_KIT_ADC_CH1_PIN || \
+    (pin) == AI_M64P_KIT_ADC_CH2_PIN || (pin) == AI_M64P_KIT_ADC_CH3_PIN || \
+    (pin) == AI_M64P_KIT_ADC_CH4_PIN || (pin) == AI_M64P_KIT_ADC_CH5_PIN || \
+    (pin) == AI_M64P_KIT_ADC_CH6_PIN || (pin) == AI_M64P_KIT_ADC_CH7_PIN || \
+    (pin) == AI_M64P_KIT_ADC_CH8_PIN || (pin) == AI_M64P_KIT_ADC_CH9_PIN))
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
@@ -180,6 +250,27 @@ int ai_m64p_kit_spi_initialize(void);
  ****************************************************************************/
 
 int ai_m64p_kit_pwm_initialize(void);
+#endif
+
+#ifdef CONFIG_AI_M64P_KIT_ADC
+
+/****************************************************************************
+ * Name: ai_m64p_kit_adc_initialize
+ *
+ * Description:
+ *   Set up the GPADC on the ADC channels selected in Kconfig and register
+ *   it as /dev/adc0.
+ *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ENODEV if the GPADC cannot be set up, or the
+ *   negated errno value from adc_register().
+ *
+ ****************************************************************************/
+
+int ai_m64p_kit_adc_initialize(void);
 #endif
 
 #endif /* __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_AI_M64P_KIT_AI_M64P_KIT_H */

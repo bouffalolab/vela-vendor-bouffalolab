@@ -41,6 +41,10 @@ if(CONFIG_AI_M64P_KIT_PWM)
   list(APPEND SRCS ai_m64p_kit_pwm.c)
 endif()
 
+if(CONFIG_AI_M64P_KIT_ADC)
+  list(APPEND SRCS ai_m64p_kit_adc.c)
+endif()
+
 nuttx_add_romfs(
   NAME
   etc

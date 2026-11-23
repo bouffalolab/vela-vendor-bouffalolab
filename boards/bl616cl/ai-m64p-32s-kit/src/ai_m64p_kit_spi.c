@@ -46,6 +46,16 @@
   AI_M64P_KIT_PWM_OWNS(CONFIG_AI_M64P_KIT_SPI0_TARGET1_CS_PIN)
 #  error "SPI0 target 1 CS conflicts with a PWM0 output"
 #endif
+#if AI_M64P_KIT_ADC_OWNS(CONFIG_AI_M64P_KIT_SPI0_CS_PIN) ||  \
+  AI_M64P_KIT_ADC_OWNS(CONFIG_AI_M64P_KIT_SPI0_CLK_PIN) ||    \
+  AI_M64P_KIT_ADC_OWNS(CONFIG_AI_M64P_KIT_SPI0_MISO_PIN) ||   \
+  AI_M64P_KIT_ADC_OWNS(CONFIG_AI_M64P_KIT_SPI0_MOSI_PIN)
+#  error "SPI0 pin conflicts with an ADC input"
+#endif
+#if defined(CONFIG_AI_M64P_KIT_SPI0_TARGET1) && \
+  AI_M64P_KIT_ADC_OWNS(CONFIG_AI_M64P_KIT_SPI0_TARGET1_CS_PIN)
+#  error "SPI0 target 1 CS conflicts with an ADC input"
+#endif
 
 #if CONFIG_AI_M64P_KIT_SPI0_CLK_PIN % 4 != 1
 #error "SPI0 CLK pin must map to signal 1"

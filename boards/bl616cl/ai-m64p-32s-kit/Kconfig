@@ -254,6 +254,61 @@ endif # AI_M64P_KIT_SPI0_TARGET1
 
 endif # AI_M64P_KIT_SPI0
 endif # AI_M64P_KIT_SPI
+
+menuconfig AI_M64P_KIT_ADC
+	bool "Ai-M64P-32S-Kit ADC inputs"
+	default n
+	select BL616CL_ADC
+	---help---
+		Register the GPADC as /dev/adc0 on the selected channels, which
+		are scanned in channel order. The pins are fixed: channels 0 to 7
+		are GPIO0 to GPIO7, channel 8 is GPIO12 and channel 9 is GPIO13.
+		Inputs range from 0 to 3.2 V. The selected pins leave the board
+		GPIO test devices and must not be used by I2C, SPI or PWM.
+
+if AI_M64P_KIT_ADC
+
+config AI_M64P_KIT_ADC_CH0
+	bool "Channel 0 (GPIO0)"
+	default y
+
+config AI_M64P_KIT_ADC_CH1
+	bool "Channel 1 (GPIO1)"
+	default n
+
+config AI_M64P_KIT_ADC_CH2
+	bool "Channel 2 (GPIO2)"
+	default n
+
+config AI_M64P_KIT_ADC_CH3
+	bool "Channel 3 (GPIO3)"
+	default n
+
+config AI_M64P_KIT_ADC_CH4
+	bool "Channel 4 (GPIO4)"
+	default n
+
+config AI_M64P_KIT_ADC_CH5
+	bool "Channel 5 (GPIO5)"
+	default n
+
+config AI_M64P_KIT_ADC_CH6
+	bool "Channel 6 (GPIO6)"
+	default n
+
+config AI_M64P_KIT_ADC_CH7
+	bool "Channel 7 (GPIO7)"
+	default n
+
+config AI_M64P_KIT_ADC_CH8
+	bool "Channel 8 (GPIO12)"
+	default n
+
+config AI_M64P_KIT_ADC_CH9
+	bool "Channel 9 (GPIO13)"
+	default n
+
+endif # AI_M64P_KIT_ADC
 # For a description of the syntax of this configuration file,
 # see the file kconfig-language.txt in the NuttX tools repository.
 #

@@ -2,12 +2,12 @@
 
 ## 统一外设测试配置
 
-`configs/nsh-peripherals` 用于在同一固件中回归 crypto、DMA、GPIO、I2C、PSRAM、PWM、
-RTC、SPI、Timer、TRNG、UART 和 WDT，编入全部 12 个 `mcu_*_test` 命令。GPIO 测试使用不与其他外设冲突的 GPIO23/20 回环，不编译
+`configs/nsh-peripherals` 用于在同一固件中回归 ADC、crypto、DMA、GPIO、I2C、PSRAM、PWM、
+RTC、SPI、Timer、TRNG、UART 和 WDT，编入全部 13 个 `mcu_*_test` 命令。GPIO 测试使用不与其他外设冲突的 GPIO23/20 回环，不编译
 `gpio` 示例。NSH 命令行最长 127 个字符、最多 16 个参数，并开启命令历史和
 Tab 补全，各测试 README 中写全参数的命令可以直接输入。
 
-本板适用的外设测试统一加入此配置，不为单个外设新增 defconfig。GPIO、UART、SPI、PWM 测试依赖本板接线，Kconfig 限定只在本板（`ARCH_BOARD_AI_M64P_32S_KIT`）编译；音视频类外设在 `bl616cl-ave-v10` 上测试。
+本板适用的外设测试统一加入此配置，不为单个外设新增 defconfig。ADC、GPIO、UART、SPI、PWM 测试依赖本板接线，Kconfig 限定只在本板（`ARCH_BOARD_AI_M64P_32S_KIT`）编译；音视频类外设在 `bl616cl-ave-v10` 上测试。
 基础 `configs/nsh` 提供 `free`、`ps` 命令，并通过启动脚本挂载 `/proc`。
 
 QFN48 封装提供 GPIO0 到 GPIO36。片内 flash（SF1）和 PSRAM 不占用这些 GPIO，
@@ -24,6 +24,7 @@ GPIO6–11、21 可作普通 IO（GPIO6–11 只是外置 flash SF2 的候选脚
 | SPI0 | CS 12、CLK 13、MISO 18、MOSI 19 | 测试时 MISO 与 MOSI 外接环回 |
 | SPI1 | 无 | 四线 pin 未冻结，板级不注册、不占引脚 |
 | PWM0 | CH0 正 8/负 9、CH1 正 10/负 11、CH2 负 21、CH3 正 6/负 7 | `nsh-peripherals` 的分配，可在板级 Kconfig 改；四通道同频，负输出是正输出的反相 |
+| ADC | CH0–CH3 = GPIO0–3 | `nsh-peripherals` 的分配，可在板级 Kconfig 逐路选；CH0–CH7 固定在 GPIO0–7，CH8、CH9 在 GPIO12、13；输入 0–3.2 V |
 | GPIO 回环 | GPIO23 output、GPIO20 input | `mcu_gpio_test` 默认回环，测试时外接跳线 |
 | 板载 LED | 红 14、绿 15、蓝 16、暖白 28、冷白 27 | 高电平点亮（Ai-M64P-32S-Kit V1.0 原理图）；蓝灯注册为 `/dev/gpio16` |
 
@@ -45,6 +46,8 @@ TIMER1 同时是普通 timer lower-half 和 one-shot lower-half 的硬件资源�
   没有目标时硬件探测/传输用例应报告环境缺失。
 - RTC：`mcu_rtc_test -c 005` 会删除 `/dev/rtc0`，放在最后单独跑，之后复位。
 - PWM：测量时把探头接 GPIO6–11、21（CH2 只有负输出 21）。
+- ADC：`mcu_adc_test -c 003` 需要在 GPIO0–3 上加已知电压（接地、分压或可调电源，
+  不超过 3.2 V）并用 `-e` 写明；其余 ADC 用例不需要接线。
 - WDT：会触发复位的用例必须单独执行并根据 reset cause 验证，不能与其余
   并发测试混跑。
 - GPIO：GPIO23 与 GPIO20 短接；统一配置只注册 `/dev/gpio16`（板载蓝灯）、

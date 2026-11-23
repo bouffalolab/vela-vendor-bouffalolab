@@ -53,6 +53,8 @@
 - [BL616CL I2S0 与 ES8388 音频](bl616cl-i2s.md)：I2S0 master lower-half 的时钟与
   引脚规则、DMA 收发流程、Kconfig、NuttX ES8388 驱动修复，以及 AVE-V10 播放、录音
   实测和限制（44.1 kHz 偏快 1.2%），以及 ES8388 录音噪声、偶发数据错位的定位与修复。
+- [BL616CL GPADC（ADC）](bl616cl-adc.md)：`/dev/adc0` 的读数与 ioctl 合同、轮询与
+  中断连续扫描两种方式、溢出处理、为 PWM 触发和 DMA 预留的分层、引脚检查和实板结果。
 - [BL616CL 普通 Timer 与 TIMER1 验证](bl616cl-timer.md)：说明 TIMER0/TIMER1
   最大能力交集、oneshot owner 互斥、tick/poll/multi-fd 测试、
   五配置裁剪和 USB2 实测边界。

@@ -91,6 +91,10 @@ if(CONFIG_BL616CL_PWM)
   list(APPEND SRCS bl616cl_pwm.c)
 endif()
 
+if(CONFIG_BL616CL_ADC)
+  list(APPEND SRCS bl616cl_adc.c)
+endif()
+
 if(CONFIG_BL616CL_RTC)
   list(APPEND SRCS bl616cl_rtc.c bl616cl_rtc_hw.c)
 endif()

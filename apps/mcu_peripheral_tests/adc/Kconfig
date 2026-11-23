@@ -1,0 +1,27 @@
+menuconfig BL_MCU_PERIPHERAL_TESTS_ADC
+	tristate "MCU peripheral ADC tests"
+	default n
+	depends on AI_M64P_KIT_ADC && BL616CL_ADC
+	depends on !DISABLE_PTHREAD
+	---help---
+		Enable the BL616CL GPADC test runner. It reads /dev/adc0 through
+		read(), poll() and the standard ANIOC ioctls and checks the
+		channel order, the sample count, the error codes of the selected
+		transfer mode and the queue lifetime. The accuracy case needs a
+		known voltage on the channel inputs.
+
+if BL_MCU_PERIPHERAL_TESTS_ADC
+
+config BL_MCU_PERIPHERAL_TESTS_ADC_PROGNAME
+	string "Program name"
+	default "mcu_adc_test"
+
+config BL_MCU_PERIPHERAL_TESTS_ADC_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_ADC_STACKSIZE
+	int "Stack size"
+	default 6144
+
+endif

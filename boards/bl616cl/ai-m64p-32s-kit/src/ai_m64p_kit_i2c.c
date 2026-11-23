@@ -30,6 +30,10 @@
       AI_M64P_KIT_PWM_OWNS(CONFIG_AI_M64P_KIT_I2C0_SDA_PIN)
 #    error "I2C0 pin conflicts with a PWM0 output"
 #  endif
+#  if AI_M64P_KIT_ADC_OWNS(CONFIG_AI_M64P_KIT_I2C0_SCL_PIN) || \
+      AI_M64P_KIT_ADC_OWNS(CONFIG_AI_M64P_KIT_I2C0_SDA_PIN)
+#    error "I2C0 pin conflicts with an ADC input"
+#  endif
 #  if (CONFIG_AI_M64P_KIT_I2C0_SCL_PIN & 1) != 0
 #    error "I2C0 SCL pin must be even"
 #  endif
@@ -46,6 +50,10 @@
 #  if AI_M64P_KIT_PWM_OWNS(CONFIG_AI_M64P_KIT_I2C1_SCL_PIN) || \
       AI_M64P_KIT_PWM_OWNS(CONFIG_AI_M64P_KIT_I2C1_SDA_PIN)
 #    error "I2C1 pin conflicts with a PWM0 output"
+#  endif
+#  if AI_M64P_KIT_ADC_OWNS(CONFIG_AI_M64P_KIT_I2C1_SCL_PIN) || \
+      AI_M64P_KIT_ADC_OWNS(CONFIG_AI_M64P_KIT_I2C1_SDA_PIN)
+#    error "I2C1 pin conflicts with an ADC input"
 #  endif
 #  if (CONFIG_AI_M64P_KIT_I2C1_SCL_PIN & 1) != 0
 #    error "I2C1 SCL pin must be even"
