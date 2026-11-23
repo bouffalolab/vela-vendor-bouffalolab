@@ -199,8 +199,12 @@ cyclic 传输用链表节点（LLI，每个 16 字节：源、目的、下一节
   清 H 后从原位继续。CxCONFIG bit21 LLI_MUTEX 的作用是让硬件停在下一个节点边界，
   adapter 不用它。
 - 中断频率：cyclic 每个 period 一次中断。mem2mem 全速运行时 period 太小会让中断占满
-  CPU，实测 64 字节 period 的环让看门狗复位，8 KB period 的 4 字节宽环也会让任务
-  长时间抢不到 CPU；外设方向由外设节拍限速，period 按允许的中断频率选。
+  CPU，外设方向由外设节拍限速，period 按允许的中断频率选。所有 CLIC 中断用同一默认
+  优先级，同级时编号大的先响应，DMA0 排在 MTIMER 前面：处理一次 DMA 中断的时间超过
+  一个 period 时，中断一个接一个连续进入，tick 停止，看门狗复位。`nsh-peripherals`
+  （KASAN、stack canary、代码在 flash）里一次 DMA 中断约 14,000–16,000 cycle
+  （45–50 µs），会随代码布局变化；4 字节宽、8 KB period 的 mem2mem 环每 12,250 cycle
+  一次中断，比处理一次中断的时间还短。实测 64 字节 period 的环同样让看门狗复位。
 - 外设对应：I2C、UART TX、短 SPI 用 ≤4095 units 的 `DMA_START`；SPI 大块传输用长
   `DMA_START`；UART RX、ADC、I2S 用 `DMA_START_CYCLIC` 加 `DMA_RESIDUAL`。DMA 不支持
   `config.timeout`，UART RX 的空闲检测要用 UART 自己的接收超时中断。
@@ -310,6 +314,15 @@ ES8388 的完成回调里等了约 20 ms。中断里每 64 次回调忙等 20 ms
 余量）时，用 `DMA_RESIDUAL` 判出 DMA 已回到要补或要取的 period。I2S 环形方式需要
 LLI 节点（节点池小于两倍 period 数时编译失败），0 节点的临时配置要同时关掉
 `BL616CL_I2S_DMA_RING`。
+
+2026-11-23：`nsh-peripherals` 打开 syslog 时间戳后，AVE-V10 上 DMA-011 的 4 字节宽环
+（2 个 8 KB period）每次都让看门狗复位，去掉时间戳又能通过。DMA-011 运行时没有
+syslog 输出，时间戳的作用只是让 `nx_vsyslog` 变大、后面的代码整体后移，KASAN 检查
+函数和 `irq_dispatch` 的位置跟着变。用 perfmon 临时插桩测量：一次 DMA 中断从
+14,000–15,100 cycle 变成 16,000 cycle，而这个环每 12,250 cycle 一次中断，原来中断就占了
+87–88%。这个环改为 2 个 16 KB period（每个 period 两段），测试缓冲随之加大到
+32 KB；中断间隔与另外三个环相同，约 24,600 cycle，中断约占 64%。两板各连跑五次
+`passed=13 failed=0 skipped=0`，没有复位。
 
 ## 限制与后续入口
 

@@ -34,6 +34,12 @@
 #define DMA_CHANNEL_COUNT      BL616CL_DMA0_NCHANNELS
 #define DMA_TRANSFER_MAX_UNITS 4095u
 #define DMA_TEST_MAX_BYTES     ((DMA_TRANSFER_MAX_UNITS + 1u) * 4u)
+
+/* The buffers hold the 4-byte cyclic ring of DMA-011: two periods of
+ * DMA_TEST_MAX_BYTES (see run_cyclic_case())
+ */
+
+#define DMA_RING_BYTES         (DMA_TEST_MAX_BYTES * 2u)
 #define DMA_SMALL_BYTES        128u
 #define DMA_WAIT_LOOPS         2000u
 #define DMA_GUARD_BYTES        32u
@@ -118,8 +124,8 @@ struct dma_case_s
  * Private Data
  ****************************************************************************/
 
-static uint8_t g_source[DMA_TEST_MAX_BYTES] __attribute__((aligned(32)));
-static uint8_t g_destination[DMA_TEST_MAX_BYTES + DMA_GUARD_BYTES]
+static uint8_t g_source[DMA_RING_BYTES] __attribute__((aligned(32)));
+static uint8_t g_destination[DMA_RING_BYTES + DMA_GUARD_BYTES]
   __attribute__((aligned(32)));
 static uint8_t g_parallel_source[DMA_CHANNEL_COUNT][DMA_SMALL_BYTES]
   __attribute__((aligned(32)));
@@ -1810,7 +1816,7 @@ static int run_cyclic_case(struct dma_dev_s *dev)
       ret = run_cyclic_ring(&cyclic, 1, false);
     }
 
-  /* Two periods of two 2-byte segments, then of one 4-byte segment */
+  /* Two periods of two 2-byte segments */
 
   if (ret >= 0)
     {
@@ -1818,8 +1824,17 @@ static int run_cyclic_case(struct dma_dev_s *dev)
       ret = run_cyclic_ring(&cyclic, 2, false);
     }
 
+  /* Two periods of two 4-byte segments. 4-byte units move twice as fast,
+   * so the period is doubled to keep the interrupt rate of the rings
+   * above. With 8 KB periods an interrupt came every 38 us at full speed,
+   * less than one took in nsh-peripherals (KASAN, code in flash): the
+   * interrupts then followed one another, the timer interrupt never got
+   * in and the watchdog reset the board.
+   */
+
   if (ret >= 0)
     {
+      cyclic.period = DMA_TEST_MAX_BYTES;
       ret = run_cyclic_ring(&cyclic, 4, false);
     }
 

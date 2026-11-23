@@ -87,7 +87,7 @@ buffer 按 32 字节对齐。这里验证的是调用方履行该协议后的 ca
 
 DMA-001、DMA-004、DMA-007 的「实测关键数据」来自用例精简前的固件（当时 8 项），输出
 格式未变的行予以保留；DMA-002、DMA-003 和 DMA-009..014 的数据来自 2026-10-22、10-23
-的固件。2026-10-20 改为按空闲通道运行后，在 AVE-V10（6 个通道）和 Ai-M64P-32S-Kit
+的固件，其中 DMA-011 来自 2026-11-23 的固件。2026-10-20 改为按空闲通道运行后，在 AVE-V10（6 个通道）和 Ai-M64P-32S-Kit
 （8 个通道）上各连跑两次，均为 `passed=7 failed=0`；2026-10-23 的最终固件两板各连跑
 五次，均为 `passed=13 failed=0 skipped=0`。记录见 `docs/bl616cl-dma.md`。
 
@@ -271,7 +271,12 @@ hold=0 3-seg=-12 2-seg=0 3-seg=-12 after-stop=0 after-put=0
 | 1 | 4064 | 4 | 1 | callback 内 |
 | 1 | 8164 | 2 | 3（4064+4064+36） | task |
 | 2 | 8192 | 2 | 2（4064+32 units） | task |
-| 4 | 8192 | 2 | 1 | task |
+| 4 | 16384 | 2 | 2（4064+32 units） | task |
+
+period 按中断频率选：全速 mem2mem 下四个环都约每 24,600 cycle（77 µs）一次中断。
+4 字节宽的单位走得快一倍，它的 period 是 2 字节宽环的两倍，测试缓冲因此为 32 KB。
+它原用 8 KB period，每 12,250 cycle 一次中断，在 `nsh-peripherals`（KASAN、代码在
+flash）里中断处理跟不上，看门狗复位（见 `docs/bl616cl-dma.md` 的“中断频率”）。
 
 流程（每个环）：
 
@@ -287,7 +292,7 @@ hold=0 3-seg=-12 2-seg=0 3-seg=-12 after-stop=0 after-put=0
    - DMA 只在 resume 到 pause 之间运行，关中断保证这一段不被拉长；读位置放在暂停后，
      读寄存器的耗时不算进 DMA 运行时间。每步走过的距离要小于半圈，否则报
      `-ERANGE`，避免一步跨过整圈而少算。输出里的 `max-step` 是每步的最大距离，
-     实测 1 字节宽 240–296 字节、4 字节宽 512–1184 字节，环长约 16 KB。
+     实测 1 字节宽 180–296 字节、4 字节宽 720–1392 字节；4 字节宽环长 32 KB，其余约 16 KB。
    - 早期版本在整个窗口内关中断、在 DMA 运行中读位置。最快的 4 字节宽环在读位置
      较慢时会在两次读之间跑完整圈，距离少算后窗口一直关着中断走到读次数上限，喂狗
      被耽误，模组被看门狗复位（`resetcause` 为 `rtc_watchdog`）。
@@ -301,10 +306,10 @@ hold=0 3-seg=-12 2-seg=0 3-seg=-12 after-stop=0 after-put=0
 实测关键数据（Ai-M64P-32S-Kit）：
 
 ```text
-width=1 periods=4 x 4064 callbacks=2237 toggles=36269 max-step=296 mismatches=0 residual=10268 stop=callback ret=0
-width=1 periods=2 x 8164 callbacks=1119 toggles=36359 max-step=296 mismatches=0 residual=4448 stop=task ret=0
-width=2 periods=2 x 8192 callbacks=2227 toggles=36250 max-step=480 mismatches=0 residual=2400 stop=task ret=0
-width=4 periods=2 x 8192 callbacks=4509 toggles=36194 max-step=1184 mismatches=0 residual=15728 stop=task ret=0
+width=1 periods=4 x 4064 callbacks=2212 toggles=30736 max-step=296 mismatches=0 residual=14276 stop=callback ret=0
+width=1 periods=2 x 8164 callbacks=1119 toggles=25788 max-step=240 mismatches=0 residual=1684 stop=task ret=0
+width=2 periods=2 x 8192 callbacks=2229 toggles=35977 max-step=592 mismatches=0 residual=1056 stop=task ret=0
+width=4 periods=2 x 16384 callbacks=2228 toggles=33971 max-step=960 mismatches=0 residual=17072 stop=task ret=0
 [DMA-011] PASS ret=0
 ```
 
@@ -380,6 +385,16 @@ restart ret=0 callbacks=1; new transfer callbacks=1 result=16380 residual=0 copi
 ```text
 Ai-M64P-32S-Kit  ed3631fb059974b1f56aec9202c1924dda7b317b23ba3eb06c63cf090edf2428
 BL616CL-AVE-V10  f680935587b1284c9c9ffe77b4af67fa247b2eaaa7486290a931b2398938f4aa
+```
+
+2026-11-23 4 字节宽 cyclic 环改为 2 个 16 KB period 后，两板 `nsh-peripherals`
+（已打开 syslog 时间戳）各连跑五次 `mcu_dma_test`，均为
+`DMA0 summary: passed=13 failed=0 skipped=0`，没有复位（`resetcause` 为 `power_on`）。
+上面 DMA-011 的实测数据取自这次的 Ai-M64P-32S-Kit。`nuttx.bin` SHA256：
+
+```text
+Ai-M64P-32S-Kit  61fd3436ea8db06521e5964082898ab26008c1c273c20e615ab9ce22cdb18eef
+BL616CL-AVE-V10  544274aedb89458802c437c3dfd2320b6059ecebf579977ac29b9845fe089c9d
 ```
 
 把 `CONFIG_BL616CL_DMA0_LLI_NODES` 设为 0 的临时配置在 Ai-M64P-32S-Kit 上为
