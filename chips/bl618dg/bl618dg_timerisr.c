@@ -57,12 +57,7 @@ void up_timer_initialize(void)
 {
   struct oneshot_lowerhalf_s *lower;
 
-  if (bl618dg_timer_clock_init() < 0)
-    {
-      for (; ; )
-        {
-        }
-    }
+  bl618dg_timer_clock_init();
 
   lower = riscv_mtimer_initialize(BL618DG_SYSTIMER_MTIME,
                                   BL618DG_SYSTIMER_MTIMECMP,
