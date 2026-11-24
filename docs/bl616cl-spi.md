@@ -13,7 +13,7 @@ SPI lower-half、board pin/CS owner 或 `/dev/spiN` 注册。
 
 本适配不修改 CI 同步的 `vendor/bouffalolab/drivers/`。chip adapter 翻译 OpenVela
 SPI ABI，board 代码只接管从同源 BL616CLDK 选择的 SPI0 候选 pin 和 GPIO CS，
-父仓 CMake wrapper 按实例选择 LHAL `bflb_spi.c`。该 pinmux 已在 Ai-M64P-32S-Kit
+父仓 CMake wrapper 全量编入 LHAL（含 `bflb_spi.c`，SPI 关闭时不被链接）。该 pinmux 已在 Ai-M64P-32S-Kit
 上完成环回和波形验证；SPI1 完整四线 pin 未经当前板卡证实，故只开放 lower-half，
 不创建虚假的 board 节点。
 
@@ -70,8 +70,8 @@ SPIIOC_TRANSFER
   编入 `libarch.a`；
 - `boards/bl616cl/ai-m64p-32s-kit/src/ai_m64p_kit_spi.c`：SPI0 pin、target、GPIO CS
   和 `/dev/spi0` 注册，编入 `libboard.a`；
-- `cmake/bl616cl_lhal.cmake`：有任一实例时编入同步仓 `bflb_spi.c`，生成
-  `libbl_lhal.a`；
+- `cmake/bl616cl_lhal.cmake`：全量编入同步仓 LHAL，生成 `libbl_lhal.a`，
+  `bflb_spi.c` 不随实例开关变化；
 - `apps/mcu_peripheral_tests/spi/`：单一测试 main，独立生成
   `libapps_mcu_spi_test.a`；
 - `drivers/`：保持未修改；chip 代码不放入 `libbl_std.a`。
@@ -80,7 +80,7 @@ SPIIOC_TRANSFER
 
 | 选项 | 作用 | 关闭效果 |
 |---|---|---|
-| `BL616CL_SPI` | chip 总开关，选择 OpenVela SPI/exchange/bit-order 能力 | 无实例时不编 chip/LHAL SPI 对象 |
+| `BL616CL_SPI` | chip 总开关，选择 OpenVela SPI/exchange/bit-order 能力 | 无实例时不编 chip SPI 对象（LHAL 照常编译、不被链接） |
 | `BL616CL_SPI0/1` | 独立 controller 实例 | 只生成所选实例私有状态 |
 | `AI_M64P_KIT_SPI` | board SPI 总开关 | 不接管 pin、不注册节点 |
 | `AI_M64P_KIT_SPI0` | SPI0 pin、target、GPIO CS 和 `/dev/spi0` | 关闭后无 board SPI 对象/节点 |

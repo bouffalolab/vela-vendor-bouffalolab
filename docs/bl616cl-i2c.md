@@ -13,8 +13,8 @@ BL616CL LHAL 提供 I2C0/I2C1 两个控制器的同步 polling master 和中断�
 `I2C_M_INT` 时只配置并启动，按第一条消息的方向打开 FIFO 中断，数据和子地址由调用者在
 中断里用 `bflb_i2c_fifo_write/read` 搬运），
 但 OpenVela 适配层此前没有 chip lower-half、board pin owner 或 `/dev/i2cN` 节点。LHAL
-位于 CI 同步的 `vendor/bouffalolab/drivers/`，本适配只通过父仓 CMake wrapper 条件编入
-`bflb_i2c.c`，不修改同步驱动仓。中断方式需要 drivers 2.3.38 及以后（LHAL 从这一版起带
+位于 CI 同步的 `vendor/bouffalolab/drivers/`，父仓 CMake wrapper 全量编入 LHAL（含
+`bflb_i2c.c`，I2C 关闭时不被链接），不修改同步驱动仓。中断方式需要 drivers 2.3.38 及以后（LHAL 从这一版起带
 BL616CL 的 I2C 中断模式），轮询方式不需要。
 
 OpenVela `I2C_TRANSFER()` 接受消息数组并要求整组传输原子。公共 `NOSTOP`、
@@ -76,7 +76,7 @@ I2CIOC_TRANSFER
 - `boards/bl616cl/bl616cl-ave-v10/src/bl616cl_ave_v10_i2c.c`：AVE-V10 的 I2C0 节点注册。
   ES8388 驱动（`bl616cl_ave_v10_audio.c`）再调用一次 `bl616cl_i2cbus_initialize(0, ...)`，
   拿到同一个实例，实例按引用计数共享，两边的传输由同一把实例 mutex 串行；
-- `cmake/bl616cl_lhal.cmake`：仅在实例开启时编入同步仓的 `bflb_i2c.c`；
+- `cmake/bl616cl_lhal.cmake`：全量编入同步仓 LHAL，`bflb_i2c.c` 不随实例开关变化；
 - `apps/mcu_peripheral_tests/i2c/`：独立 `libapps_mcu_i2c_test.a` 和一个测试 main；
 - `drivers/`：保持未修改。
 
@@ -285,6 +285,8 @@ dual       3bb8c27210cebf56e02ab1053e45b01d42e0b19f6b00efbf35f452069b72b7bb
 
 no-instance 的 `libarch.a` 无 `bl616cl_i2c.c.o`，`libboard.a` 无
 `ai_m64p_kit_i2c.c.o`，`libbl_lhal.a` 无 `bflb_i2c.c.o`，测试 archive 不存在。
+此后 LHAL 改为全量编译，`libbl_lhal.a` 始终含 `bflb_i2c.c.o`，没有引用时不进镜像；
+表中 LHAL 一列只反映当时的构建方式。
 三个实例配置的 map 均把对象归入上述四个独立 archive；单实例 `nm` 只出现自身
 实例私有符号。
 

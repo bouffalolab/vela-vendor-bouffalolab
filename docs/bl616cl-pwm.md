@@ -64,8 +64,8 @@ open / SET / START / STOP / close
 - `chips/bl616cl/bl616cl_pwm.c`：OpenVela lower、频率求解和错误转换，编入 `libarch.a`；
 - `boards/bl616cl/ai-m64p-32s-kit/src/ai_m64p_kit_pwm.c`：按 Kconfig 生成通道和引脚表，
   编译期检查引脚槽位，注册 `/dev/pwm0`，编入 `libboard.a`；
-- `cmake/bl616cl_lhal.cmake`：按 PWM Kconfig 选择现有 LHAL PWM/clock 依赖，
-  编入 `libbl_lhal.a`；
+- `cmake/bl616cl_lhal.cmake`：LHAL 全量编入 `libbl_lhal.a`（含 `bflb_pwm_v2.c`），
+  不随 PWM Kconfig 变化，PWM 关闭时不被链接；
 - `apps/mcu_peripheral_tests/pwm/`：单一测试 main，独立生成测试 archive；
 - `drivers/`：保持只读，chip adapter 不放入 `libbl_std.a`。
 
