@@ -1,0 +1,146 @@
+# Bouffalo SDK files of the display port, one line each:
+#   <mode> <git blob id at the last sync> <SDK path> [<Vela paths>]
+# (the blob id reads OLD..NEW while update leaves the file to finish by
+# hand; display_sdk_sync.py resolve then moves it to NEW).
+# Modes: same (copied unchanged), patched (copied with Vela changes),
+# ported (logic moved into the Vela files listed), skipped (not used).
+# An indented line under an entry is a Vela change to keep when porting
+# that file (ported files mark it "Vela:" in the code).
+# Maintained by tools/bl616cl/display_sdk_sync.py; see README.md.
+# Last sync: bouffalo_sdk v2.3.39, except bus/dbi, bus/spi and the skipped
+# README.md, default/Kconfig, scanout/sim_v1, which are from a later SDK
+# revision; the blob ids below are authoritative.
+# synced: v2.3.39 (+ newer bus/dbi, bus/spi)
+ported   403f5a3e0afe03d182cfdf5a862767cecff5b5ba bsp/common/display/CMakeLists.txt components/display/CMakeLists.txt
+ported   51fbccce73d9a4d940a1615c32c1381f3817578d bsp/common/display/Kconfig components/display/Kconfig
+skipped  61bc3fa0bdf9184e35d74fe5833f24f37a696b81 bsp/common/display/README.md
+skipped  f8111da481c6dd01c82c3670a37062d7a18861b3 bsp/common/display/README_CN.md
+ported   fdd2be7ca02023c2678373ec014673be7f3affd0 bsp/common/display/bus/CMakeLists.txt components/display/CMakeLists.txt,chips/bl616cl/CMakeLists.txt
+ported   a7f091ea5304ac05a319a1744e22b4cbcd8e7abd bsp/common/display/bus/Kconfig chips/bl616cl/Kconfig
+ported   caa605effa31e17d71c71a6a32e1244e723784b4 bsp/common/display/bus/dbi/display_dbi.c chips/bl616cl/bl616cl_dbi.c
+ported   6323b8fdc198ffcee7682ad2b78cdcdbd30a7c6c bsp/common/display/bus/dbi/display_dbi.h chips/bl616cl/bl616cl_dbi.h
+same     54c3c45fc98babc48f2dd6c105afaacb93d2fe09 bsp/common/display/bus/display_bus.c components/display/bus/display_bus.c
+same     6d41429acfd1267826c2393cbeb6fd2882f9b89f bsp/common/display/bus/display_bus.h components/display/bus/display_bus.h
+same     1b40eccd815feedc21f2c1e5918bc8a08b4b61ad bsp/common/display/bus/display_bus_driver.h components/display/bus/display_bus_driver.h
+same     3baf67faa0d089dde5b0b19f366fa61eeb555e85 bsp/common/display/bus/display_io.c components/display/bus/display_io.c
+same     c87cd29e3528c4c0c3e34b3139cae4b6c858b909 bsp/common/display/bus/display_io.h components/display/bus/display_io.h
+skipped  daf3e8062975037a38fed480daa7b47c10c8499e bsp/common/display/bus/dsi/display_dsi.c
+skipped  c788e43ee944097ef3dcdd6f5ab519bd3805c7c3 bsp/common/display/bus/dsi/display_dsi.h
+skipped  626c1d1cfef7502c88bbe3091bc5e304ff11bba4 bsp/common/display/bus/dsi/display_dsi_bl618dg.c
+skipped  4ce48f49b10f48ff91f2bbec4076a5aba8935c13 bsp/common/display/bus/dsi/display_dsi_hw.h
+same     456f49276ce612c62b205ccfb60cb9bd042f58ec bsp/common/display/bus/soft_dbi_c/display_soft_dbi_c.c components/display/bus/soft_dbi_c/display_soft_dbi_c.c
+same     01daa1eb73e92d11690aeae81b407374bd4d84ca bsp/common/display/bus/soft_dbi_c/display_soft_dbi_c.h components/display/bus/soft_dbi_c/display_soft_dbi_c.h
+ported   6928991e0b435ba04a4c482a55b1312d82a32141 bsp/common/display/bus/spi/display_spi.c chips/bl616cl/bl616cl_display_spi.c
+    the DMA callback ends the transfer with its error code (the SDK has no DMA error path)
+ported   202fe9068c02e5423feecd22355baa79d3bfc42a bsp/common/display/bus/spi/display_spi.h chips/bl616cl/bl616cl_display_spi.h
+skipped  acb884fb02b55ef9ff4ea3f9259d61989cb23922 bsp/common/display/default/CMakeLists.txt
+skipped  4483e3a2245ce13dc58fc951dbba2c2486af6eb2 bsp/common/display/default/Kconfig
+skipped  da49e245bcbea1bfe0075a9be1dd9a5759e67049 bsp/common/display/default/display_default.h
+skipped  8d7ce9f9e8dadc0a3112d80b8875a0ef815ba731 bsp/common/display/default/display_default_board.h
+skipped  07fa623ec02c4bacb89e409037a422d4df263319 bsp/common/display/default/display_default_gpio_ext.h
+skipped  a408e74aa08f743ec0d9637737491aa383d2fb31 bsp/common/display/default/display_default_gram.c
+skipped  95173f34bbad895a992958e5a97d34fdb060546b bsp/common/display/default/display_default_module.h
+skipped  19d9ed32bcf269bb065adce801504c9bccc233de bsp/common/display/default/display_default_video.c
+same     495a283a2d0b9f48d859e09c6b240898be6277a4 bsp/common/display/display.c components/display/display.c
+same     81fee01bdf6a2b2ade9998d33f00306a65e7e72f bsp/common/display/display.h components/display/display.h
+ported   4e756d20855c9b824a35bb3b6d55798aba7cfec4 bsp/common/display/display_os.c components/display/nuttx/display_os_nuttx.c,chips/bl616cl/bl616cl_display.c
+patched  23fc730fc4a8b77bc76f2a6df99464b0614dfdbe bsp/common/display/display_os.h components/display/display_os.h
+    the NuttX semaphore type
+same     77e840afc3adcade126aebfd69535c6766b50186 bsp/common/display/display_types.h components/display/display_types.h
+ported   58ddc4683742b9c97032249cf909ce4063990398 bsp/common/display/panel/CMakeLists.txt components/display/CMakeLists.txt
+ported   fef1e63f7ddf883f3a1b338c7d9271ed00d2d11c bsp/common/display/panel/Kconfig components/display/Kconfig
+same     2d09f23adad7d93e7bc13b4d32f2969555c5463b bsp/common/display/panel/dcs/display_panel_dcs.c components/display/panel/dcs/display_panel_dcs.c
+same     fa4e1ae8477b5cb4d65404999ba35fb3b9cfb0f6 bsp/common/display/panel/dcs/display_panel_dcs.h components/display/panel/dcs/display_panel_dcs.h
+same     560cffc1a8f4bfe9503206c9d457df53896d53bc bsp/common/display/panel/display_board.h components/display/panel/display_board.h
+same     0f396c675cb7812a36945f0e91754dfad652fb8a bsp/common/display/panel/display_board_gpio.c components/display/panel/display_board_gpio.c
+same     442b4fc4d16ab1c3f1a336aea02bc05ab5fdb604 bsp/common/display/panel/display_board_gpio.h components/display/panel/display_board_gpio.h
+same     f85eeff783637b7d3ac0a6606cefdf699c739008 bsp/common/display/panel/display_panel.c components/display/panel/display_panel.c
+same     8da1a111fa0a127dbadd2de44154073cbed79218 bsp/common/display/panel/display_panel.h components/display/panel/display_panel.h
+same     277f9403ac001ad7825869417bef5ff332be88f8 bsp/common/display/panel/gram_gc9307/display_gc9307.c components/display/panel/gram_gc9307/display_gc9307.c
+same     87d34185cfb66f6c5bb17c2857c7186a1080395b bsp/common/display/panel/gram_gc9307/display_gc9307.h components/display/panel/gram_gc9307/display_gc9307.h
+same     14e70f4535ae22415115ed758b61e41ea4073b24 bsp/common/display/panel/gram_gc9a01/display_gc9a01.c components/display/panel/gram_gc9a01/display_gc9a01.c
+same     f05dd2e32bdfab3de09a8308928d8f4d272d5109 bsp/common/display/panel/gram_gc9a01/display_gc9a01.h components/display/panel/gram_gc9a01/display_gc9a01.h
+same     c7e1925436c17c261c0b07cbc4838e8d3b7745b3 bsp/common/display/panel/gram_ili9341/display_ili9341.c components/display/panel/gram_ili9341/display_ili9341.c
+same     753e528dd60186aad549139a3831dbf1cdfb096a bsp/common/display/panel/gram_ili9341/display_ili9341.h components/display/panel/gram_ili9341/display_ili9341.h
+same     eb3ab4701c6909bbc6f539745db24f8132dce009 bsp/common/display/panel/gram_ili9486/display_ili9486.c components/display/panel/gram_ili9486/display_ili9486.c
+same     f9fdb4a1a6511634f87b1469fed31d80d0962a0f bsp/common/display/panel/gram_ili9486/display_ili9486.h components/display/panel/gram_ili9486/display_ili9486.h
+same     3fd29fd28832ca7130b2d7191cd18ea93bd94b46 bsp/common/display/panel/gram_ili9488/display_ili9488.c components/display/panel/gram_ili9488/display_ili9488.c
+same     baddfeb6ae28e567c991164ac1d972be4690fce9 bsp/common/display/panel/gram_ili9488/display_ili9488.h components/display/panel/gram_ili9488/display_ili9488.h
+same     46053d0c8ea24715ab3516bec67de90f32b1ab9e bsp/common/display/panel/gram_jd9853/display_jd9853.c components/display/panel/gram_jd9853/display_jd9853.c
+same     bc50710f804b08932188957a7fa4d45666aa7782 bsp/common/display/panel/gram_jd9853/display_jd9853.h components/display/panel/gram_jd9853/display_jd9853.h
+same     93efc72171d40831b9fdc3548ab4d98988428e83 bsp/common/display/panel/gram_nt35510/display_nt35510.c components/display/panel/gram_nt35510/display_nt35510.c
+same     9d23bb7a5394c46e330d6ace0fa0f84ab73c4a12 bsp/common/display/panel/gram_nt35510/display_nt35510.h components/display/panel/gram_nt35510/display_nt35510.h
+same     487deb8b350415dfe6bd5d4051d1e7f6edec58f0 bsp/common/display/panel/gram_spd2010/display_spd2010.c components/display/panel/gram_spd2010/display_spd2010.c
+same     fc1856aa36e879b1153722bd3ddcfe7f31f07e73 bsp/common/display/panel/gram_spd2010/display_spd2010.h components/display/panel/gram_spd2010/display_spd2010.h
+same     06da628ed83206c644d726a2595147f1ccc5f04c bsp/common/display/panel/gram_st7735/display_st7735.c components/display/panel/gram_st7735/display_st7735.c
+same     8a25700faa2e8a5fa303532b9fc8084821030dbf bsp/common/display/panel/gram_st7735/display_st7735.h components/display/panel/gram_st7735/display_st7735.h
+same     8beada515238fbe82d319d193fe4c7a046ae6808 bsp/common/display/panel/gram_st7789/display_st7789.c components/display/panel/gram_st7789/display_st7789.c
+same     7bc91954a99bb769d05ba0f33aa04675bd175fb7 bsp/common/display/panel/gram_st7789/display_st7789.h components/display/panel/gram_st7789/display_st7789.h
+same     f7d2b445ebaa04a4d3f9f9e02b61b9aaa5f2436a bsp/common/display/panel/gram_st77922/display_st77922.c components/display/panel/gram_st77922/display_st77922.c
+same     ff1d20f12e903e372e063cf26d19e2c3ec02250d bsp/common/display/panel/gram_st77922/display_st77922.h components/display/panel/gram_st77922/display_st77922.h
+same     3b2ac60982b431a62c2b67b972abad52c9dfc730 bsp/common/display/panel/gram_st7796/display_st7796.c components/display/panel/gram_st7796/display_st7796.c
+same     65ee01a59b8bc90808f8aad66d42a8cb2392c816 bsp/common/display/panel/gram_st7796/display_st7796.h components/display/panel/gram_st7796/display_st7796.h
+skipped  8662e5ae332edd84a9f81c0ce6805db95fa07d26 bsp/common/display/panel/template/display_module_template.c
+same     d5b38b9885b398940b6e31cab84397ba84440128 bsp/common/display/panel/video_axs15231b/display_axs15231b.c components/display/panel/video_axs15231b/display_axs15231b.c
+same     9de7e65934f15a27ec25c41c65fec7b36ce36300 bsp/common/display/panel/video_axs15231b/display_axs15231b.h components/display/panel/video_axs15231b/display_axs15231b.h
+same     dd4c75772b1f3b2cde10b0c565fbad9f5e0d91c9 bsp/common/display/panel/video_axs15231e/display_axs15231e.c components/display/panel/video_axs15231e/display_axs15231e.c
+same     891e53a4b70b5a24ca7bef5267226eba8ab37be1 bsp/common/display/panel/video_axs15231e/display_axs15231e.h components/display/panel/video_axs15231e/display_axs15231e.h
+same     d538da46a4e38d8da4d537f74ae31551bb40f612 bsp/common/display/panel/video_ek79007/display_ek79007.c components/display/panel/video_ek79007/display_ek79007.c
+same     1d9cb11bf51650348e439d196c36c634dc0def62 bsp/common/display/panel/video_ek79007/display_ek79007.h components/display/panel/video_ek79007/display_ek79007.h
+same     0965346c862c1e6346ec62404a7ea78986a7aa07 bsp/common/display/panel/video_fl7707n/display_fl7707n.c components/display/panel/video_fl7707n/display_fl7707n.c
+same     8bc23f1931a6c5c2a3bef73fcef2badc54846b9d bsp/common/display/panel/video_fl7707n/display_fl7707n.h components/display/panel/video_fl7707n/display_fl7707n.h
+same     7234e4ed70c5b527d6de110b30f723903fc40f0a bsp/common/display/panel/video_gc9503v/display_gc9503v.c components/display/panel/video_gc9503v/display_gc9503v.c
+same     786c3fdde33210fba430f6c4c30ffcdb85acc635 bsp/common/display/panel/video_gc9503v/display_gc9503v.h components/display/panel/video_gc9503v/display_gc9503v.h
+same     eef1707b1e023de399c4dc0113b1838efc13a279 bsp/common/display/panel/video_ili9806e/display_ili9806e.c components/display/panel/video_ili9806e/display_ili9806e.c
+same     28ec7fc0bbc799c288ea669b97dce800b4d97871 bsp/common/display/panel/video_ili9806e/display_ili9806e.h components/display/panel/video_ili9806e/display_ili9806e.h
+same     6fa830603415da62a6fece9bc2bb0e84ecd1ca6f bsp/common/display/panel/video_ili9881c/display_ili9881c.c components/display/panel/video_ili9881c/display_ili9881c.c
+same     b2799f9c05bc1ae06735f838a69b37debe9ecda1 bsp/common/display/panel/video_ili9881c/display_ili9881c.h components/display/panel/video_ili9881c/display_ili9881c.h
+same     61af5230491535eab95b51730955adcc83abf46d bsp/common/display/panel/video_jd9165ba/display_jd9165ba.c components/display/panel/video_jd9165ba/display_jd9165ba.c
+same     6eb418c686cc8f8f9734c28ad55e1a14c30f73a5 bsp/common/display/panel/video_jd9165ba/display_jd9165ba.h components/display/panel/video_jd9165ba/display_jd9165ba.h
+same     d52b7b86a51ec77bbebe489ddeb45b3b72172f0b bsp/common/display/panel/video_jd9365tx/display_jd9365tx.c components/display/panel/video_jd9365tx/display_jd9365tx.c
+same     53cb4816ffa1c89237a8579f9903e7bf34a6f96c bsp/common/display/panel/video_jd9365tx/display_jd9365tx.h components/display/panel/video_jd9365tx/display_jd9365tx.h
+same     f2c48acad1c71d660c5abef4078cb5955d816202 bsp/common/display/panel/video_st7102/display_st7102.c components/display/panel/video_st7102/display_st7102.c
+same     296f00d0192b84b7ee93e573a571055ab4c53270 bsp/common/display/panel/video_st7102/display_st7102.h components/display/panel/video_st7102/display_st7102.h
+same     003c1abc71df7e2c53fa5d3eadcb0d889be71c6a bsp/common/display/panel/video_st7701p/display_st7701p.c components/display/panel/video_st7701p/display_st7701p.c
+same     aa2c563f4e2343b8fdf2ccb176f1d3fc5fd044df bsp/common/display/panel/video_st7701p/display_st7701p.h components/display/panel/video_st7701p/display_st7701p.h
+same     d00465cb17763fea82a0a56a6216b74c65325314 bsp/common/display/panel/video_st7701s/display_st7701s.c components/display/panel/video_st7701s/display_st7701s.c
+same     83f9462796a2c61bc9fae8b3936e1bf902f28910 bsp/common/display/panel/video_st7701s/display_st7701s.h components/display/panel/video_st7701s/display_st7701s.h
+same     6718a3187f2d27f39a05f08e3e55226e0afdb9fd bsp/common/display/panel/video_standard/display_video_standard.c components/display/panel/video_standard/display_video_standard.c
+same     26291ac72ad6d2a0e78cc67959172f3d477a9cfa bsp/common/display/panel/video_standard/display_video_standard.h components/display/panel/video_standard/display_video_standard.h
+ported   a80d5271e2b4ce75ceb7e86d557a59a219467da2 bsp/common/display/scanout/CMakeLists.txt components/display/CMakeLists.txt
+ported   a4802fbbf8e6dea48ce786e845090ee2195b732f bsp/common/display/scanout/Kconfig components/display/Kconfig
+skipped  3e2c253fbd0562a1cf83ea384929e29ede751d72 bsp/common/display/scanout/bl618dg_dpu/README.md
+skipped  84f4dd1067e3560c888d94e96f3fbc3f388c0440 bsp/common/display/scanout/bl618dg_dpu/README_CN.md
+skipped  c0a7d00d9c89d1573fea396f3070428c82795855 bsp/common/display/scanout/bl618dg_dpu/display_bl618dg_dpu_clock.c
+skipped  1573443d031e833c901359484843cf07b8bc28f8 bsp/common/display/scanout/bl618dg_dpu/display_bl618dg_dpu_clock.h
+skipped  cb9ed7a1e313715f0fc016175c84d36bdc9a53b1 bsp/common/display/scanout/bl618dg_dpu/display_bl618dg_dpu_hw.c
+skipped  bda7abacb002b79eb1a719683db00d4c5d53ff73 bsp/common/display/scanout/bl618dg_dpu/display_bl618dg_dpu_hw.h
+skipped  85328f35f412414b8dc9e769ca742a670cf608dd bsp/common/display/scanout/bl618dg_dpu/display_bl618dg_dpu_scanout.c
+skipped  cf942ae2a65dd620024ba71b9b371309341b5989 bsp/common/display/scanout/bl618dg_dpu/display_bl618dg_dpu_scanout.h
+same     b2ce3d00f81da574fe5a1c57bdc845b819edfd5e bsp/common/display/scanout/display_scanout.c components/display/scanout/display_scanout.c
+same     45f2c5fbf783bf5a58266ee61aee37895d19ecd2 bsp/common/display/scanout/display_scanout.h components/display/scanout/display_scanout.h
+same     a0fd954cb88df77bf7ad67c432f9afc03bf4df7d bsp/common/display/scanout/display_scanout_driver.h components/display/scanout/display_scanout_driver.h
+skipped  b450a7531ee7f6c10d43f7763263fb7f5d640b44 bsp/common/display/scanout/sim_v1/display_sim_v1_hw.c
+skipped  80ada9194d5420fca9d94d08bceb2085b68fb9ef bsp/common/display/scanout/sim_v1/display_sim_v1_hw.h
+skipped  b55802ddf99a6b6914666bb1b8f969a22d24118e bsp/common/display/scanout/sim_v1/display_sim_v1_scanout.c
+skipped  e0665bbbe5abdffee7759a2e212ea2316a23c1cc bsp/common/display/scanout/sim_v1/display_sim_v1_scanout.h
+ported   dc90adff9013d71652d8bbfeb90e3c08a5c8eb8f bsp/common/display/simple_font/CMakeLists.txt components/display/CMakeLists.txt
+ported   5c004a45ec89bfe12fb7498a225ced48627cf282 bsp/common/display/simple_font/Kconfig components/display/Kconfig
+skipped  d1bc53ccbd3cd463876c491eb65565d37645d122 bsp/common/display/simple_font/README.md
+skipped  9182ee66e33c62c88872e5e78949fe6bec1c9556 bsp/common/display/simple_font/README_CN.md
+same     39c7fa96054af5feb55dc3072eacf4bdb42d32f5 bsp/common/display/simple_font/display_simple_font.c components/display/simple_font/display_simple_font.c
+same     002b811267031962cb7d6d19e9b7331380c9e477 bsp/common/display/simple_font/display_simple_font.h components/display/simple_font/display_simple_font.h
+same     e6ff4688fe6cba07b68231b5aac6fc204bfc4baa bsp/common/display/simple_font/display_simple_font_ascii_16x8.c components/display/simple_font/display_simple_font_ascii_16x8.c
+same     2f7bd432125b894c0434a106d0166a2fbe3707f0 bsp/common/display/simple_font/display_simple_font_ascii_32x16.c components/display/simple_font/display_simple_font_ascii_32x16.c
+same     2cb6a7165eab55f07d9e2712d4ad3642819e677d bsp/common/display/simple_font/display_simple_font_ascii_64x32.c components/display/simple_font/display_simple_font_ascii_64x32.c
+same     8f61f032f9a2cfa190cc96917acd39edbc4864aa bsp/common/display/simple_font/tools/LICENSE.OFL components/display/simple_font/tools/LICENSE.OFL
+same     08c0b6a21c9d1c3e63538aa48e1d19340630b76c bsp/common/display/simple_font/tools/generate_fonts.py components/display/simple_font/tools/generate_fonts.py
+ported   5b715af0e97c02f92430368608426ebafb6c3352 bsp/common/touch/ft6x36_i2c.c components/display/touch/touch_ft6x36.c
+    a failed point read is an error (the SDK ignores the read result)
+ported   443b3faaa670a490e1db016dd2231153fdb494ea bsp/common/touch/ft6x36_i2c.h components/display/touch/touch_ft6x36.c
+ported   d8f6b0f94dc6785de6066fb659fca87db13669f6 bsp/common/touch/gt911_i2c.c components/display/touch/touch_gt911.c
+    only a ready frame counts, its low 4 bits are the points, and a failed point read is an error (the SDK takes the whole status byte as the count and ignores the read result)
+ported   073ed7d7a3ff8416e097f20113d8d12ce91a1dcb bsp/common/touch/gt911_i2c.h components/display/touch/touch_gt911.c
+ported   f9a838a3d26c33951d93b325dde40cdf7ef09576 bsp/common/touch/touch.c components/display/touch/touch_poll.c
+ported   9cd7f57a10987d36f62faf0666bb12032a112d25 bsp/common/touch/touch.h components/display/touch/touch_poll.h
+skipped  485ac613d2316074fd6f93b214e3f7dcd57cb5a5 bsp/common/touch/touch_conf.h
