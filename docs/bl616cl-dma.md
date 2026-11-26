@@ -20,7 +20,7 @@ pause/resume，仍走 OpenVela 标准 DMA 接口，供 SPI 大块传输、UART R
 |---|---|---|
 | DMA0 CH0..CH7 | 纳入 | fixed-ident 独占申请、等待、释放和复用；外设通道固定分配，见“通道分配” |
 | mem2mem one-shot | 纳入 | 1/2/4-byte 同宽，step=0 或 width；≤4095 units 单段，更长的拆成 LLI 段（见“链式传输”） |
-| mem2dev、dev2mem one-shot | 纳入 | DRQ 用 LHAL `DMA_REQUEST_*`，只放在外设一侧；外设方向 burst 固定 INCR1，DMA 做流控 |
+| mem2dev、dev2mem one-shot | 纳入 | DRQ 用 LHAL `DMA_REQUEST_*`，只放在外设一侧；外设方向 burst 默认 INCR1，可经 `dma_config_s.option` 选 INCR4/8/16（`BL616CL_DMA_OPTION_BURST_*`），DMA 做流控 |
 | TC IRQ | 纳入 | raw IRQ 31 -> NuttX IRQ 47，共享 snapshot/clear |
 | error IRQ 状态机 | 已实现，硬件触发不到 | error 优先、`-EIO`、residual；地址类总线错误不会返回给 DMA（实测，见“限制”） |
 | stop/residual | 纳入 | byte residual 按硬件位置计算；传输中 stop 后 residual 与目的端实际写入一致（mem2mem 实测） |
@@ -133,7 +133,9 @@ DMA0 的 8 个通道按外设固定分配：一个通道只给一个外设，外
    1/2/4 byte，step=0 或 width。mem2mem 两侧 DRQ 都为 0；外设方向只在外设一侧填
    LHAL 请求号（0..63，0 是 UART0 RX），内存一侧为 0。`DMA_DEV_TO_DEV` 返回
    `-EINVAL`。
-4. 非零 priority/timeout/option 返回 NuttX ABI 的 `-ENOTSUP`；地址、长度、对齐和
+4. 非零 priority/timeout 返回 NuttX ABI 的 `-ENOTSUP`；option 只接受
+   `BL616CL_DMA_OPTION_BURST_*`（外设方向两侧的 burst），mem2mem 的非零 option 或
+   其它位返回 `-ENOTSUP`；地址、长度、对齐和
    step 错误返回 `-EINVAL`。超过 4095 units 的传输需要的 LLI 节点超过
    `CONFIG_BL616CL_DMA0_LLI_NODES` 时返回 `-E2BIG`，池里暂时不够时返回 `-ENOMEM`，
    通道状态不变。

@@ -56,6 +56,17 @@
 #define BL616CL_DMA0_ASSIGNMENTS(X, arg) \
   BL616CL_DMA0_I2S(X, arg)
 
+/* dma_config_s option: burst size of a peripheral transfer. 0 keeps the
+ * default, single (INCR1) bursts; a peripheral whose FIFO request level
+ * matches a larger burst sets it here. Memory-to-memory transfers always
+ * use INCR4.
+ */
+
+#define BL616CL_DMA_OPTION_BURST_MASK   0x3
+#define BL616CL_DMA_OPTION_BURST_INCR4  0x1
+#define BL616CL_DMA_OPTION_BURST_INCR8  0x2
+#define BL616CL_DMA_OPTION_BURST_INCR16 0x3
+
 /* Channels declared for application code, one bit per channel */
 
 #ifdef CONFIG_BL616CL_DMA0_APP_CHANNELS
@@ -91,7 +102,8 @@
  *   transfers with equal 1, 2, or 4-byte widths and source/destination
  *   steps of zero or one width. Peripheral transfers take the LHAL
  *   DMA_REQUEST_* number as dst_drq (to the device) or src_drq (from the
- *   device). One-shot transfers longer than 4095 units, cyclic transfers
+ *   device); option may set their burst size (BL616CL_DMA_OPTION_BURST_*).
+ *   One-shot transfers longer than 4095 units, cyclic transfers
  *   and pause/resume of cyclic transfers need
  *   CONFIG_BL616CL_DMA0_LLI_NODES. Clients own all cache clean and
  *   invalidate operations for their buffers.

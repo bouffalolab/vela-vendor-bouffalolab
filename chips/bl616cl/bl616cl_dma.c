@@ -109,6 +109,14 @@
 static_assert((BL616CL_DMA0_APP >> BL616CL_DMA_CHANNEL_COUNT) == 0,
               "DMA0 application channels name a channel above CH7");
 
+/* The burst option values are the LHAL DMA_BURST_* encodings */
+
+static_assert(DMA_BURST_INCR1 == 0 &&
+              DMA_BURST_INCR4 == BL616CL_DMA_OPTION_BURST_INCR4 &&
+              DMA_BURST_INCR8 == BL616CL_DMA_OPTION_BURST_INCR8 &&
+              DMA_BURST_INCR16 == BL616CL_DMA_OPTION_BURST_INCR16,
+              "BL616CL_DMA_OPTION_BURST_* must match DMA_BURST_*");
+
 #define BL616CL_DMA_ON(n, channel, name)   + ((channel) == (n))
 #define BL616CL_DMA_USERS(n) \
   (((BL616CL_DMA0_APP >> (n)) & 1) \
@@ -1154,9 +1162,11 @@ static void bl616cl_dma_put_chan(struct dma_dev_s *dev,
  *
  * Returned Value:
  *   Zero (OK) on success; a negated errno value on failure: -EINVAL for a
- *   bad handle or unsupported configuration, -ENOTSUP if priority,
- *   timeout or option is set, -EBUSY if the channel is running, releasing
- *   or has callbacks in flight, -EPERM if the channel is not owned.
+ *   bad handle or unsupported configuration, -ENOTSUP if priority or
+ *   timeout is set or option is not a peripheral burst size
+ *   (BL616CL_DMA_OPTION_BURST_*), -EBUSY if the channel is running,
+ *   releasing or has callbacks in flight, -EPERM if the channel is not
+ *   owned.
  *
  ****************************************************************************/
 
@@ -1181,7 +1191,9 @@ static int bl616cl_dma_config(struct dma_chan_s *chan,
       return -EINVAL;
     }
 
-  if (config->priority != 0 || config->timeout != 0 || config->option != 0)
+  if (config->priority != 0 || config->timeout != 0 ||
+      (config->option & ~BL616CL_DMA_OPTION_BURST_MASK) != 0 ||
+      (config->option != 0 && config->direction == DMA_MEM_TO_MEM))
     {
       return -ENOTSUP;
     }
@@ -1225,7 +1237,8 @@ static int bl616cl_dma_config(struct dma_chan_s *chan,
  *   of at most BL616CL_DMA_TRANSFER_MAX units uses no LLI node; a longer
  *   one takes a node for each segment after the first. A cyclic transfer
  *   takes a node for every segment, the last linked back to the first.
- *   Peripheral transfers use single (INCR1) bursts.
+ *   Peripheral transfers use single (INCR1) bursts unless the channel
+ *   option sets a burst size.
  *
  * Input Parameters:
  *   channel - Channel state.
@@ -1310,14 +1323,14 @@ static int bl616cl_dma_submit(struct bl616cl_dma_chan_s *channel,
       config = ((uint32_t)channel->config.dst_drq <<
                 DMA_DSTPERIPHERAL_SHIFT) |
                ((uint32_t)DMA_MEMORY_TO_PERIPH << DMA_FLOWCNTRL_SHIFT);
-      burst = DMA_BURST_INCR1;
+      burst = channel->config.option & BL616CL_DMA_OPTION_BURST_MASK;
     }
   else if (channel->config.direction == DMA_DEV_TO_MEM)
     {
       config = ((uint32_t)channel->config.src_drq <<
                 DMA_SRCPERIPHERAL_SHIFT) |
                ((uint32_t)DMA_PERIPH_TO_MEMORY << DMA_FLOWCNTRL_SHIFT);
-      burst = DMA_BURST_INCR1;
+      burst = channel->config.option & BL616CL_DMA_OPTION_BURST_MASK;
     }
 
   channel->control = (burst << DMA_SBSIZE_SHIFT) |
