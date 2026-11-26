@@ -26,9 +26,11 @@ def merge_databases(databases):
                     or not (isinstance(entry.get("command"), str)
                             or isinstance(entry.get("arguments"), list))):
                 raise ValueError(f"{database}: invalid entry {index}")
-            # Resolve aliases for deduplication; preserve the actual command
-            # and its working directory so relative includes keep their meaning.
+            # Record the real path: clangd's background index loses sources
+            # listed through a symlink (apps/vendor -> ../vendor). clangd
+            # takes the input from "file", so the command stays unchanged.
             source_file = (Path(entry["directory"]) / entry["file"]).resolve()
+            entry["file"] = str(source_file)
             merged.setdefault(source_file, entry)
         total += len(entries)
         print(f"{database.parent.name}: {len(entries)} entries")
