@@ -1,0 +1,6 @@
+#
+
+config ARCH_BOARD_BL618DGDK
+	def_bool y
+	---help---
+		BouffaloLab BL618DGDK board.

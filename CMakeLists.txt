@@ -39,20 +39,28 @@ endif()
 
 string(TOLOWER "${CHIP}" CHIP)
 
+if("${CHIP}" STREQUAL "bl618dg")
+  set(BL_CORE_INCLUDE_DIR
+      "${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/include/arch/risc-v/n900")
+else()
+  set(BL_CORE_INCLUDE_DIR
+      "${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/include/arch/risc-v/t-head")
+endif()
+
 bl_include_directories(
   SCOPE
   CHIP_BOARD
   DIRECTORIES
   ${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/include
   ${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/include/arch
-  ${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/include/arch/risc-v/t-head
-  ${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/include/arch/risc-v/t-head/Core/Include
-  ${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/config/bl616cl
+  ${BL_CORE_INCLUDE_DIR}
+  ${BL_CORE_INCLUDE_DIR}/Core/Include
+  ${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/config/${CHIP}
   ${CMAKE_CURRENT_LIST_DIR}/drivers/lhal/src/flash
-  ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/include
-  ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/bl616cl/std/include/hardware
+  ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/${CHIP}/std/include
+  ${CMAKE_CURRENT_LIST_DIR}/drivers/soc/${CHIP}/std/include/hardware
   ${CMAKE_CURRENT_LIST_DIR}/drivers/sys
-  ${CMAKE_CURRENT_LIST_DIR}/drivers/sys/bl616cl)
+  ${CMAKE_CURRENT_LIST_DIR}/drivers/sys/${CHIP})
 
 if(COMMAND nuttx_add_kernel_library AND "${CHIP}" STREQUAL "bl616cl")
   include(${CMAKE_CURRENT_LIST_DIR}/cmake/bl616cl_lhal.cmake)
@@ -82,6 +90,11 @@ if(COMMAND nuttx_add_kernel_library AND "${CHIP}" STREQUAL "bl616cl")
       APPEND
       PROPERTY COMPILE_OPTIONS -Wno-unused-but-set-variable)
   endif()
+endif()
+
+if(COMMAND nuttx_add_kernel_library AND "${CHIP}" STREQUAL "bl618dg")
+  include(${CMAKE_CURRENT_LIST_DIR}/cmake/bl618dg_lhal.cmake)
+  include(${CMAKE_CURRENT_LIST_DIR}/cmake/bl618dg_std.cmake)
 endif()
 
 nuttx_add_subdirectory()
