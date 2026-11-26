@@ -565,8 +565,8 @@ Note RAM 不得与 `SCHED_INSTRUMENTATION_CSECTION` 或 spinlock hook 同时启�
 | P13 | SDH/SDIO | 延后 | host/bus-width/pin/card-detect | 模组未确认卡座与连线；需 DMA/cache、文件系统和热插拔回归 |
 | P14 | 原生 USB device/host | 延后 | role/PHY/class 分层 | `/dev/ttyUSB2` 是 USB-UART；需确认 USB pin/PHY、枚举、重连和吞吐 |
 | P15 | EMAC | 延后 | MAC/PHY/RMII pin/clock | device table 有 MAC，但当前板未确认 PHY；需 cache/DMA 和网络压力 |
-| P16 | camera、MJPEG/MJDEC、DBI/display | 延后 | pipeline 各块独立选项 | 依赖传感器/面板、DMA/cache 和大内存；图像正确性与吞吐 |
-| P17 | touch、PEC、wave output | 延后 | 外设和通道分别裁剪 | OpenVela 上层契约与板上使用场景未明确，先补硬件/接口证据 |
+| P16 | camera、MJPEG/MJDEC、DBI/display | DBI/display 已验证（AVE-V10）；camera、MJPEG/MJDEC 延后 | display：`BL616CL_DISPLAY`、`BL616CL_DBI`（像素 DMA 可关）、SPI 显示总线、软件 DBI type C、每款屏一个组件选项；camera 等 pipeline 各块独立选项 | display：SDK 显示框架原样带入，DBI type B 驱动 ST7796 320x480 经 `/dev/lcd0` 画图、DMA 整屏 81 fps、与 I2S 放音并行、LVGL 实测；SPI、type C/QSPI、软件总线和其它 23 款屏只构建。见 [bl616cl-display.md](bl616cl-display.md)。camera、MJPEG/MJDEC 依赖传感器、DMA/cache 和大内存，需图像正确性与吞吐验证 |
+| P17 | touch、PEC、wave output | touch 已验证（AVE-V10 GT911）；PEC、wave output 延后 | touch：`BL616CL_TOUCH`、板级芯片选项与轮询周期；其余外设和通道分别裁剪 | touch：SDK 的 GT911、FT6x36 驱动经 NuttX touchscreen 注册 `/dev/input0`，LPWORK 轮询、单点；GT911 空闲无虚报、LVGL 实测，FT6x36 只构建。见 [bl616cl-display.md](bl616cl-display.md)。PEC、wave output 的 OpenVela 上层契约与板上使用场景未明确 |
 
 源码入口：`drivers/lhal/config/bl616cl/device_table.c`、`drivers/lhal/src/`、
 `cmake/bl616cl_lhal.cmake`、`chips/bl616cl/include/irq.h`。当前 NuttX IRQ 头只

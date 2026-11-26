@@ -57,3 +57,125 @@ comment "Recording: input Differential is the speaker feedback (untested)"
 	depends on ES8388_INPUT_CHANNEL_DIFFERENTIAL
 
 endif # BL616CL_AVE_V10_AUDIO
+
+menuconfig BL616CL_AVE_V10_DISPLAY
+	bool "BL616CL-AVE-V10 U10 8080 panel (/dev/lcd0)"
+	default n
+	depends on BL616CL_DISPLAY && BL616CL_DBI
+	select LCD
+	---help---
+		Drive the panel on connector U10 through the DBI controller as
+		MIPI DBI type B (8080, 8 data lines): CS GPIO0 (software), WR
+		GPIO2, DC GPIO36, D0..D7 GPIO12..19. RD, reset, TE and backlight
+		are not wired, so the panel cannot be identified: pick its module
+		below. The panel is registered as /dev/lcd0 with LCD_DEV and as
+		/dev/fb0 with VIDEO_FB and LCD_FRAMEBUFFER. GPIO36 is also BOOT,
+		which the USB-UART DTR drives.
+
+if BL616CL_AVE_V10_DISPLAY
+
+choice
+	prompt "Panel module"
+	default BL616CL_AVE_V10_DISPLAY_ST7796_320X480
+
+config BL616CL_AVE_V10_DISPLAY_ST7796_320X480
+	bool "ST7796 320x480"
+	select BL_COMPONENT_DISPLAY_PANEL_ST7796
+
+config BL616CL_AVE_V10_DISPLAY_ILI9488_320X480
+	bool "ILI9488 320x480"
+	select BL_COMPONENT_DISPLAY_PANEL_ILI9488
+
+config BL616CL_AVE_V10_DISPLAY_ILI9486_320X480
+	bool "ILI9486 320x480"
+	select BL_COMPONENT_DISPLAY_PANEL_ILI9486
+
+config BL616CL_AVE_V10_DISPLAY_ST77922_320X480
+	bool "ST77922 320x480"
+	select BL_COMPONENT_DISPLAY_PANEL_ST77922
+
+config BL616CL_AVE_V10_DISPLAY_ST7789_240X320
+	bool "ST7789 240x320"
+	select BL_COMPONENT_DISPLAY_PANEL_ST7789
+
+config BL616CL_AVE_V10_DISPLAY_ILI9341_240X320
+	bool "ILI9341 240x320"
+	select BL_COMPONENT_DISPLAY_PANEL_ILI9341
+
+config BL616CL_AVE_V10_DISPLAY_GC9307_240X320
+	bool "GC9307 240x320"
+	select BL_COMPONENT_DISPLAY_PANEL_GC9307
+
+config BL616CL_AVE_V10_DISPLAY_JD9853_240X320
+	bool "JD9853 240x320"
+	select BL_COMPONENT_DISPLAY_PANEL_JD9853
+
+config BL616CL_AVE_V10_DISPLAY_NT35510_480X800
+	bool "NT35510 480x800"
+	select BL_COMPONENT_DISPLAY_PANEL_NT35510
+
+endchoice
+
+config BL616CL_AVE_V10_DISPLAY_FREQ
+	int "WR clock in Hz (0: 27 MHz)"
+	default 0
+	---help---
+		Write clock of the 8080 interface. 0 takes the interface default
+		of 27 MHz. The DBI controller divides 160 MHz by a whole number,
+		so the clock is the nearest such value, at most 54 MHz.
+
+choice
+	prompt "Rotation"
+	default BL616CL_AVE_V10_DISPLAY_ROTATION_0
+
+config BL616CL_AVE_V10_DISPLAY_ROTATION_0
+	bool "0 degrees"
+
+config BL616CL_AVE_V10_DISPLAY_ROTATION_90
+	bool "90 degrees"
+
+config BL616CL_AVE_V10_DISPLAY_ROTATION_180
+	bool "180 degrees"
+
+config BL616CL_AVE_V10_DISPLAY_ROTATION_270
+	bool "270 degrees"
+
+endchoice
+
+endif # BL616CL_AVE_V10_DISPLAY
+
+menuconfig BL616CL_AVE_V10_TOUCH
+	bool "BL616CL-AVE-V10 U10 touch panel (/dev/input0)"
+	default n
+	depends on BL616CL_TOUCH
+	select BL616CL_AVE_V10_I2C0
+	---help---
+		Register the touch controller of the U10 panel, on I2C0 (U10 pin 5
+		SCL, pin 8 SDA), as /dev/input0. U10 wires no interrupt or reset
+		line, so the controller is polled and must answer at its default
+		address: the panel shipped with the board has a GT911 at 0x5d.
+
+if BL616CL_AVE_V10_TOUCH
+
+choice
+	prompt "Touch controller"
+	default BL616CL_AVE_V10_TOUCH_GT911
+
+config BL616CL_AVE_V10_TOUCH_GT911
+	bool "GT911 (0x5d)"
+	select BL_COMPONENT_TOUCH_GT911
+
+config BL616CL_AVE_V10_TOUCH_FT6X36
+	bool "FT6x36 (0x38)"
+	select BL_COMPONENT_TOUCH_FT6X36
+
+endchoice
+
+config BL616CL_AVE_V10_TOUCH_PERIOD
+	int "Poll period (ms)"
+	default 20
+	range 5 1000
+	---help---
+		Interval between two reads of the touch point.
+
+endif # BL616CL_AVE_V10_TOUCH

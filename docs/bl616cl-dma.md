@@ -20,7 +20,7 @@ pause/resume，仍走 OpenVela 标准 DMA 接口，供 SPI 大块传输、UART R
 |---|---|---|
 | DMA0 CH0..CH7 | 纳入 | fixed-ident 独占申请、等待、释放和复用；外设通道固定分配，见“通道分配” |
 | mem2mem one-shot | 纳入 | 1/2/4-byte 同宽，step=0 或 width；≤4095 units 单段，更长的拆成 LLI 段（见“链式传输”） |
-| mem2dev、dev2mem one-shot | 纳入 | DRQ 用 LHAL `DMA_REQUEST_*`，只放在外设一侧；外设方向 burst 默认 INCR1，可经 `dma_config_s.option` 选 INCR4/8/16（`BL616CL_DMA_OPTION_BURST_*`），DMA 做流控 |
+| mem2dev、dev2mem one-shot | 纳入 | DRQ 用 LHAL `DMA_REQUEST_*`，只放在外设一侧；外设方向 burst 默认 INCR1，可经 `dma_config_s.option` 选 INCR4/8/16（`BL616CL_DMA_OPTION_BURST_*`，DBI、SPI 显示总线使用），DMA 做流控 |
 | TC IRQ | 纳入 | raw IRQ 31 -> NuttX IRQ 47，共享 snapshot/clear |
 | error IRQ 状态机 | 已实现，硬件触发不到 | error 优先、`-EIO`、residual；地址类总线错误不会返回给 DMA（实测，见“限制”） |
 | stop/residual | 纳入 | byte residual 按硬件位置计算；传输中 stop 后 residual 与目的端实际写入一致（mem2mem 实测） |
@@ -29,7 +29,7 @@ pause/resume，仍走 OpenVela 标准 DMA 接口，供 SPI 大块传输、UART R
 | cyclic | 纳入（需要 LLI 节点） | 每 period 回调一次，`len` 为环内偏移；mem2mem 与外设方向（I2S0 TX/RX）实测 |
 | pause/resume | 只支持 cyclic | 用 H 位；one-shot 返回 `-ENOTSUP`，没有运行中的传输返回 `-EINVAL` |
 | `DMA_LINK`（`start_link`） | 不支持 | 上游没有实现与使用者，语义无从确认；依赖 `!DMA_LINK`，不进入 vtable |
-| 外设 consumer | I2S0 已接入（默认 CH0/CH1，初始化时申请并一直持有；默认用 cyclic 环，可选逐段 one-shot），其它延后 | 必须逐 consumer 冻结 owner、request、pin 和实物信号 |
+| 外设 consumer | I2S0 已接入（默认 CH0/CH1，初始化时申请并一直持有；默认用 cyclic 环，可选逐段 one-shot）；DBI 显示总线已接入（默认 CH2，长 one-shot + INCR8）；SPI 显示总线只构建（默认 CH3）；其它延后 | 必须逐 consumer 冻结 owner、request、pin 和实物信号 |
 
 ## 架构与调用链
 
@@ -60,7 +60,7 @@ LLI 节点也由 adapter 自己填写：LHAL 的 `bflb_dma_channel_lli_reload()`
 |---|---:|---|
 | `CONFIG_DMA` | n | 打开 OpenVela generic DMA ABI，并选择 `ARCH_DMA` |
 | `CONFIG_BL616CL_DMA0` | n | 编译 DMA0 adapter、LHAL DMA 和 clock 依赖 |
-| `CONFIG_BL616CL_DMA0_LLI_NODES` | 16 | DMA0 各通道共用的 LLI 节点数，每个 16 字节；0 时单次传输限 4095 units，cyclic 返回 `-ENOTSUP` |
+| `CONFIG_BL616CL_DMA0_LLI_NODES` | 16；打开 DBI 或 SPI 显示 DMA 时 56，两路都开时 96 | DMA0 各通道共用的 LLI 节点数，每个 16 字节；0 时单次传输限 4095 units，cyclic 返回 `-ENOTSUP`。显示总线一次刷新默认最多 40 个节点，见 [bl616cl-display.md](bl616cl-display.md) |
 | `CONFIG_BL_MCU_PERIPHERAL_TESTS_DMA` | n | 编译单一测试命令 `mcu_dma_test` |
 
 `BL616CL_DMA0` 依赖 `DMA && !DMA_LINK`。关闭时 adapter、`bflb_dma.c.o` 和测试 app
@@ -75,7 +75,9 @@ DMA0 的 8 个通道按外设固定分配：一个通道只给一个外设，外
 |---|---|---|
 | CH0 | I2S0 TX（打开 `BL616CL_I2S` 时） | `CONFIG_BL616CL_I2S_TX_DMA_CHANNEL` |
 | CH1 | I2S0 RX（同上） | `CONFIG_BL616CL_I2S_RX_DMA_CHANNEL` |
-| CH2–CH7 | 未分配 | — |
+| CH2 | DBI TX（打开 `BL616CL_DBI_DMA` 时） | `CONFIG_BL616CL_DBI_TX_DMA_CHANNEL` |
+| CH3 | Display SPI TX（打开 `BL616CL_DISPLAY_SPI_DMA` 时） | `CONFIG_BL616CL_DISPLAY_SPI_TX_DMA_CHANNEL` |
+| CH4–CH7 | 未分配 | — |
 | 任意 | 应用代码（默认不用） | `CONFIG_BL616CL_DMA0_APP_CHANNELS` |
 
 - 查看和修改：全部分配集中在 menuconfig 的 `BL616CL Peripheral Support` →
@@ -336,8 +338,9 @@ syslog 输出，时间戳的作用只是让 `nx_vsyslog` 变大、后面的代�
   剩下的途径是用 TZC 把一块区域设成 DMA 不可访问，涉及系统安全配置，未做。
 - put 等待 in-flight callback 的路径在单核、不嵌套中断的 BL616CL 上走不到，没有测试；
   callback 里 put 由 `DEBUGASSERT` 拦截，也不做测试。
-- cyclic 与运行中 residual 已在 mem2mem 和 I2S0 外设方向实测；长 one-shot、
-  pause/resume 只在 mem2mem 上实测（I2S 不用），外设方向由以后的 consumer 实测。
+- cyclic 与运行中 residual 已在 mem2mem 和 I2S0 外设方向实测；长 one-shot 在
+  mem2mem 和 DBI 外设方向实测（整屏 307200 字节、18 个 LLI 节点，见
+  [bl616cl-display.md](bl616cl-display.md)）；pause/resume 只在 mem2mem 上实测。
 - cyclic 运行中出现 error 的同时 pause/resume，读改写 CxCONFIG 可能把硬件刚关掉的
   通道短暂打开，随后 error 中断把它停掉；error 无法触发，未覆盖。
 - 节点池放在普通 RAM，未验证放 PSRAM 的情形。

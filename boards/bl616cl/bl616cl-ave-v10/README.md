@@ -10,7 +10,8 @@ PSRAM。
 | 配置 | 内容 |
 |---|---|
 | `nsh` | 基础控制台，与 `ai-m64p-32s-kit/nsh` 相同 |
-| `nsh-peripherals` | 本板外设测试：片内外设测试（crypto、dma、psram、rtc、timer、trng、wdt）、I2C0 与 `mcu_i2c_test`、NuttX `i2c` 工具、ES8388 音频（`/dev/audio/pcm0`、`/dev/audio/pcm_in0`）与 `mcu_i2s_test`；诊断项与 M64P 的同名配置相同（KASAN、canary、perfmon 等） |
+| `nsh-peripherals` | 本板外设测试：片内外设测试（crypto、dma、psram、rtc、timer、trng、wdt）、I2C0 与 `mcu_i2c_test`、NuttX `i2c` 工具、ES8388 音频（`/dev/audio/pcm0`、`/dev/audio/pcm_in0`）与 `mcu_i2s_test`、U10 屏（`/dev/lcd0`）和 GT911 触摸（`/dev/input0`）与 `mcu_display_test`；诊断项与 M64P 的同名配置相同（KASAN、canary、perfmon 等） |
+| `lvgl` | LVGL 演示：U10 屏和触摸、PSRAM 堆、`lvgldemo widgets`，屏上显示帧率和 CPU 占用；不带 KASAN 等诊断项 |
 
 本板适用的外设测试统一加入 `nsh-peripherals`。GPIO、UART、SPI、PWM 测试需要空闲引脚
 或外接回环，本板没有，Kconfig 限定它们只在 Ai-M64P-32S-Kit 上编译。
@@ -28,9 +29,9 @@ PSRAM。
 |---|---|---|
 | UART0 console | TX 34、RX 35 | 经 CH343P 接 USB-C，2 Mbps |
 | BOOT | 36 | 同时是 LCD 的 DBI DC；按键 SW1 和 CH343P 的 DTR 也接在这根线上 |
-| I2C0 | SCL 20、SDA 11 | 4.7 kOhm 上拉到 3.3 V；ES8388（地址 0x10）和摄像头 SCCB |
+| I2C0 | SCL 20、SDA 11 | 4.7 kOhm 上拉到 3.3 V；ES8388（地址 0x10）、摄像头 SCCB，以及 U10 第 5、8 脚（触摸芯片） |
 | I2S → ES8388 | MCLK 1、BCLK 4、FS 5、DI 6、DO 7 | MCLK 由 CLKOUT1 输出，CLKOUT1 不能再作他用 |
-| DBI 8080 | DB0–7 为 12–19、CS 0、WR 2、DC 36 | 2x14 排针，没有 RD、RESET、背光脚，尚未适配 |
+| DBI 8080 | DB0–7 为 12–19、CS 0、WR 2、DC 36 | 2x14 排针 U10，没有 RD、RESET、TE、背光脚，见“屏与触摸” |
 | DVP / RMII | 23–31 | 经模拟开关二选一，见下节；尚未适配 |
 | DVP 其它 | PCLK 21、HSYNC 22、MCLK 3（CLKOUT3） | 摄像头复位只有 RC，PWDN 下拉 |
 | SD（1-bit） | CLK 9、CMD 8、DAT0 10 | DAT1–3 未接，没有卡检测脚；尚未适配 |
@@ -86,6 +87,46 @@ mcu_i2c_test hw eeprom --addr 16 --offset 26 --addr-width 1 --capacity 53 --leng
 `-s`：它把寄存器号和数值分成两次调用发送，驱动不支持；i2ctool 的选项会保留到后续
 命令，误用后加一次 `-n` 恢复。`hw eeprom` 每次只写一个寄存器，并会备份、读回比较和
 恢复。完整结果见 `docs/bl616cl-i2c.md`。
+
+## 屏与触摸（U10）
+
+U10 是 2x14 排针：第 9 脚 WR（GPIO2）、第 10 脚 CS（GPIO0）、第 12 脚 DC（GPIO36，即
+BOOT）、第 13–20 脚 DB0–7（GPIO12–19），第 5、8 脚为 I2C0 的 SCL、SDA；3.3 V、5 V 供电，
+其余为 NC。屏的 RD、复位、TE 和背光都没有引出，固件读不到屏的 ID，也调不了背光。
+
+`BL616CL_AVE_V10_DISPLAY` 把屏接到 DBI 控制器（8080 8 位，像素经 DMA0），注册
+`/dev/lcd0`（`LCD_DEV`）；打开 `VIDEO_FB` 和 `LCD_FRAMEBUFFER` 时再注册 `/dev/fb0`。
+屏模组在 `Panel module` 里选，默认 ST7796 320x480，与本板随附的屏一致；另有 ILI9488、
+ILI9486、ST77922（320x480），ST7789、ILI9341、GC9307、JD9853（240x320），NT35510
+（480x800）。`BL616CL_AVE_V10_DISPLAY_FREQ` 为 WR 时钟，0 表示 8080 接口默认的 27 MHz（DBI 时钟
+160 MHz 6 分频，实际约 26.7 MHz）；旋转在 `Rotation` 里选。
+
+`BL616CL_AVE_V10_TOUCH` 每 20 ms（`BL616CL_AVE_V10_TOUCH_PERIOD`）在低优先级工作队列里
+读一次触摸芯片，注册 `/dev/input0`。随附的屏用 GT911（地址 0x5D，开机日志打印
+`Touch Product ID: 0x00313139`）；FT6x36（0x38）可在 `Touch controller` 里选。
+I2C0 跑 100 kHz，与 ES8388 共用总线。
+
+上板检查（`nsh-peripherals`）：
+
+```text
+mcu_display_test info
+mcu_display_test bars
+mcu_display_test touch
+```
+
+LVGL 演示（`lvgl`）：
+
+```bash
+./vela build bl616cl-ave-v10/lvgl
+./vela flash bl616cl-ave-v10/lvgl --port /dev/ttyACM1
+```
+
+```text
+lvgldemo widgets &
+```
+
+框架、Kconfig 和实测结果见 `docs/bl616cl-display.md`，测试命令见
+`apps/mcu_peripheral_tests/display/README.md`。
 
 ## 音频（I2S0 + ES8388）
 

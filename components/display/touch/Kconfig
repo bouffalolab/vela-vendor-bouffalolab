@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# No menu: BL_COMPONENT_TOUCH is selected by BL616CL_TOUCH, each controller
+# driver by the board option of the touch panel that uses it.
+
+config BL_COMPONENT_TOUCH
+	bool
+	depends on ARCH_CHIP_BL616CL
+	help
+	  Selected by BL616CL_TOUCH. Builds the polled NuttX touchscreen lower
+	  half for the I2C touch controllers of the Bouffalo SDK
+	  (bsp/common/touch).
+
+if BL_COMPONENT_TOUCH
+
+config BL_COMPONENT_TOUCH_GT911
+	bool
+
+config BL_COMPONENT_TOUCH_FT6X36
+	bool
+
+endif # BL_COMPONENT_TOUCH

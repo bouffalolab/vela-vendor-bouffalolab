@@ -28,6 +28,19 @@ if(CONFIG_BL616CL_AVE_V10_AUDIO)
   list(APPEND SRCS bl616cl_ave_v10_audio.c)
 endif()
 
+if(CONFIG_BL616CL_AVE_V10_DISPLAY)
+  list(APPEND SRCS bl616cl_ave_v10_display.c)
+endif()
+
+if(CONFIG_BL616CL_AVE_V10_TOUCH)
+  list(APPEND SRCS bl616cl_ave_v10_touch.c)
+endif()
+
+if(CONFIG_BL616CL_AVE_V10_DISPLAY OR CONFIG_BL616CL_AVE_V10_TOUCH)
+  target_include_directories(
+    board PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../../../components/display)
+endif()
+
 nuttx_add_romfs(
   NAME
   etc

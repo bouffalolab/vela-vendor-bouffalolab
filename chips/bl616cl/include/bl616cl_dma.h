@@ -53,8 +53,24 @@
 #  define BL616CL_DMA0_I2S(X, arg)
 #endif
 
+#ifdef CONFIG_BL616CL_DBI_DMA
+#  define BL616CL_DMA0_DBI(X, arg) \
+     X(arg, CONFIG_BL616CL_DBI_TX_DMA_CHANNEL, "DBI TX")
+#else
+#  define BL616CL_DMA0_DBI(X, arg)
+#endif
+
+#ifdef CONFIG_BL616CL_DISPLAY_SPI_DMA
+#  define BL616CL_DMA0_DISPLAY_SPI(X, arg) \
+     X(arg, CONFIG_BL616CL_DISPLAY_SPI_TX_DMA_CHANNEL, "Display SPI TX")
+#else
+#  define BL616CL_DMA0_DISPLAY_SPI(X, arg)
+#endif
+
 #define BL616CL_DMA0_ASSIGNMENTS(X, arg) \
-  BL616CL_DMA0_I2S(X, arg)
+  BL616CL_DMA0_I2S(X, arg) \
+  BL616CL_DMA0_DBI(X, arg) \
+  BL616CL_DMA0_DISPLAY_SPI(X, arg)
 
 /* dma_config_s option: burst size of a peripheral transfer. 0 keeps the
  * default, single (INCR1) bursts; a peripheral whose FIFO request level

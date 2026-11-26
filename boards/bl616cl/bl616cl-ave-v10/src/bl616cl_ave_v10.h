@@ -42,6 +42,16 @@
 #define BL616CL_AVE_V10_I2S_DI_PIN       6
 #define BL616CL_AVE_V10_I2S_DO_PIN       7
 
+/* U10 panel connector, 8080 x8 (MIPI DBI type B): D0..D7 are GPIO12..19
+ * in order. RD, reset, TE and backlight are not wired. DC is also BOOT,
+ * which the USB-UART DTR drives through R77.
+ */
+
+#define BL616CL_AVE_V10_LCD_CS_PIN       0
+#define BL616CL_AVE_V10_LCD_WR_PIN       2
+#define BL616CL_AVE_V10_LCD_DC_PIN       36
+#define BL616CL_AVE_V10_LCD_D0_PIN       12
+
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
@@ -90,6 +100,51 @@ int bl616cl_ave_v10_i2c_initialize(void);
  ****************************************************************************/
 
 int bl616cl_ave_v10_audio_initialize(void);
+#endif
+
+#ifdef CONFIG_BL616CL_AVE_V10_DISPLAY
+
+/****************************************************************************
+ * Name: bl616cl_ave_v10_display_initialize
+ *
+ * Description:
+ *   Bring up the U10 panel on the DBI controller and register it as
+ *   /dev/lcd0 (LCD_DEV) and /dev/fb0 (LCD_FRAMEBUFFER).
+ *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; the negated errno value from display_init(),
+ *   display_set_rotation(), lcddev_register() or fb_register(), or -ENOMEM
+ *   if the LCD device cannot be allocated. The panel cannot be read, so a
+ *   panel that is missing or of another type is not reported here.
+ *
+ ****************************************************************************/
+
+int bl616cl_ave_v10_display_initialize(void);
+#endif
+
+#ifdef CONFIG_BL616CL_AVE_V10_TOUCH
+
+/****************************************************************************
+ * Name: bl616cl_ave_v10_touch_initialize
+ *
+ * Description:
+ *   Register the U10 touch controller on I2C0 as /dev/input0, polled
+ *   every CONFIG_BL616CL_AVE_V10_TOUCH_PERIOD milliseconds.
+ *
+ * Input Parameters:
+ *   None.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; -ENODEV if I2C0 cannot be initialized or the
+ *   controller does not answer as expected, or the negated errno value
+ *   from touch_poll_register().
+ *
+ ****************************************************************************/
+
+int bl616cl_ave_v10_touch_initialize(void);
 #endif
 
 #endif /* __VENDOR_BOUFFALOLAB_BOARDS_BL616CL_BL616CL_AVE_V10_BL616CL_AVE_V10_H */

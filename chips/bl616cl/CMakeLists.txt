@@ -111,6 +111,29 @@ if(CONFIG_BL616CL_TIMER)
   list(APPEND SRCS bl616cl_tim.c)
 endif()
 
+if(CONFIG_BL616CL_DISPLAY)
+  set(BL616CL_DISPLAY_DIR ${CMAKE_CURRENT_LIST_DIR}/../../components/display)
+  list(APPEND SRCS bl616cl_display.c)
+  if(CONFIG_BL616CL_DBI)
+    list(APPEND SRCS bl616cl_dbi.c)
+  endif()
+  if(CONFIG_BL616CL_DISPLAY_SPI)
+    list(APPEND SRCS bl616cl_display_spi.c)
+  endif()
+  if(CONFIG_BL616CL_DISPLAY_SOFT_DBI_C)
+    # The SDK file includes bflb_gpio.h after the NuttX headers; the forced
+    # pre-include imports LHAL first so that errno keeps the NuttX values.
+    set(BL616CL_SOFT_DBI_C ${BL616CL_DISPLAY_DIR}/bus/soft_dbi_c/display_soft_dbi_c.c)
+    list(APPEND SRCS ${BL616CL_SOFT_DBI_C})
+    set_property(
+      SOURCE ${BL616CL_SOFT_DBI_C}
+      TARGET_DIRECTORY arch
+      APPEND
+      PROPERTY COMPILE_OPTIONS -include ${CMAKE_CURRENT_LIST_DIR}/bl616cl_lhal.h)
+  endif()
+  target_include_directories(arch PRIVATE ${BL616CL_DISPLAY_DIR})
+endif()
+
 if(CONFIG_NET_ARCH_CHKSUM)
   list(APPEND SRCS bl616cl_chksum.c)
 endif()

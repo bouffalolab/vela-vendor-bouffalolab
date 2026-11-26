@@ -52,7 +52,9 @@
 void bl616cl_board_initialize(void)
 {
 #if defined(CONFIG_BL616CL_AVE_V10_I2C0) || \
-    defined(CONFIG_BL616CL_AVE_V10_AUDIO)
+    defined(CONFIG_BL616CL_AVE_V10_AUDIO) || \
+    defined(CONFIG_BL616CL_AVE_V10_DISPLAY) || \
+    defined(CONFIG_BL616CL_AVE_V10_TOUCH)
   int ret;
 #endif
 
@@ -69,6 +71,22 @@ void bl616cl_board_initialize(void)
   if (ret < 0)
     {
       syslog(LOG_ERR, "ERROR: Failed to initialize audio: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_BL616CL_AVE_V10_DISPLAY
+  ret = bl616cl_ave_v10_display_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize display: %d\n", ret);
+    }
+#endif
+
+#ifdef CONFIG_BL616CL_AVE_V10_TOUCH
+  ret = bl616cl_ave_v10_touch_initialize();
+  if (ret < 0)
+    {
+      syslog(LOG_ERR, "ERROR: Failed to initialize touch: %d\n", ret);
     }
 #endif
 }

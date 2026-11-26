@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# No menu: component symbols have no prompt. BL_COMPONENT_DISPLAY is
+# selected by BL616CL_DISPLAY, each panel description by the board option
+# of the panel module that uses it.
+
+config BL_COMPONENT_DISPLAY
+	bool
+	depends on ARCH_CHIP_BL616CL
+	help
+	  Selected by BL616CL_DISPLAY. Builds the display framework of the
+	  Bouffalo SDK (display, bus and panel cores, the generic DCS panel
+	  driver, the standard RGB panels, the scanout core and the simple
+	  font) with its NuttX platform layer and, with LCD, the NuttX LCD
+	  device glue.
+
+if BL_COMPONENT_DISPLAY
+
+config BL_COMPONENT_DISPLAY_PANEL_ST7789
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_ST7796
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_ILI9341
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_ILI9488
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_GC9A01
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_GC9307
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_ILI9486
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_JD9853
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_ST7735
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_ST77922
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_SPD2010
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_NT35510
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_ST7701S
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_ST7701P
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_GC9503V
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_JD9165BA
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_EK79007
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_AXS15231B
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_AXS15231E
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_FL7707N
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_ILI9806E
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_ILI9881C
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_JD9365TX
+	bool
+
+config BL_COMPONENT_DISPLAY_PANEL_ST7102
+	bool
+
+endif # BL_COMPONENT_DISPLAY
+
+rsource "touch/Kconfig"

@@ -323,6 +323,26 @@ config BL616CL_I2S_RX_DMA_CHANNEL
 	---help---
 		DMA0 channel for I2S receive, kept like the TX channel.
 
+config BL616CL_DBI_TX_DMA_CHANNEL
+	int "DBI TX"
+	default 2
+	range 0 7
+	depends on BL616CL_DBI_DMA
+	---help---
+		DMA0 channel that feeds the pixels to the DBI FIFO. The DBI
+		display bus takes it when it starts and keeps it. CH0..CH5 have
+		the larger FIFO and run INCR8 bursts, CH6 and CH7 INCR4.
+
+config BL616CL_DISPLAY_SPI_TX_DMA_CHANNEL
+	int "Display SPI TX"
+	default 3
+	range 0 7
+	depends on BL616CL_DISPLAY_SPI_DMA
+	---help---
+		DMA0 channel that feeds the pixels to the FIFO of the display SPI
+		controller. The display SPI bus takes it when it starts and keeps
+		it.
+
 config BL616CL_DMA0_APP_CHANNELS
 	hex "Application code"
 	default 0x0
@@ -336,6 +356,8 @@ endmenu # DMA0 channel assignment
 
 config BL616CL_DMA0_LLI_NODES
 	int "DMA0 LLI nodes"
+	default 96 if BL616CL_DBI_DMA && BL616CL_DISPLAY_SPI_DMA
+	default 56 if BL616CL_DBI_DMA || BL616CL_DISPLAY_SPI_DMA
 	default 16
 	range 0 255
 	---help---
@@ -345,6 +367,10 @@ config BL616CL_DMA0_LLI_NODES
 		or more for periods longer than 4095 units. A transfer gets its
 		nodes when it starts and returns them when it ends. 0 limits
 		one-shot transfers to 4095 units and disables cyclic transfers.
+		The default adds 40 nodes for each of the DBI and display SPI
+		buses (BL616CL_DBI_DMA_LLI_COUNT, BL616CL_DISPLAY_SPI_DMA_LLI_COUNT),
+		so that both can run their largest draw at once, to 16 for the
+		other users.
 
 endif # BL616CL_DMA0
 
@@ -654,6 +680,145 @@ endif # IOEXPANDER_INT_ENABLE
 endif # BL616CL_GPIO
 
 endmenu
+
+menuconfig BL616CL_DISPLAY
+	bool "Display"
+	default n
+	select BL_COMPONENT_DISPLAY
+	---help---
+		Enable the display framework of the Bouffalo SDK
+		(components/display) with the BL616CL controller backends. Board
+		code defines the bus, the panel module and its control pins, and
+		registers the display as a NuttX LCD device.
+
+if BL616CL_DISPLAY
+
+menuconfig BL616CL_DBI
+	bool "DBI controller bus"
+	default y
+	---help---
+		Display bus on the DBI controller: MIPI DBI type B (8080, 8 data
+		lines), type C 3-wire and 4-wire, and QSPI panels. Commands and
+		parameters are written to the FIFO by the CPU.
+
+if BL616CL_DBI
+
+config BL616CL_DBI_CLK_MODE
+	int "Clock polarity and phase of the serial interfaces"
+	default 1
+	range 0 3
+	---help---
+		DBI_CLOCK_MODE_0..3 of the type C and QSPI interfaces, common to
+		all endpoints of the bus. The SDK default is 1.
+
+menuconfig BL616CL_DBI_DMA
+	bool "Send pixels with DMA0"
+	default y
+	depends on BL616CL_DMA0
+	---help---
+		DMA0 feeds the pixels to the DBI FIFO and the draw ends with the
+		DBI transfer-complete interrupt. Without it the CPU writes the
+		pixels to the FIFO, which is meant for bring-up and debugging.
+		The channel is set in "DMA0 channel assignment".
+
+if BL616CL_DBI_DMA
+
+config BL616CL_DBI_DMA_LLI_COUNT
+	int "DMA0 LLI nodes per draw"
+	default 40
+	range 1 255
+	---help---
+		Largest draw, in DMA0 LLI nodes of 16256 bytes: 40 nodes carry
+		650240 bytes, two 320x480 RGB565 frames. A draw takes its nodes
+		from BL616CL_DMA0_LLI_NODES while it runs; the build fails if that
+		pool holds fewer than this count minus one.
+
+endif # BL616CL_DBI_DMA
+
+endif # BL616CL_DBI
+
+menuconfig BL616CL_DISPLAY_SPI
+	bool "SPI controller bus"
+	default n
+	depends on !BL616CL_SPI0 || !BL616CL_SPI1
+	---help---
+		Display bus on an SPI controller: MIPI DBI type C 4-wire (SCK,
+		MOSI, DC on a GPIO) with RGB565 and XRGB8888 pixels. Commands and
+		parameters are sent by polling. The controller belongs to the
+		display and cannot also be a NuttX SPI bus, so one of SPI0 and
+		SPI1 must be free.
+
+if BL616CL_DISPLAY_SPI
+
+choice
+	prompt "SPI controller"
+	default BL616CL_DISPLAY_SPI_PORT0
+
+config BL616CL_DISPLAY_SPI_PORT0
+	bool "SPI0"
+	depends on !BL616CL_SPI0
+
+config BL616CL_DISPLAY_SPI_PORT1
+	bool "SPI1"
+	depends on !BL616CL_SPI1
+
+endchoice
+
+config BL616CL_DISPLAY_SPI_MODE
+	int "SPI mode"
+	default 0
+	range 0 3
+	---help---
+		Clock polarity and phase, common to all endpoints of the bus.
+
+menuconfig BL616CL_DISPLAY_SPI_DMA
+	bool "Send pixels with DMA0"
+	default y
+	depends on BL616CL_DMA0
+	---help---
+		DMA0 feeds the pixels to the SPI FIFO; the draw ends when the DMA
+		has finished and the controller is idle. Without it the CPU sends
+		the pixels by polling. The channel is set in "DMA0 channel
+		assignment".
+
+if BL616CL_DISPLAY_SPI_DMA
+
+config BL616CL_DISPLAY_SPI_DMA_LLI_COUNT
+	int "DMA0 LLI nodes per draw"
+	default 40
+	range 1 255
+	---help---
+		Largest draw, in DMA0 LLI nodes of 4064 16-bit units: 40 nodes
+		carry 325120 bytes, two 240x320 RGB565 frames. A draw takes its
+		nodes from BL616CL_DMA0_LLI_NODES while it runs; the build fails
+		if that pool holds fewer than this count minus one.
+
+endif # BL616CL_DISPLAY_SPI_DMA
+
+endif # BL616CL_DISPLAY_SPI
+
+config BL616CL_DISPLAY_SOFT_DBI_C
+	bool "Software DBI type C bus"
+	default n
+	---help---
+		Display bus bit-banged on GPIOs: MIPI DBI type C 3-wire, and
+		4-wire with a DC pin. Synchronous and slow; used for the command
+		port of RGB panels or small panels.
+
+endif # BL616CL_DISPLAY
+
+config BL616CL_TOUCH
+	bool "Touch panel"
+	default n
+	select BL_COMPONENT_TOUCH
+	select INPUT
+	select INPUT_TOUCHSCREEN
+	select SCHED_LPWORK
+	---help---
+		Enable the I2C touch controller drivers of the Bouffalo SDK
+		(components/display/touch) as a NuttX touchscreen. The controller
+		is read periodically from the low-priority work queue; board code
+		picks the controller and registers /dev/inputN.
 
 menuconfig BL616CL_WIRELESS
 	bool "BL616CL wireless"

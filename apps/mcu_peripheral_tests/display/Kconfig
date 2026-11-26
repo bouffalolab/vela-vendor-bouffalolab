@@ -1,0 +1,29 @@
+menuconfig BL_MCU_PERIPHERAL_TESTS_DISPLAY
+	tristate "MCU peripheral display tests"
+	default n
+	depends on BL616CL_AVE_V10_DISPLAY && LCD_DEV
+	depends on !DISABLE_PTHREAD
+	---help---
+		Draw test patterns on /dev/lcd0, the U10 panel of BL616CL-AVE-V10,
+		through the LCD character device ioctls: color bars with corner
+		markers, full-screen fills with the frame rate, and small,
+		odd-sized and non-contiguous areas. The ioctls must succeed; the
+		picture is checked by eye. With a touchscreen on /dev/input0, a
+		person taps five targets and drags across the panel, and an idle
+		case checks that no touch is reported while nobody touches it.
+
+if BL_MCU_PERIPHERAL_TESTS_DISPLAY
+
+config BL_MCU_PERIPHERAL_TESTS_DISPLAY_PROGNAME
+	string "Program name"
+	default "mcu_display_test"
+
+config BL_MCU_PERIPHERAL_TESTS_DISPLAY_PRIORITY
+	int "Task priority"
+	default 100
+
+config BL_MCU_PERIPHERAL_TESTS_DISPLAY_STACKSIZE
+	int "Stack size"
+	default 4096
+
+endif
