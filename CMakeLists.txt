@@ -28,6 +28,13 @@ if(CONFIG_BL_COMPONENT_MACSW
   include(${CMAKE_CURRENT_LIST_DIR}/cmake/bl_wifi.cmake)
 endif()
 
+# Custom chips leave CONFIG_ARCH_CHIP empty, so take the custom chip name
+# first. The board path is only a last resort: customer boards may live
+# outside boards/<chip>/.
+if(NOT DEFINED CHIP OR "${CHIP}" STREQUAL "")
+  set(CHIP "${CONFIG_ARCH_CHIP_CUSTOM_NAME}")
+endif()
+
 if(NOT DEFINED CHIP OR "${CHIP}" STREQUAL "")
   set(CHIP "${CONFIG_ARCH_CHIP}")
 endif()
