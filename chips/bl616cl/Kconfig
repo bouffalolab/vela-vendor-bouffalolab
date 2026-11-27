@@ -330,8 +330,9 @@ config BL616CL_DBI_TX_DMA_CHANNEL
 	depends on BL616CL_DBI_DMA
 	---help---
 		DMA0 channel that feeds the pixels to the DBI FIFO. The DBI
-		display bus takes it when it starts and keeps it. CH0..CH5 have
-		the larger FIFO and run INCR8 bursts, CH6 and CH7 INCR4.
+		display bus takes it when it starts and keeps it. The channel
+		FIFO is 64 bytes on CH0 and CH1 and 32 bytes on CH2 and CH3,
+		which run INCR8 bursts, and 16 bytes on CH4..CH7, which run INCR4.
 
 config BL616CL_DISPLAY_SPI_TX_DMA_CHANNEL
 	int "Display SPI TX"

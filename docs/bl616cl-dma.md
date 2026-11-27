@@ -71,14 +71,19 @@ LLI 节点也由 adapter 自己填写：LHAL 的 `bflb_dma_channel_lli_reload()`
 DMA0 的 8 个通道按外设固定分配：一个通道只给一个外设，外设在初始化时申请并一直
 持有，不在外设之间轮流借用。
 
-| 通道 | 默认分配 | 配置项 |
-|---|---|---|
-| CH0 | I2S0 TX（打开 `BL616CL_I2S` 时） | `CONFIG_BL616CL_I2S_TX_DMA_CHANNEL` |
-| CH1 | I2S0 RX（同上） | `CONFIG_BL616CL_I2S_RX_DMA_CHANNEL` |
-| CH2 | DBI TX（打开 `BL616CL_DBI_DMA` 时） | `CONFIG_BL616CL_DBI_TX_DMA_CHANNEL` |
-| CH3 | Display SPI TX（打开 `BL616CL_DISPLAY_SPI_DMA` 时） | `CONFIG_BL616CL_DISPLAY_SPI_TX_DMA_CHANNEL` |
-| CH4–CH7 | 未分配 | — |
-| 任意 | 应用代码（默认不用） | `CONFIG_BL616CL_DMA0_APP_CHANNELS` |
+| 通道 | 通道 FIFO | 默认分配 | 配置项 |
+|---|---|---|---|
+| CH0 | 64 字节 | I2S0 TX（打开 `BL616CL_I2S` 时） | `CONFIG_BL616CL_I2S_TX_DMA_CHANNEL` |
+| CH1 | 64 字节 | I2S0 RX（同上） | `CONFIG_BL616CL_I2S_RX_DMA_CHANNEL` |
+| CH2 | 32 字节 | DBI TX（打开 `BL616CL_DBI_DMA` 时） | `CONFIG_BL616CL_DBI_TX_DMA_CHANNEL` |
+| CH3 | 32 字节 | Display SPI TX（打开 `BL616CL_DISPLAY_SPI_DMA` 时） | `CONFIG_BL616CL_DISPLAY_SPI_TX_DMA_CHANNEL` |
+| CH4–CH7 | 16 字节 | 未分配 | — |
+| 任意 | — | 应用代码（默认不用） | `CONFIG_BL616CL_DMA0_APP_CHANNELS` |
+
+通道 FIFO 大小已与芯片设计确认。外设方向一次 burst 的字节数（宽度 × 拍数）不能超过
+所在通道的 FIFO：32 位宽 INCR8 是 32 字节，只能用在 CH0–CH3；INCR16 是 64 字节，只能用在
+CH0、CH1。DMA 适配层不检查这一点，由选 burst 的驱动保证（DBI 按通道号在 INCR8 和 INCR4
+之间选，见 [bl616cl-display.md](bl616cl-display.md)）。
 
 - 查看和修改：全部分配集中在 menuconfig 的 `BL616CL Peripheral Support` →
   `DMA0 channel assignment` 菜单里，一处能看到。SDK 驱动的通道各有一个选项；应用代码

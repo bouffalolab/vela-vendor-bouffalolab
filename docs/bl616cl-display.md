@@ -88,9 +88,13 @@ RGB565；SPI 按 16 位单位计，每节点 8128 字节。LLI 节点来自 DMA0
 调大每次刷新节点数时按同样的合计核算，不够时这次 `DMA_START()` 失败、刷新返回错误。
 超过单次上限的刷新由 `display_lcddev.c` 按行拆小，应用不用关心。
 
-**burst**：照 SDK。DBI 在 CH0–CH5 用 INCR8（这几个通道 FIFO 较大）、FIFO 门限 7，
-CH6、CH7 用 INCR4、门限 3；SPI 用 INCR4、FIFO 门限 7。burst 经 `dma_config_s.option`
-传给 DMA 适配层，其它 DMA 用户不受影响。
+**burst**：按所选 DMA0 通道的 FIFO 大小选，与 SDK 相同。CH0、CH1 的通道 FIFO 为 64 字节，
+CH2、CH3 为 32 字节，DBI 在这四个通道用 INCR8（8 个 32 位字，32 字节）、FIFO 门限 7；
+CH4–CH7 只有 16 字节，DBI 用 INCR4、门限 3。SPI 用 INCR4、FIFO 门限 7。burst 经
+`dma_config_s.option` 传给 DMA 适配层，其它 DMA 用户不受影响。AVE-V10 整屏绘制测试没有测出
+通道之间的差异：DBI 用 CH0、CH2（INCR8）和 CH4（INCR4），WR 时钟 27 MHz 时都是 80 fps，
+53 MHz 时都是 149 fps（只算画图）。53 MHz 超出屏的规格，只用于测总线吞吐，不是验证过的屏
+工作频率。
 
 **完成**：DBI 在 TC 中断里断开 DMA 请求、清并屏蔽 TC、停通道，通知框架；SPI 在 DMA
 完成回调里等 SPI 空闲后断开 DMA 请求、清 RX FIFO、恢复 8 位帧，通知框架。框架发 DMA

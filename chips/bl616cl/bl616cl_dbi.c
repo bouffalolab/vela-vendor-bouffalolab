@@ -70,12 +70,13 @@ static_assert(offsetof(display_dbi_bus_t, base) == 0,
 #define QSPI_LINES_NONE         0xffu        /* wire layout not known */
 
 /* TX FIFO threshold (entries) matching the DMA burst: INCR4 -> 3,
- * INCR8 -> 7. DMA0 channels 0..5 have the larger FIFO for INCR8.
+ * INCR8 -> 7. An INCR8 burst of words is 32 bytes; the DMA0 channel FIFO
+ * is 64 bytes on CH0..CH1, 32 bytes on CH2..CH3 and 16 bytes on CH4..CH7.
  */
 
 #define DBI_FIFO_THRESHOLD_INCR4  3
 #define DBI_FIFO_THRESHOLD_INCR8  7
-#define DBI_DMA_BIG_FIFO_CHANNELS 6
+#define DBI_DMA_BIG_FIFO_CHANNELS 4
 
 /* The largest draw takes one LLI node per 16256 bytes after the first */
 
