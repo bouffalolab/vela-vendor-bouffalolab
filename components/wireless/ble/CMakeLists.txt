@@ -19,8 +19,8 @@ nuttx_add_extra_library(
 
 # zblue's H4 driver, selected by CONFIG_BT_H4 but left out of the default
 # zblue build. It compiles with the include paths and options of the
-# zblue library.
-if(NOT CONFIG_BT_H4)
+# zblue library, which is only built with CONFIG_BT.
+if(NOT CONFIG_BT OR NOT CONFIG_BT_H4)
   return()
 endif()
 
