@@ -3,6 +3,7 @@ menuconfig BL_MCU_PERIPHERAL_TESTS_RTC
 	default n
 	depends on BL616CL_RTC
 	depends on !BL616CL_RTC_ALARM || !DISABLE_SIGNALS
+	depends on !BL616CL_RTC_ALARM || !DISABLE_PTHREAD
 	---help---
 			Enable the built-in MCU peripheral RTC case runner. Alarm cases are
 			reported as unavailable when BL616CL_RTC_ALARM is not enabled.
