@@ -38,7 +38,7 @@ endif()
 
 if(CONFIG_BL616CL_AVE_V10_DISPLAY OR CONFIG_BL616CL_AVE_V10_TOUCH)
   target_include_directories(
-    board PRIVATE ${CMAKE_CURRENT_LIST_DIR}/../../../../components/display)
+    board PRIVATE ${BL616CL_VENDOR_DIR}/components/display)
 endif()
 
 nuttx_add_romfs(

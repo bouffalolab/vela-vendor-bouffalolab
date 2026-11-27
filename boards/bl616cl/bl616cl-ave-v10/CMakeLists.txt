@@ -18,110 +18,11 @@
 #
 # ##############################################################################
 
+# Shared BL616CL board build glue: common, link options, post-processing and
+# the linker script. Include it before src/ so that src/ can use
+# BL616CL_VENDOR_DIR.
+include(${NUTTX_DIR}/../vendor/bouffalolab/cmake/bl616cl_board.cmake)
+
 add_subdirectory(src)
 
-# Warn when an input section is not placed by ld.script. RAM code shares
-# its load image with .data, and the image is flashed as a BIN on a core
-# without an MMU, so an RWX segment is expected; -n keeps the ELF headers
-# out of the load segments.
-target_link_options(nuttx PRIVATE -Wl,--build-id=none
-                    -Wl,--orphan-handling=warn -Wl,-n
-                    -Wl,--no-warn-rwx-segments
-                    -Wl,-u,g_bl616cl_ave_v10_fw_header)
-
-get_filename_component(BOUFFALOLAB_VENDOR_DIR "${NUTTX_BOARD_ABS_DIR}/../../.."
-                       ABSOLUTE)
-get_filename_component(BL616CL_LD_SCRIPT
-                       "${NUTTX_BOARD_ABS_DIR}/../common/scripts/ld.script"
-                       ABSOLUTE)
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-set(BL616CL_PARTITION_CONFIG
-    "${NUTTX_BOARD_ABS_DIR}/config/partition_cfg_4M.toml")
-set(BL616CL_PARTITION_SIZE_TOOL
-    "${BOUFFALOLAB_VENDOR_DIR}/tools/bl616cl/app_partition_size.py")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-             ${BL616CL_PARTITION_CONFIG} ${BL616CL_PARTITION_SIZE_TOOL})
-execute_process(
-  COMMAND ${Python3_EXECUTABLE} ${BL616CL_PARTITION_SIZE_TOOL}
-          ${BL616CL_PARTITION_CONFIG}
-  OUTPUT_VARIABLE BL616CL_APP_SIZE
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  COMMAND_ERROR_IS_FATAL ANY)
-target_link_options(nuttx PRIVATE
-                    -Wl,--defsym=__bl616cl_app_size=${BL616CL_APP_SIZE}
-                    -Wl,--defsym=_wifi_log_flag=1)
-
-set(BL616CL_POSTPROCESS
-    "${BOUFFALOLAB_VENDOR_DIR}/tools/bl616cl/postprocess_bl616cl.sh")
-set(BL616CL_POSTPROCESS_STAMP "${CMAKE_BINARY_DIR}/nuttx.postprocessed")
-set(BL616CL_RAW_IMAGE "${CMAKE_BINARY_DIR}/nuttx.raw.bin")
-set(BL616CL_POSTPROCESS_INPUTS
-    ${NUTTX_BOARD_ABS_DIR}/config/bl_factory_params_IoTKitA_auto.dts
-    ${NUTTX_BOARD_ABS_DIR}/config/boot2_bl616cl_isp_release_v8.2.1.bin
-    ${NUTTX_BOARD_ABS_DIR}/config/partition_cfg_4M.toml
-    ${BL616CL_PARTITION_SIZE_TOOL}
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bl616cl/flash_factory_cfg.ini
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bflb_fw_post_proc/bflb_fw_post_proc-ubuntu
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bflb_fw_post_proc/bflb_fw_post_proc-macos
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bflb_fw_post_proc/bflb_fw_post_proc.exe
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bouffalo_flash_cube/BLFlashCommand-ubuntu
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bouffalo_flash_cube/BLFlashCommand-macos
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bouffalo_flash_cube/BLFlashCommand.exe
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bouffalo_flash_cube/chips/bl616cl/eflash_loader/eflash_loader_cfg.conf
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bouffalo_flash_cube/chips/bl616cl/efuse_bootheader/efuse_bootheader_cfg.conf
-    ${BOUFFALOLAB_VENDOR_DIR}/tools/bflb_flash_tools/bouffalo_flash_cube/chips/bl616cl/efuse_bootheader/flash_para.bin
-)
-
-add_custom_command(
-  OUTPUT ${BL616CL_RAW_IMAGE}
-  COMMAND ${CMAKE_OBJCOPY} -O binary ${CMAKE_BINARY_DIR}/final_nuttx
-          ${BL616CL_RAW_IMAGE}
-  DEPENDS ${CMAKE_BINARY_DIR}/final_nuttx
-  COMMENT "Generate BL616CL raw firmware image"
-  VERBATIM)
-
-add_custom_command(
-  OUTPUT ${BL616CL_POSTPROCESS_STAMP}
-  COMMAND
-    bash ${BL616CL_POSTPROCESS} --raw-image ${BL616CL_RAW_IMAGE} --image
-    ${CMAKE_BINARY_DIR}/nuttx.bin --board-config ${NUTTX_BOARD_ABS_DIR}/config
-  COMMAND ${CMAKE_COMMAND} -E touch ${BL616CL_POSTPROCESS_STAMP}
-  DEPENDS ${CMAKE_BINARY_DIR}/nuttx.bin ${BL616CL_RAW_IMAGE}
-          ${BL616CL_POSTPROCESS} ${BL616CL_POSTPROCESS_INPUTS}
-  BYPRODUCTS ${CMAKE_BINARY_DIR}/nuttx.whole.bin
-  WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-  COMMENT "Postprocess BL616CL firmware image"
-  VERBATIM)
-
-set(BL616CL_POST_BUILD_OUTPUTS ${BL616CL_POSTPROCESS_STAMP})
-
-# Warn when Wi-Fi hot list entries no longer match the image.
-if(CONFIG_BL616CL_WIRELESS_WIFI)
-  set(BL616CL_LAYOUT_CHECK
-      "${BOUFFALOLAB_VENDOR_DIR}/tools/bl616cl/perf/layout_check.py")
-  set(BL616CL_LAYOUT_STAMP "${CMAKE_BINARY_DIR}/nuttx.layout_checked")
-  set(BL616CL_WIFI_HOT_LIST
-      "${NUTTX_BOARD_ABS_DIR}/../common/scripts/bl616cl_wifi_hot.ld")
-  add_custom_command(
-    OUTPUT ${BL616CL_LAYOUT_STAMP}
-    COMMAND
-      ${Python3_EXECUTABLE} ${BL616CL_LAYOUT_CHECK} --hot-list
-      ${BL616CL_WIFI_HOT_LIST} --map ${CMAKE_BINARY_DIR}/nuttx.map
-    COMMAND ${CMAKE_COMMAND} -E touch ${BL616CL_LAYOUT_STAMP}
-    DEPENDS ${CMAKE_BINARY_DIR}/final_nuttx ${BL616CL_LAYOUT_CHECK}
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    COMMENT "Check BL616CL Wi-Fi hot code layout"
-    VERBATIM)
-  list(APPEND BL616CL_POST_BUILD_OUTPUTS ${BL616CL_LAYOUT_STAMP})
-endif()
-
-add_custom_target(
-  nuttx_post_build DEPENDS ${CMAKE_BINARY_DIR}/nuttx.bin ${BL616CL_RAW_IMAGE}
-                           ${BL616CL_POST_BUILD_OUTPUTS})
-
-file(GLOB EXTRA_LIBS
-     ${NUTTX_BOARD_ABS_DIR}/libs/${CONFIG_ARCH_BOARD_CUSTOM_NAME}/*.a)
-
-set_property(GLOBAL APPEND PROPERTY NUTTX_EXTRA_LIBRARIES ${EXTRA_LIBS})
-
-set_property(GLOBAL PROPERTY LD_SCRIPT ${BL616CL_LD_SCRIPT})
+bl616cl_board(FW_HEADER g_bl616cl_ave_v10_fw_header)
