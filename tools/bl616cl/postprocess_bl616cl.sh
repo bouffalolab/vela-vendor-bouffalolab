@@ -133,9 +133,20 @@ select_tools
 POST_TOOL="$POST_TOOL_DIR/$POST_TOOL_NAME"
 FLASH_TOOL="$FLASH_TOOL_DIR/$FLASH_TOOL_NAME"
 
+# bflb_fw_post_proc takes the single boot2 image in the board config and
+# keeps its name, so the boot2 version lives only in that file name.
+BOOT2=
+for file in "$BOARD_CONFIG"/boot2_*.bin
+do
+  [ -f "$file" ] || continue
+  [ -z "$BOOT2" ] || fail "more than one boot2_*.bin in $BOARD_CONFIG"
+  BOOT2=$(basename "$file")
+done
+[ -n "$BOOT2" ] || fail "no boot2_*.bin in $BOARD_CONFIG"
+
 for file in \
   "$BOARD_CONFIG/bl_factory_params_IoTKitA_auto.dts" \
-  "$BOARD_CONFIG/boot2_bl616cl_isp_release_v8.2.1.bin" \
+  "$BOARD_CONFIG/$BOOT2" \
   "$BOARD_CONFIG/partition_cfg_4M.toml" \
   "$POST_TOOL" \
   "$FLASH_TOOL" \
@@ -162,7 +173,7 @@ cp "$RAW_IMAGE" "$BUILD_STAGE/nuttx.bin"
 
 for file in \
   "$BUILD_STAGE/nuttx.bin" \
-  "$BUILD_STAGE/boot2_bl616cl_isp_release_v8.2.1.bin" \
+  "$BUILD_STAGE/$BOOT2" \
   "$BUILD_STAGE/partition.bin"
 do
   require_file "$file"
@@ -191,15 +202,18 @@ if [ "$(file_size "$PACKED_IMAGE")" -gt "$FLASH_SIZE" ]; then
   fail "FlashCube output exceeds the 4 MiB flash size"
 fi
 
-compare_segment "$PACKED_IMAGE" $((0x000000)) \
-  "$BUILD_STAGE/boot2_bl616cl_isp_release_v8.2.1.bin"
+compare_segment "$PACKED_IMAGE" $((0x000000)) "$BUILD_STAGE/$BOOT2"
 compare_segment "$PACKED_IMAGE" $((0x00e000)) "$BUILD_STAGE/partition.bin"
 compare_segment "$PACKED_IMAGE" $((0x00f000)) "$BUILD_STAGE/partition.bin"
 compare_segment "$PACKED_IMAGE" $((0x010000)) "$BUILD_STAGE/nuttx.bin"
 
-# Persist the partition table and a per-partition flash config next to the
-# firmware, so `vela flash --config` can run without re-running
-# bflb_fw_post_proc (which must run only during the build).
+# Persist boot2, the partition table and a per-partition flash config next
+# to the firmware, so `vela flash --config` can run without re-running
+# bflb_fw_post_proc (which must run only during the build). FlashCube
+# resolves relative paths from the config's directory, so the output
+# directory can be moved or copied as a whole.
+rm -f "$IMAGE_DIR"/boot2_*.bin
+cp "$BUILD_STAGE/$BOOT2" "$IMAGE_DIR/$BOOT2"
 cp "$BUILD_STAGE/partition.bin" "$IMAGE_DIR/partition.bin"
 cat > "$IMAGE_DIR/flash_prog_cfg.ini" <<EOF
 [cfg]
@@ -208,27 +222,26 @@ skip_mode = 0x0, 0x0
 boot2_isp_mode = 0
 
 [boot2]
-filedir = $BOARD_CONFIG/boot2_bl616cl_isp_release_v8.2.1.bin
+filedir = ./$BOOT2
 address = 0x000000
 
 [partition]
-filedir = $IMAGE_DIR/partition.bin
+filedir = ./partition.bin
 address = 0xE000
 
 [partition_b]
-filedir = $IMAGE_DIR/partition.bin
+filedir = ./partition.bin
 address = 0xF000
 
 [FW]
-filedir = $IMAGE_DIR/nuttx.bin
+filedir = ./nuttx.bin
 address = @partition
 EOF
 
 PADDED_IMAGE="$WORK_DIR/nuttx.whole.bin"
 dd if=/dev/zero bs=1048576 count=4 2>/dev/null | \
   LC_ALL=C tr '\000' '\377' > "$PADDED_IMAGE"
-write_segment "$PADDED_IMAGE" $((0x000000)) \
-  "$BUILD_STAGE/boot2_bl616cl_isp_release_v8.2.1.bin"
+write_segment "$PADDED_IMAGE" $((0x000000)) "$BUILD_STAGE/$BOOT2"
 write_segment "$PADDED_IMAGE" $((0x00e000)) "$BUILD_STAGE/partition.bin"
 write_segment "$PADDED_IMAGE" $((0x00f000)) "$BUILD_STAGE/partition.bin"
 write_segment "$PADDED_IMAGE" $((0x010000)) "$BUILD_STAGE/nuttx.bin"

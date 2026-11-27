@@ -62,7 +62,7 @@ BL616CL-AVE-V10（音视频评估板）有 `nsh` 和 `nsh-peripherals`，引脚�
 - `nuttx.whole.bin`：4 MiB whole image（boot2、双 partition、app），可从 flash
   `0x0` 写入，MFG 等数据分区保持擦除态；
 - `partition.bin`：分区表；
-- `flash_prog_cfg.ini`：按分区烧录的 FlashCube 配置。
+- `flash_prog_cfg.ini`：按分区烧录的 FlashCube 配置，引用同目录的 boot2、`partition.bin`、`nuttx.bin`（相对路径，产物目录可以整体拷走）。
 
 烧录只调用 FlashCube，不编译：
 

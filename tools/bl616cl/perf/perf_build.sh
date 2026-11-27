@@ -44,6 +44,6 @@ if ! "$VENDOR/vela" build "ai-m64p-32s-kit/$CFG" > "$OUT/build.log" 2>&1; then
   exit 1
 fi
 
-cp "$BUILD"/{nuttx.bin,partition.bin,final_nuttx,nuttx.map} "$OUT/"
-sed "s#$BUILD/#$OUT/#" "$BUILD/flash_prog_cfg.ini" > "$OUT/flash_prog_cfg.ini"
+cp "$BUILD"/{nuttx.bin,partition.bin,final_nuttx,nuttx.map,flash_prog_cfg.ini} \
+   "$BUILD"/boot2_*.bin "$OUT/"
 echo "$SRC + perfmon staged in $OUT"

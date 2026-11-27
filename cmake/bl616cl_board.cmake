@@ -57,13 +57,24 @@ function(bl616cl_board)
   target_link_options(nuttx PRIVATE -Wl,--defsym=__bl616cl_app_size=${app_size}
                       -Wl,--defsym=_wifi_log_flag=1)
 
+  # bflb_fw_post_proc takes the single boot2 image in config/, so its
+  # version is only in the file name. Fail here instead of mid-build.
+  file(GLOB boot2 LIST_DIRECTORIES false CONFIGURE_DEPENDS
+       "${NUTTX_BOARD_ABS_DIR}/config/boot2_*.bin")
+  list(LENGTH boot2 boot2_count)
+  if(NOT boot2_count EQUAL 1)
+    message(FATAL_ERROR "bl616cl_board: ${NUTTX_BOARD_ABS_DIR}/config needs "
+                        "exactly one boot2_*.bin, found ${boot2_count}")
+  endif()
+  get_filename_component(boot2_name "${boot2}" NAME)
+
   set(postprocess "${BL616CL_VENDOR_DIR}/tools/bl616cl/postprocess_bl616cl.sh")
   set(postprocess_stamp "${CMAKE_BINARY_DIR}/nuttx.postprocessed")
   set(raw_image "${CMAKE_BINARY_DIR}/nuttx.raw.bin")
   set(flash_tools "${BL616CL_VENDOR_DIR}/tools/bflb_flash_tools")
   set(postprocess_inputs
       ${NUTTX_BOARD_ABS_DIR}/config/bl_factory_params_IoTKitA_auto.dts
-      ${NUTTX_BOARD_ABS_DIR}/config/boot2_bl616cl_isp_release_v8.2.1.bin
+      ${boot2}
       ${partition_config}
       ${partition_size_tool}
       ${BL616CL_VENDOR_DIR}/tools/bl616cl/flash_factory_cfg.ini
@@ -93,7 +104,12 @@ function(bl616cl_board)
     COMMAND ${CMAKE_COMMAND} -E touch ${postprocess_stamp}
     DEPENDS ${CMAKE_BINARY_DIR}/nuttx.bin ${raw_image} ${postprocess}
             ${postprocess_inputs}
+    # The flash files are outputs too: a missing one, or boot2 under a new
+    # name, reruns post-processing even when the image is not relinked.
     BYPRODUCTS ${CMAKE_BINARY_DIR}/nuttx.whole.bin
+               ${CMAKE_BINARY_DIR}/${boot2_name}
+               ${CMAKE_BINARY_DIR}/partition.bin
+               ${CMAKE_BINARY_DIR}/flash_prog_cfg.ini
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Postprocess BL616CL firmware image"
     VERBATIM)

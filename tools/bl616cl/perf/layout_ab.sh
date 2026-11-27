@@ -79,8 +79,8 @@ for kind in hot base; do
     if "$VENDOR/vela" build "ai-m64p-32s-kit/$CFG" > "$OUT/build-$v.log" 2>&1; then
       img=$OUT/img-$v
       mkdir -p "$img"
-      cp "$BUILD"/{nuttx.bin,partition.bin,final_nuttx,nuttx.map} "$img/"
-      sed "s#$BUILD/#$img/#" "$BUILD/flash_prog_cfg.ini" > "$img/flash_prog_cfg.ini"
+      cp "$BUILD"/{nuttx.bin,partition.bin,final_nuttx,nuttx.map,flash_prog_cfg.ini} \
+         "$BUILD"/boot2_*.bin "$img/"
       echo "$v built, nuttx.bin $(stat -c %s "$img/nuttx.bin") B"
     else
       echo "$v build FAILED, see $OUT/build-$v.log"

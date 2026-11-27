@@ -28,7 +28,7 @@
         │   ├── <board>_fw_header.c、<board>_fw_header.h
         │   └── etc/（init.d/rc.sysinit、init.d/rcS、group）
         ├── config/
-        │   ├── boot2_bl616cl_isp_release_v8.2.1.bin
+        │   ├── boot2_*.bin（只放一个）
         │   ├── partition_cfg_4M.toml
         │   └── bl_factory_params_IoTKitA_auto.dts
         └── configs/<name>/defconfig
@@ -85,7 +85,7 @@ target_sources(board PRIVATE ${SRCS})
 | 固件头 | 256 字节、放在 `.fw_header` 段的常量，变量名就是 `FW_HEADER` 参数。flash 和时钟参数要和实际硬件一致。 |
 | `include/board.h` | 必须存在，芯片启动代码会包含 `<arch/board/board.h>`，内容可以为空。 |
 | `Kconfig` | 定义板身份符号 `config ARCH_BOARD_<BOARD>`（`def_bool y`）。板级选项用 `<BOARD>_*` 命名，不要复用 SDK 板的符号。 |
-| `config/` | 三个文件名固定，后处理脚本按这些名字读取。应用分区大小取自 `partition_cfg_4M.toml` 的 `FW` 条目。 |
+| `config/` | `partition_cfg_4M.toml` 和 `bl_factory_params_IoTKitA_auto.dts` 的文件名固定。boot2 只放一个 `boot2_*.bin`，文件名里的版本号不限，换版本时直接替换文件。应用分区大小取自 `partition_cfg_4M.toml` 的 `FW` 条目。 |
 
 **defconfig**：从 SDK 板的配置复制，改两行，芯片相关的行保持不变：
 
@@ -110,6 +110,12 @@ CONFIG_ARCH_BOARD_CUSTOM_NAME="<board>"
 
 - 目标写法：可以写短名 `<board>/<name>`，也可以写 `<chip>/<board>/configs/<name>`、相对 SDK 根的 `vendor/<customer>/boards/bl616cl/<board>/configs/<name>`，或者绝对路径。以 `vendor/<customer>/boards/` 开头的写法只在这个 vendor 里查找，路径不存在时报错，不会落到别的 vendor 的同名板上。
 - 板名要保持唯一。产物目录是 `cmake_out/<board>_<config>`，同名的板会共用这个目录：目录已经属于另一块板时，`build`、`menuconfig`、`savedefconfig`、`clean` 和 `flash` 都会报错，并提示用 `vela clean` 清理原来那块板。原来那块板已经删掉或移走，或者看不出目录是哪块板构建的，只能先 `vela clean`，再构建。短名有歧义时，`vela` 会列出可以区分的写法。
+- 产物目录里有 boot2、`partition.bin`、`nuttx.bin` 和 `flash_prog_cfg.ini`，ini 里写的是相对路径，整个目录可以拷到别处再烧录。例如拷到 `/data/fw/acme-kit_nsh` 后，在 SDK 根目录执行（目录和串口换成实际的）：
+
+  ```bash
+  ./vela flash --config "/data/fw/acme-kit_nsh/flash_prog_cfg.ini" --port /dev/ttyUSB0
+  ```
+
 - `./build.sh vendor/<customer>/boards/bl616cl/<board>/configs/nsh --cmake` 也能构建，标准入口仍是 `vela`。不支持 Make 构建。
 
 ## 4. repo 清单
@@ -235,6 +241,5 @@ repo sync -j8
 
 - 我们的清单目前跟踪分支，还没有发版 tag。锁定版本要由客户按 4.1 节自己导出。
 - 锁定的 SHA 必须一直能取到。上游重写历史或清理对象后，旧 SHA 可能取不到；需要长期复现的版本，请在自己的服务器上保留镜像。
-- `cmake_out/<board>_<config>/flash_prog_cfg.ini` 里记录的是 boot2 和镜像的绝对路径。SDK 树移动后，要重新构建再烧录。
 - `apps/mcu_peripheral_tests` 下依赖 SDK 板身份或接线的测试，在客户板上不会出现。
-- 所有板共用 SDK 的链接脚本，flash 布局按 4 MiB 分区表。`config/` 下的文件名是固定的。
+- 所有板共用 SDK 的链接脚本，flash 布局按 4 MiB 分区表。
