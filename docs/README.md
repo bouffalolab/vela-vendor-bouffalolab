@@ -3,6 +3,9 @@
 - [openvela WebAssembly（WAMR）使用说明与教程](openvela-wamr-guide.md)：说明 openvela
   Wasm 的三层结构（WAMR 运行时、模块构建框架、原生模块注册）、sim:wamr 实测教程、
   使用说明/参考/排错，以及 BL616CL 实验性评估。
+- [BL616CL 客户板级仓库接入](bl616cl-customer-board.md)：客户在自己的仓库维护板级代码，
+  复用 SDK 公共代码的目录结构与 `bl616cl_board()`，客户 manifest 仓库、锁定 SDK 版本、
+  跟随升级和 local_manifests 联调的写法。
 - [BL616CL OpenVela 能力矩阵](bl616cl-openvela-capability-matrix.md)：查询
   BL616CL 当前覆盖、可直接开启、需要适配、延后和不支持的 OS/架构/外设能力。
 - [BL616CL 堆分配归属与序号观测](bl616cl-mm-record.md)：配置和验证

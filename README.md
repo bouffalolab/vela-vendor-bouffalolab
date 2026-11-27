@@ -38,7 +38,9 @@ CMake + Ninja（本仓不提供 `Make.defs`/`Makefile`）。
 
 目标写到 `configs/<name>` 一层；`vendor/bouffalolab/boards/` 前缀可省略，无歧义时
 chip 和 `configs/` 层也可省略（`bl616cl/ai-m64p-32s-kit/configs/nsh` 与
-`ai-m64p-32s-kit/nsh` 等价；`nsh`、`nsh-peripherals` 两板都有，要带板名）。默认并行度为逻辑核数的一半，可用 `-j N` 覆盖。
+`ai-m64p-32s-kit/nsh` 等价；`nsh`、`nsh-peripherals` 两板都有，要带板名）。客户仓库里的板
+（`vendor/<customer>/boards/`）同样会被列出，接入方法见
+[客户板级仓库接入](docs/bl616cl-customer-board.md)。默认并行度为逻辑核数的一半，可用 `-j N` 覆盖。
 
 Ai-M64P-32S-Kit 的配置：
 
@@ -87,7 +89,7 @@ shell 补全：`./vela completion install`，或 `./vela completion <bash|zsh|fi
 | `drivers/` | Bouffalo SDK `drivers/` 的只读镜像（lhal、soc、rfparam、预编译 phyrf），独立仓 | `cmake/bl616cl_lhal.cmake`、`bl616cl_std.cmake` 显式选择源码 |
 | `components/` | 中间件，当前为 `wireless/`（`wifi`、`ble`、`rfparam`） | 自动发现 |
 | `apps/` | 测试与示例 app：`mcu_peripheral_tests`、`os_feature_tests`、`perf_tools`、`wireless_tests` | 自动发现 |
-| `cmake/` | 构建辅助（驱动 wrapper、组件 helper、Wi-Fi 源码/预编译选择） | 顶层 `CMakeLists.txt` include |
+| `cmake/` | 构建辅助（驱动 wrapper、组件 helper、板级构建 helper、Wi-Fi 源码/预编译选择） | 顶层 `CMakeLists.txt` include |
 | `docs/` | BL616CL 功能文档 | — |
 | `tools/` | 宿主侧工具（后处理 wrapper、性能工具），不编入固件；固件后处理和 FlashCube 在 `tools/bflb_flash_tools`，是 Bouffalo SDK `tools/bflb_tools/` 的只读镜像，独立仓 | 无 `CMakeLists.txt` |
 

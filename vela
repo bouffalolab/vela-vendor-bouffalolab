@@ -23,7 +23,10 @@ from typing import NoReturn, Optional, Sequence
 
 VERSION = "1.0"
 EXTRA_FLAGS = "-Wno-cpp -Wno-deprecated-declarations"
-BOARD_ROOT = "vendor/bouffalolab/boards"
+# Boards of every vendor, e.g. a customer repository at vendor/<customer>.
+# Only configs built on a chip of this SDK are listed and matched by name.
+BOARD_ROOTS = "vendor/*/boards"
+SDK_CHIPS = "vendor/bouffalolab/chips"
 DEFAULT_FLASH_CHIP = "bl616cl"
 TOOLCHAIN_ARCHES = (
     "xtensa",
@@ -255,24 +258,50 @@ class BoardAmbiguous(BoardError):
         self.matches = matches
 
 
+def is_sdk_config(root: Path, config_dir: Path) -> bool:
+    """True when the config's defconfig selects a chip of this SDK.
+
+    The chip path is resolved like NuttX does: relative to nuttx/.
+    """
+    defconfig = config_dir / "defconfig"
+    if not defconfig.is_file():
+        return False
+    for line in defconfig.read_text().splitlines():
+        if line.startswith("CONFIG_ARCH_CHIP_CUSTOM_DIR="):
+            chip = line.split("=", 1)[1].strip().strip('"')
+            return (root / "nuttx" / chip).resolve().parent == (root / SDK_CHIPS).resolve()
+    return False
+
+
 def short_board_names(root: Path) -> list:
     """(configs_dir, display_name) pairs for every board config.
 
-    The display name is '<board>/<config>' and keeps the chip layer only
-    when the board name exists under more than one chip.
+    The display name is '<board>/<config>'. It keeps the chip layer when the
+    board name exists under more than one chip, and falls back to the path
+    from the SDK root when that is still ambiguous across vendors.
     """
     entries = []
-    for d in (root / BOARD_ROOT).glob("*/*/configs/*"):
-        if (d / "defconfig").is_file():
-            entries.append((d, d.parents[2].name, d.parents[1].name, d.name))
-    # A board name is ambiguous only when it exists under more than one
-    # chip, regardless of how many configs it has.
-    counts: dict = {}
-    for _, board in {(e[1], e[2]) for e in entries}:
-        counts[board] = counts.get(board, 0) + 1
+    for d in root.glob(f"{BOARD_ROOTS}/*/*/configs/*"):
+        if is_sdk_config(root, d):
+            entries.append((d, d.parents[4].name, d.parents[2].name, d.parents[1].name, d.name))
+    # A board name is ambiguous only when it exists in more than one place,
+    # regardless of how many configs it has.
+    boards: dict = {}
+    chip_boards: dict = {}
+    for vendor, chip, board in {e[1:4] for e in entries}:
+        boards[board] = boards.get(board, 0) + 1
+        chip_boards[(chip, board)] = chip_boards.get((chip, board), 0) + 1
+
+    def name_of(d, vendor, chip, board, name):
+        if boards[board] == 1:
+            return f"{board}/{name}"
+        if chip_boards[(chip, board)] == 1:
+            return f"{chip}/{board}/configs/{name}"
+        return d.relative_to(root).as_posix()
+
     return [
-        (d, f"{board}/{name}" if counts[board] == 1 else f"{chip}/{board}/configs/{name}")
-        for d, chip, board, name in sorted(entries, key=lambda e: e[1] + "/" + e[3])
+        (e[0], name_of(*e))
+        for e in sorted(entries, key=lambda e: (e[2], e[4], e[3], e[1]))
     ]
 
 
@@ -296,7 +325,8 @@ def resolve_board(root: Path, target: str) -> Path:
 
     Accepted forms (only the first two carry the full prefix):
       <absolute path>
-      vendor/bouffalolab/boards/<chip>/<board>/configs/<name>  (legacy full path)
+      vendor/<vendor>/boards/<chip>/<board>/configs/<name>     (path from the SDK root)
+      vendor/<vendor>/boards/<board>/<name> ...                (shorter forms, that vendor only)
       <chip>/<board>/configs/<name>                            (prefix omitted)
       <board>/configs/<name> or <board>/<name>                 (chip omitted)
       <name>                                                   (config name only)
@@ -312,14 +342,19 @@ def resolve_board(root: Path, target: str) -> Path:
     if not re.fullmatch(r"[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*", target):
         raise BoardNotFound(target)
 
-    # Strip a redundant full prefix so all forms match uniformly.
-    if target.startswith(BOARD_ROOT + "/"):
-        path = Path(target[len(BOARD_ROOT) + 1:])
+    if (root / path / "defconfig").is_file():
+        return (root / path).resolve()
 
-    boards_root = Path(BOARD_ROOT)
+    # A target under vendor/<vendor>/boards/ only matches inside that
+    # vendor, so a missing path there never picks another vendor's board.
+    boards_root = Path(BOARD_ROOTS)
+    prefixed = re.fullmatch(r"vendor/([^/]+)/boards/(.+)", target)
+    if prefixed:
+        boards_root = Path("vendor", prefixed.group(1), "boards")
+        path = Path(prefixed.group(2))
     patterns = [boards_root / path, boards_root / "*" / path]
-    if "/" not in target:
-        patterns.append(boards_root / "*" / "*" / "configs" / target)
+    if "/" not in str(path):
+        patterns.append(boards_root / "*" / "*" / "configs" / str(path))
     parts = path.parts
     if len(parts) == 2 and parts[-1] != "configs":
         patterns.append(boards_root / "*" / parts[0] / "configs" / parts[1])
@@ -329,7 +364,7 @@ def resolve_board(root: Path, target: str) -> Path:
             match.resolve()
             for pattern in patterns
             for match in root.glob(str(pattern))
-            if match.is_dir()
+            if is_sdk_config(root, match)
         }
     )
     if not candidates:
@@ -355,7 +390,7 @@ def resolve_or_fail(root: Path, target: str, command: str) -> Path:
         fail(
             f"{cyan(target, sys.stderr)} matches multiple boards:",
             [f"    {cyan(name, sys.stderr)}" for name in names]
-            + [f"hint: use the full '<chip>/<board>/configs/<name>' form"],
+            + ["hint: use one of the forms above"],
         )
 
 
@@ -368,6 +403,47 @@ def build_dir(root: Path, board_dir: Path) -> Path:
     config_name = board_dir.name
     board_name = board_dir.parents[1].name
     return root / "cmake_out" / f"{board_name}_{config_name}"
+
+
+def build_dir_owner(root: Path, out_dir: Path) -> Optional[Path]:
+    """Config directory an output directory was configured for, if known."""
+    cache = out_dir / "CMakeCache.txt"
+    if not cache.is_file():
+        return None
+    for line in cache.read_text(errors="replace").splitlines():
+        if line.startswith("BOARD_CONFIG:"):
+            value = line.split("=", 1)[1]
+            return (root / "nuttx" / value).resolve()
+    return None
+
+
+def owned_build_dir(root: Path, board_dir: Path, reclaim: bool = False) -> Path:
+    """build_dir() after checking that the output belongs to board_dir.
+
+    Boards with the same name in different vendors or chips share
+    cmake_out/<board>_<config>. CMakeCache.txt only records which board the
+    directory was last configured for, not who built what is in it. Refuse
+    a directory configured for another existing board. When the owner is
+    unknown or its config is gone, the directory may still hold that
+    board's firmware, so only clean (reclaim=True) may use it.
+    """
+    out_dir = build_dir(root, board_dir)
+    owner = build_dir_owner(root, out_dir)
+    if owner == board_dir or not out_dir.exists():
+        return out_dir
+    try:
+        rel = out_dir.relative_to(root).as_posix()
+    except ValueError:
+        rel = str(out_dir)
+    if owner is not None and (owner / "defconfig").is_file():
+        fail(f"{cyan(rel, sys.stderr)} was built for {cyan(display_name(root, owner), sys.stderr)}",
+             ["boards with the same name share this output directory; rename one of them",
+              f"hint: vela clean {display_name(root, owner)}"], 1)
+    if reclaim:
+        return out_dir
+    fail(f"cannot tell which board {cyan(rel, sys.stderr)} was built for",
+         ["it may hold firmware of another board with the same name",
+          f"hint: vela clean {display_name(root, board_dir)}"], 1)
 
 
 def cmake_board_config(root: Path, board_dir: Path) -> str:
@@ -970,7 +1046,7 @@ def parse_args(words: Sequence[str]) -> Parsed:
 
 def cmd_build(root: Path, args: Parsed) -> int:
     board = resolve_or_fail(root, args.positionals[0], "build")
-    out_dir = build_dir(root, board)
+    out_dir = owned_build_dir(root, board)
     name = display_name(root, board)
 
     ensure_fresh_config(root, out_dir, board)
@@ -995,7 +1071,7 @@ def cmd_build(root: Path, args: Parsed) -> int:
 
 def cmd_menuconfig(root: Path, args: Parsed) -> int:
     board = resolve_or_fail(root, args.positionals[0], "menuconfig")
-    out_dir = build_dir(root, board)
+    out_dir = owned_build_dir(root, board)
     name = display_name(root, board)
 
     ensure_fresh_config(root, out_dir, board)
@@ -1027,7 +1103,7 @@ def cmd_menuconfig(root: Path, args: Parsed) -> int:
 
 def cmd_savedefconfig(root: Path, args: Parsed) -> int:
     board = resolve_or_fail(root, args.positionals[0], "savedefconfig")
-    out_dir = build_dir(root, board)
+    out_dir = owned_build_dir(root, board)
     name = display_name(root, board)
 
     ensure_fresh_config(root, out_dir, board)
@@ -1048,7 +1124,7 @@ def cmd_savedefconfig(root: Path, args: Parsed) -> int:
 
 def cmd_clean(root: Path, args: Parsed) -> int:
     board = resolve_or_fail(root, args.positionals[0], "clean")
-    out_dir = build_dir(root, board)
+    out_dir = owned_build_dir(root, board, reclaim=True)
     try:
         rel = out_dir.relative_to(root).as_posix()
     except ValueError:
@@ -1129,7 +1205,9 @@ def cmd_flash(root: Path, args: Parsed) -> int:
             board = resolve_or_fail(root, args.positionals[0], "flash")
             name = display_name(root, board)
             ini = build_dir(root, board) / "flash_prog_cfg.ini"
-            if not ini.is_file():
+            if ini.is_file():
+                owned_build_dir(root, board)
+            else:
                 fail(f"no firmware built for {cyan(name, sys.stderr)}",
                      [f"hint: vela build {name}", f"hint: vela flash {name} --port {port or '<tty>'}"], 1)
         else:
